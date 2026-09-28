@@ -204,9 +204,9 @@ pnpm test   # node --test tests/unit.test.mjs
 ## 参考项目，特别鸣谢
 
 - [nextjs](https://nextjs.org/) 提供了 Next.js 框架，用于构建 Web 应用
-- [MiniMax-H3 官方仓库](https://github.com/MiniMax-AI/MiniMax-H3) 提供了 H3 模型和Skill技能
-- [OpenClaude](https://github.com/Gitlawb/openclaude) 提供了 Agent 内核和工作流管理功能
-- [ComfyUI](https://github.com/comfyui/comfyui) 提供了 ComfyUI 工作流和模型架构
+- [MiniMax-H3 官方仓库:https://github.com/MiniMax-AI/MiniMax-H3](https://github.com/MiniMax-AI/MiniMax-H3) 提供了 H3 模型和Skill技能
+- [OpenClaude：https://github.com/Gitlawb/openclaude](https://github.com/Gitlawb/openclaude) 提供了 Agent 内核和工作流管理功能
+- [Comfy-Org/ComfyUI](https://github.com/Comfy-Org/ComfyUI) 提供了 ComfyUI 工作流和模型架构
 - [deepseek](https://www.deepseek.com/) 感谢Deepseek提供了 deepseek-v4-flash-vision-exp 模型
 
 感谢这些项目为我提供了帮助，使项目能够快速迭代和改进。

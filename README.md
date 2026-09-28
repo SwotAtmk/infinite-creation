@@ -1,9 +1,9 @@
 # Agent无限创作 · infinite-creation
 
+![](images/banner.jpg)
 
 ## 项目简介
- **提交小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能全自动无限生产视频**
-![](images/banner.jpg)
+ **小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频**
 
 ## 项目计划
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
@@ -27,11 +27,15 @@
 **全程无需人工介入**，可以长时托管无需人工干预运行（跑一晚/一整天均可）；完成后可逐段**审查分镜**并对不满意的片段**单独重生成**。
 
 ## 我的电脑运行配置
-本地ComfyUI部署配置
+
 系统：Windows 11（也支持在Linux/Mac上运行）
 CPU：12th Gen Intel(R) Core(TM) i5-12400F
-显卡：NVIDIA GeForce RTX 3080 20G
+显卡：NVIDIA GeForce RTX 3080 20G 
 内存：32GB DDR4 3200 MT/s (16GBx2)
+
+**具体本地的显卡配置需要多大的显存，我这边暂时还没有做详细测试，如果有相关测试的结果，欢迎加入群聊分享，理论上来说8GB以上显存都是可以运行的**
+
+**注意**：须先安装ffmpeg，否则可能会影响最后的合并成片的功能，下载地址：[https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
 
 ## 核心能力
 
@@ -90,7 +94,11 @@ infinite-creation/
 ## 快速开始
 
 **简单开始使用**
-- 打开Trae、豆包、CodeX等工具，把打开这个项目，并输入提示词“运行这个项目”
+- 打开Trae、豆包、CodeX等工具，打开豆包使用“工作模式”，并输入提示词
+
+```text
+帮我克隆这个项目https://github.com/SwotAtmk/infinite-creation.git到本地（这里填写要安装的项目目录），并且在本地运行这个项目
+```
 
 **前置要求**
 
@@ -137,10 +145,10 @@ pnpm run build && pnpm start
 在首次运行项目前，必须先安装ComfyUI工具，如果没有安装的可以先到Comfyui官网下载安装，或者使用我提供的网盘链接一键安装包进行安装（一键安装包中包含所有工作流中用到的模型和工作流），我的一键安装包目前仅支持Windows系统，Mac系统建议到官网进行手动安装，并下载模型和跑通所有示例工作流。
 
 ```txt
-我用夸克网盘给你分享了「无限创作-ComfyUI一键安装」，点击链接或复制整段内容，打开「夸克APP」即可获取。
-/~cca83b4VO6~:/
-链接：https://pan.quark.cn/s/1a278a5f11c5?pwd=tk5t
-提取码：tk5t
+我用夸克网盘给你分享了「无限创作-ComfyUI一键安装部署」，点击链接或复制整段内容，打开「夸克APP」即可获取。
+/~c2d03b8qfM~:/
+链接：https://pan.quark.cn/s/ed2afd0f6a4f?pwd=GVZe
+提取码：GVZe
 ```
 
 在使用此Agent项目工具之前，建议你先使用ComfyUI手动跑一遍所有工作流（即：跑通comfyui_original_workflows/目录下的所有工作流）之后使用Agent项目工具就能进行全自动生成。

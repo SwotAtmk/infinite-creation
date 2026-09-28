@@ -1,0 +1,10 @@
+{
+  "name": "@ic/core",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.js",
+  "dependencies": {
+    "@ic/shared": "workspace:*"
+  }
+}

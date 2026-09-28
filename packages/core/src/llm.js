@@ -1,0 +1,58 @@
+import { normBaseUrl } from './utils.js';
+import { logger } from './logger.js';
+
+export function llmEndpoint(baseUrl) {
+  let base = normBaseUrl(baseUrl || '');
+  if (/\/chat\/completions$/.test(base)) return base;
+  if (!/\/v\d+$/.test(base)) base += '/v1';
+  return base + '/chat/completions';
+}
+
+// 把 base64 dataURL 列表转成 OpenAI 多模态 image_url 内容块（视觉模型用）
+export function imageUrlParts(dataUrls) {
+  return (dataUrls || []).filter(Boolean).map((url) => ({ type: 'image_url', image_url: { url } }));
+}
+
+// 组装一条 user 消息：文本 + 可选图片；无图时保持纯字符串 content（兼容普通模型）
+export function buildVisionUserMessage(text, dataUrls) {
+  const parts = imageUrlParts(dataUrls);
+  if (!parts.length) return { role: 'user', content: text };
+  return { role: 'user', content: [{ type: 'text', text }, ...parts] };
+}
+
+export async function llmChat(llmCfg, messages, { json = false, tools = null, temperature = 0.8, maxTokens = 4000 } = {}) {
+  if (!llmCfg?.apiKey) throw new Error('未配置 LLM api_key，请先到「设置」里配置。');
+  const url = llmEndpoint(llmCfg.baseUrl);
+  const body = { model: llmCfg.model, messages, temperature, max_tokens: maxTokens, stream: false };
+  if (json) body.response_format = { type: 'json_object' };
+  if (tools && tools.length) body.tools = tools;
+  logger.debug('LLM 请求', { url, model: llmCfg.model, json, hasTools: !!(tools && tools.length) });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + llmCfg.apiKey },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error('LLM 请求失败 ' + res.status + ': ' + text.slice(0, 500));
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    throw new Error('LLM 接口返回了非 JSON 内容（可能返回网页 HTML）。请检查 API Base URL 是否需以 /v1 结尾。返回开头：' + text.slice(0, 200));
+  }
+  const data = await res.json();
+  const message = data?.choices?.[0]?.message ?? {};
+  logger.debug('LLM 响应', { content: String(message.content || '').slice(0, 2000), toolCalls: (message.tool_calls || []).length });
+  return { content: message.content ?? '', toolCalls: message.tool_calls || [], message };
+}
+
+export function extractJson(text) {
+  const cleaned = String(text || '').replace(/\u0060\u0060\u0060(?:json)?/gi, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('LLM 返回内容不是合法 JSON：' + String(text || '').slice(0, 300));
+  }
+  return JSON.parse(cleaned.slice(start, end + 1));
+}

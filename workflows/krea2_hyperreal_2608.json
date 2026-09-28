@@ -1,0 +1,141 @@
+{
+  "95": {
+    "inputs": {
+      "filename_prefix": "krea2",
+      "images": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "96": {
+    "inputs": {
+      "seed": 900561119789718,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "101",
+        0
+      ],
+      "positive": [
+        "102",
+        0
+      ],
+      "negative": [
+        "99",
+        0
+      ],
+      "latent_image": [
+        "100",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "97": {
+    "inputs": {
+      "clip_name": "qwen3vl_4b_fp8_scaled.safetensors",
+      "type": "krea2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "98": {
+    "inputs": {
+      "unet_name": "krea2_turbo_fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "99": {
+    "inputs": {
+      "conditioning": [
+        "102",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "条件零化"
+    }
+  },
+  "100": {
+    "inputs": {
+      "width": 1920,
+      "height": 1080,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "空Latent图像"
+    }
+  },
+  "101": {
+    "inputs": {
+      "lora_name": "realism_engine_krea2_v3.1.safetensors",
+      "strength_model": 0.9000000000000001,
+      "model": [
+        "98",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "102": {
+    "inputs": {
+      "text": " 横版构图，中国年轻女性，18岁，邻家女孩甜美气质，梨型身材，瓷白肌肤，胸部丰满，巨乳，D罩杯，曲线玲珑，紧身服装清晰勾勒出身体曲线， 内穿低领白色紧身睡衣，紧贴身型，明显突出大胸和腰部线条。外披一件浅蓝色宽松衬衫，随意搭在肩上，微微敞开，露出双肩和内搭，随性又轻松。  \n左侧1/3 区域为超大高清上半身正面面部特写，右侧 2/3 区域整齐排布角色3张全身三视图，包含角色的正面 、侧面及背面三个维度的全身站姿视图。背景为纯白色背景。人物身材比例好。\n视觉对齐： 所有角度的比例必须严格一致，确保角色身高、五官位置、服装褶皱在不同视角下完美契合。\n超高清，超写实 8K。比例 16:9。,Kera-Face-Mx-002",
+      "clip": [
+        "97",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "103": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "104": {
+    "inputs": {
+      "samples": [
+        "96",
+        0
+      ],
+      "vae": [
+        "103",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  }
+}

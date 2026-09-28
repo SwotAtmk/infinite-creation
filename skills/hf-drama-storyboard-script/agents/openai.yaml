@@ -1,0 +1,5 @@
+interface:
+  display_name: "短剧文字分镜脚本"
+  short_description: "根据剧集内容和导演视觉建议拆解专业分镜"
+  brand_color: "#7C3AED"
+  default_prompt: "使用 $hf-drama-storyboard-script 根据剧集内容和导演视觉建议，生成严格 JSON 格式的短剧文字分镜脚本。"

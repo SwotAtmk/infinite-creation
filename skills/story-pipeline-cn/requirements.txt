@@ -1,0 +1,10 @@
+# ===== story-pipeline-cn 依赖 =====
+# 核心转换逻辑由 LLM 在对话中完成；文件批量模式（scripts/extract_storyboard.py）
+# 仅使用 Python 标准库（re / json / argparse / pathlib / datetime），无需安装任何第三方包。
+
+# 可选：若希望把生成的 storyboard.json 直接对接下游图像/视频生成工具出图出视频，
+# 相关 SDK 依赖在该生成工具侧声明，本技能不重复安装：
+#   pip install requests  # 调用图像/视频生成服务 API 时按需
+
+# 可选：若要把 .md 渲染为 .docx 交付，可启用：
+#   pip install python-docx>=1.1.0

@@ -1,0 +1,23 @@
+{
+  "debug": false,
+  "server": {
+    "port": 4600
+  },
+  "comfyui": {
+    "baseUrl": "http://127.0.0.1:8188"
+  },
+  "llm": {
+    "baseUrl": "http://tx3247.t.taoxiangyoushu.com",
+    "apiKey": "sk-xxx",
+    "model": "deepseek-v4-flash-vision-exp",
+    "tools": true,
+    "vision": true
+  },
+  "generation": {
+    "imageConcurrency": 2,
+    "videoConcurrency": 1,
+    "retryTimes": 3,
+    "videoTimeoutMinutes": 30,
+    "imageTimeoutMinutes": 10
+  }
+}

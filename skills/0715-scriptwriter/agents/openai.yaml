@@ -1,0 +1,4 @@
+interface:
+  display_name: "0715编剧Skill"
+  short_description: "面向短视频平台，将大纲扩写为可拍摄AI漫剧与短剧剧本"
+  default_prompt: "使用 $0715-scriptwriter 将我的故事大纲扩写为可拍摄的中文AI漫剧或短剧剧本。"

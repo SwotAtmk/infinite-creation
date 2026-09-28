@@ -1,0 +1,11 @@
+node_modules/
+data/
+config.json
+# openclaude 二开：源码保留在 vendor/openclaude，构建产物不入库
+vendor/openclaude/node_modules/
+vendor/openclaude/dist/
+.next/
+.DS_Store
+*.log
+.pnpm-store/
+.idea/

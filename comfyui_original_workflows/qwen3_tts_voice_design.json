@@ -1,0 +1,694 @@
+{
+  "id": "cb852941-1241-42d8-a263-86bc797a42bb",
+  "revision": 0,
+  "last_node_id": 81,
+  "last_link_id": 86,
+  "nodes": [
+    {
+      "id": 2,
+      "type": "Qwen3TTSModelLoader",
+      "pos": [
+        1146.8838319646738,
+        576.4834810350848
+      ],
+      "size": [
+        312.828125,
+        198
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "模型",
+          "name": "QWEN_TTS_MODEL",
+          "type": "QWEN_TTS_MODEL",
+          "links": [
+            83
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSModelLoader",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+        "cuda:0",
+        "bfloat16",
+        true,
+        false
+      ],
+      "widgets_values_named": {
+        "model_name": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+        "device": "cuda:0",
+        "dtype": "bfloat16",
+        "keep_model_loaded": true,
+        "use_flash_attn": false
+      }
+    },
+    {
+      "id": 70,
+      "type": "LoadAudio",
+      "pos": [
+        -90.90623474121094,
+        873.0779418945312
+      ],
+      "size": [
+        274.078125,
+        138
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 4,
+      "inputs": [
+        {
+          "label": "audio",
+          "name": "audio",
+          "type": "COMBO",
+          "widget": {
+            "name": "audio"
+          }
+        },
+        {
+          "label": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          }
+        },
+        {
+          "label": "upload",
+          "name": "upload",
+          "type": "AUDIOUPLOAD",
+          "widget": {
+            "name": "upload"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "label": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "50de8e1e09cae021f159b0b9d663c45f6b0d6c87727bb265d02cf9420597567c.flac",
+        null,
+        null
+      ],
+      "widgets_values_named": {
+        "audio": "50de8e1e09cae021f159b0b9d663c45f6b0d6c87727bb265d02cf9420597567c.flac",
+        "upload": null
+      }
+    },
+    {
+      "id": 52,
+      "type": "LoadAudio",
+      "pos": [
+        667.187255859375,
+        880.7606811523438
+      ],
+      "size": [
+        274.078125,
+        138
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 4,
+      "inputs": [
+        {
+          "label": "audio",
+          "name": "audio",
+          "type": "COMBO",
+          "widget": {
+            "name": "audio"
+          }
+        },
+        {
+          "label": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          }
+        },
+        {
+          "label": "upload",
+          "name": "upload",
+          "type": "AUDIOUPLOAD",
+          "widget": {
+            "name": "upload"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "label": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "7271bc946e4670ce68f6976baddf82ba6bb1f3091458e9773908c123a20dfc62.flac",
+        null,
+        null
+      ],
+      "widgets_values_named": {
+        "audio": "7271bc946e4670ce68f6976baddf82ba6bb1f3091458e9773908c123a20dfc62.flac",
+        "upload": null
+      }
+    },
+    {
+      "id": 71,
+      "type": "LoadAudio",
+      "pos": [
+        -518.9747924804688,
+        858.50634765625
+      ],
+      "size": [
+        274.078125,
+        138
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 4,
+      "inputs": [
+        {
+          "label": "audio",
+          "name": "audio",
+          "type": "COMBO",
+          "widget": {
+            "name": "audio"
+          }
+        },
+        {
+          "label": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          }
+        },
+        {
+          "label": "upload",
+          "name": "upload",
+          "type": "AUDIOUPLOAD",
+          "widget": {
+            "name": "upload"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "label": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "d1dc64fb63e8be2d6ad49c4d06f2cc251583fe53ad3426ba2296ee9374106874.flac",
+        null,
+        null
+      ],
+      "widgets_values_named": {
+        "audio": "d1dc64fb63e8be2d6ad49c4d06f2cc251583fe53ad3426ba2296ee9374106874.flac",
+        "upload": null
+      }
+    },
+    {
+      "id": 50,
+      "type": "LoadAudio",
+      "pos": [
+        269.9658203125,
+        871.489501953125
+      ],
+      "size": [
+        274.078125,
+        138
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 4,
+      "inputs": [
+        {
+          "label": "audio",
+          "name": "audio",
+          "type": "COMBO",
+          "widget": {
+            "name": "audio"
+          }
+        },
+        {
+          "label": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          }
+        },
+        {
+          "label": "upload",
+          "name": "upload",
+          "type": "AUDIOUPLOAD",
+          "widget": {
+            "name": "upload"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "label": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "1985065130cf9e899c651a914f885532541d79ecc717d9d4829c572485c8fae8.flac",
+        null,
+        null
+      ],
+      "widgets_values_named": {
+        "audio": "1985065130cf9e899c651a914f885532541d79ecc717d9d4829c572485c8fae8.flac",
+        "upload": null
+      }
+    },
+    {
+      "id": 47,
+      "type": "SaveAudio",
+      "pos": [
+        2193.388596589436,
+        622.4935500085222
+      ],
+      "size": [
+        281.96875,
+        176.40625
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 86
+        },
+        {
+          "label": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          }
+        },
+        {
+          "label": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "label": "audio",
+          "name": "audio",
+          "type": "AUDIO"
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveAudio",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "audio/ComfyUI"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "audio/ComfyUI"
+      }
+    },
+    {
+      "id": 74,
+      "type": "PrimitiveStringMultiline",
+      "pos": [
+        1076.6357223555765,
+        857.4978286011717
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            84
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PrimitiveStringMultiline"
+      },
+      "widgets_values": [
+        "你好呀，我是沈舒妍。喜欢蕾丝花边和蓬松的裙摆，总爱在洒满阳光的房间里慢慢度过温柔的日常。很高兴认识你。"
+      ],
+      "widgets_values_named": {
+        "value": "你好呀，我是沈舒妍。喜欢蕾丝花边和蓬松的裙摆，总爱在洒满阳光的房间里慢慢度过温柔的日常。很高兴认识你。"
+      }
+    },
+    {
+      "id": 75,
+      "type": "PrimitiveStringMultiline",
+      "pos": [
+        1146.4909591000612,
+        1116.792829156299
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            85
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PrimitiveStringMultiline"
+      },
+      "widgets_values": [
+        "16-18软甜清润的少女音，甜而不腻，温柔里透着精致的大小姐质感。"
+      ],
+      "widgets_values_named": {
+        "value": "16-18软甜清润的少女音，甜而不腻，温柔里透着精致的大小姐质感。"
+      }
+    },
+    {
+      "id": 77,
+      "type": "Qwen3TTSVoiceDesign",
+      "pos": [
+        1626.0484238621657,
+        705.5566973676719
+      ],
+      "size": [
+        400,
+        362
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "QWEN_TTS_MODEL",
+          "link": 83
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 84
+        },
+        {
+          "name": "voice_description",
+          "type": "STRING",
+          "widget": {
+            "name": "voice_description"
+          },
+          "link": 85
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            86
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSVoiceDesign"
+      },
+      "widgets_values": [
+        "Hello, this is a test.",
+        "A warm, gentle young female voice with clear pronunciation.",
+        "Auto",
+        798671063927382,
+        "randomize",
+        2048,
+        1,
+        0.8,
+        1.1
+      ],
+      "widgets_values_named": {
+        "text": "Hello, this is a test.",
+        "voice_description": "A warm, gentle young female voice with clear pronunciation.",
+        "language": "Auto",
+        "seed": 798671063927382,
+        "control_after_generate": "randomize",
+        "max_new_tokens": 2048,
+        "temperature": 1,
+        "top_p": 0.8,
+        "repetition_penalty": 1.1
+      }
+    },
+    {
+      "id": 78,
+      "type": "PrimitiveStringMultiline",
+      "pos": [
+        659.9353690483588,
+        588.3587908105836
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PrimitiveStringMultiline"
+      },
+      "widgets_values": [
+        "25-32岁冷酷男声，音色干净、偏冷，声线稳定，带一点冷幽默感。"
+      ],
+      "widgets_values_named": {
+        "value": "25-32岁冷酷男声，音色干净、偏冷，声线稳定，带一点冷幽默感。"
+      }
+    },
+    {
+      "id": 79,
+      "type": "PrimitiveStringMultiline",
+      "pos": [
+        234.6781537508366,
+        611.1975562746393
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PrimitiveStringMultiline"
+      },
+      "widgets_values": [
+        "20-24岁清冷柔弱女声，音色温柔灵动。音量偏轻，情绪淡，易碎感。"
+      ],
+      "widgets_values_named": {
+        "value": "20-24岁清冷柔弱女声，音色温柔灵动。音量偏轻，情绪淡，易碎感。"
+      }
+    },
+    {
+      "id": 80,
+      "type": "PrimitiveStringMultiline",
+      "pos": [
+        -146.62744090000314,
+        583.6663169483697
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PrimitiveStringMultiline"
+      },
+      "widgets_values": [
+        "28-35岁成熟御姐女声，音色偏低沉，声线稳定，咬字清晰，尾音收得干净，气场强，情绪克制，带轻微压迫感和讽刺感。"
+      ],
+      "widgets_values_named": {
+        "value": "28-35岁成熟御姐女声，音色偏低沉，声线稳定，咬字清晰，尾音收得干净，气场强，情绪克制，带轻微压迫感和讽刺感。"
+      }
+    },
+    {
+      "id": 81,
+      "type": "PrimitiveStringMultiline",
+      "pos": [
+        -578.7933776746362,
+        576.967738718309
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PrimitiveStringMultiline"
+      },
+      "widgets_values": [
+        "18-21岁的大学女生声线，音色清澈、干净，整体偏自然明亮"
+      ],
+      "widgets_values_named": {
+        "value": "18-21岁的大学女生声线，音色清澈、干净，整体偏自然明亮"
+      }
+    }
+  ],
+  "links": [
+    [
+      83,
+      2,
+      0,
+      77,
+      0,
+      "QWEN_TTS_MODEL"
+    ],
+    [
+      84,
+      74,
+      0,
+      77,
+      1,
+      "STRING"
+    ],
+    [
+      85,
+      75,
+      0,
+      77,
+      2,
+      "STRING"
+    ],
+    [
+      86,
+      77,
+      0,
+      47,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Qwen 3 声音设计",
+      "bounding": [
+        1136.4736328125,
+        516.457275390625,
+        1366.2044677734375,
+        807.6243896484375
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "links_added_by_ue": [],
+    "ue_links": [],
+    "0246.VERSION": [
+      0,
+      0,
+      4
+    ],
+    "ds": {
+      "scale": 0.40014901469554415,
+      "offset": [
+        516.498586129773,
+        -18.317482523848568
+      ]
+    },
+    "pixaromaGroups": [],
+    "frontendVersion": "1.51.9",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true,
+    "KKvideo_latentpreview": false,
+    "KKvideo_latentpreviewrate": 0
+  },
+  "version": 0.4
+}

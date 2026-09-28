@@ -1,0 +1,486 @@
+import { PassThrough } from 'node:stream'
+
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import React from 'react'
+
+import { createRoot, Text } from '../ink.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
+
+const SYNC_START = '\x1B[?2026h'
+const SYNC_END = '\x1B[?2026l'
+
+function createTestStreams(): {
+  stdout: PassThrough
+  stdin: PassThrough & {
+    isTTY: boolean
+    setRawMode: (mode: boolean) => void
+    ref: () => void
+    unref: () => void
+  }
+  getOutput: () => string
+} {
+  let output = ''
+  const stdout = new PassThrough()
+  const stdin = new PassThrough() as PassThrough & {
+    isTTY: boolean
+    setRawMode: (mode: boolean) => void
+    ref: () => void
+    unref: () => void
+  }
+
+  stdin.isTTY = true
+  stdin.setRawMode = () => {}
+  stdin.ref = () => {}
+  stdin.unref = () => {}
+  ;(stdout as unknown as { columns: number }).columns = 120
+  stdout.on('data', chunk => {
+    output += chunk.toString()
+  })
+
+  return {
+    stdout,
+    stdin,
+    getOutput: () => output,
+  }
+}
+
+async function waitForCondition(
+  predicate: () => boolean,
+  options?: { timeoutMs?: number; intervalMs?: number },
+): Promise<void> {
+  const timeoutMs = options?.timeoutMs ?? 5000
+  const intervalMs = options?.intervalMs ?? 10
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (predicate()) {
+      return
+    }
+    await Bun.sleep(intervalMs)
+  }
+
+  throw new Error('Timed out waiting for useCodexOAuthFlow test condition')
+}
+
+function extractLastFrame(output: string): string {
+  let lastFrame: string | null = null
+  let cursor = 0
+
+  while (cursor < output.length) {
+    const start = output.indexOf(SYNC_START, cursor)
+    if (start === -1) break
+
+    const contentStart = start + SYNC_START.length
+    const end = output.indexOf(SYNC_END, contentStart)
+    if (end === -1) break
+
+    const frame = output.slice(contentStart, end)
+    if (frame.trim().length > 0) {
+      lastFrame = frame
+    }
+    cursor = end + SYNC_END.length
+  }
+
+  return lastFrame ?? output
+}
+
+const TOKENS = {
+  accessToken: 'oauth-access-token',
+  refreshToken: 'oauth-refresh-token',
+  accountId: 'acct_oauth',
+  idToken: 'oauth-id-token',
+  apiKey: 'oauth-api-key',
+}
+
+beforeEach(async () => {
+  await acquireSharedMutationLock('components/useCodexOAuthFlow.test.tsx')
+})
+
+afterEach(() => {
+  try {
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
+})
+
+test('does not persist credentials when downstream setup rejects', async () => {
+  const saveCodexCredentials = mock(() => ({ success: true }))
+  const cleanup = mock(() => {})
+  const onAuthenticated = mock(async () => {
+    throw new Error('profile save failed')
+  })
+  const deps = {
+    createOAuthService: () => ({
+      async startOAuthFlow(
+        onAuthorizationUrl: (authUrl: string) => void | Promise<void>,
+      ) {
+        await onAuthorizationUrl('https://chatgpt.com/codex')
+        return TOKENS
+      },
+      cleanup,
+      submitManualCallback: () => ({ ok: true as const }),
+    }),
+    openBrowser: async () => true,
+    saveCodexCredentials,
+    isBareMode: () => false,
+  }
+
+  const { useCodexOAuthFlow } = await import(
+    `./useCodexOAuthFlow.js?real-reject-${Date.now()}-${Math.random()}`
+  )
+
+  function Harness(): React.ReactNode {
+    const handleAuthenticated = React.useCallback(onAuthenticated, [
+      onAuthenticated,
+    ])
+    const status = useCodexOAuthFlow({
+      onAuthenticated: handleAuthenticated,
+      deps,
+    })
+
+    return (
+      <Text>
+        {status.state === 'error'
+          ? `Codex OAuth failed: ${status.message}`
+          : status.state}
+      </Text>
+    )
+  }
+
+  const streams = createTestStreams()
+  const root = await createRoot({
+    stdout: streams.stdout as unknown as NodeJS.WriteStream,
+    stdin: streams.stdin as unknown as NodeJS.ReadStream,
+    patchConsole: false,
+  })
+  root.render(<Harness />)
+
+  try {
+    await waitForCondition(() => onAuthenticated.mock.calls.length === 1)
+    await Bun.sleep(0)
+    await Bun.sleep(0)
+    expect(onAuthenticated).toHaveBeenCalled()
+    expect(saveCodexCredentials).not.toHaveBeenCalled()
+  } finally {
+    root.unmount()
+    streams.stdin.end()
+    streams.stdout.end()
+    await Bun.sleep(0)
+  }
+})
+
+test('persists credentials with profile linkage after downstream setup succeeds', async () => {
+  const saveCodexCredentials = mock(() => ({ success: true }))
+  const onAuthenticated = mock(
+    async (
+      _tokens: typeof TOKENS,
+      persistCredentials: (options?: { profileId?: string }) => void,
+    ) => {
+      persistCredentials({ profileId: 'profile_codex_oauth' })
+    },
+  )
+  const cleanup = mock(() => {})
+  const deps = {
+    createOAuthService: () => ({
+      async startOAuthFlow(
+        onAuthorizationUrl: (authUrl: string) => void | Promise<void>,
+      ) {
+        await onAuthorizationUrl('https://chatgpt.com/codex')
+        return TOKENS
+      },
+      cleanup,
+      submitManualCallback: () => ({ ok: true as const }),
+    }),
+    openBrowser: async () => true,
+    saveCodexCredentials,
+    isBareMode: () => false,
+  }
+
+  const { useCodexOAuthFlow } = await import(
+    `./useCodexOAuthFlow.js?real-persist-${Date.now()}-${Math.random()}`
+  )
+
+  function Harness(): React.ReactNode {
+    const handleAuthenticated = React.useCallback(onAuthenticated, [
+      onAuthenticated,
+    ])
+    useCodexOAuthFlow({
+      onAuthenticated: handleAuthenticated,
+      deps,
+    })
+    return <Text>waiting</Text>
+  }
+
+  const streams = createTestStreams()
+  const root = await createRoot({
+    stdout: streams.stdout as unknown as NodeJS.WriteStream,
+    stdin: streams.stdin as unknown as NodeJS.ReadStream,
+    patchConsole: false,
+  })
+  root.render(<Harness />)
+
+  try {
+    await waitForCondition(() => onAuthenticated.mock.calls.length === 1)
+    await waitForCondition(() => saveCodexCredentials.mock.calls.length === 1)
+    expect(onAuthenticated).toHaveBeenCalled()
+    expect(saveCodexCredentials).toHaveBeenCalledWith({
+      apiKey: TOKENS.apiKey,
+      accessToken: TOKENS.accessToken,
+      refreshToken: TOKENS.refreshToken,
+      idToken: TOKENS.idToken,
+      accountId: TOKENS.accountId,
+      profileId: 'profile_codex_oauth',
+    })
+  } finally {
+    root.unmount()
+    streams.stdin.end()
+    streams.stdout.end()
+    await Bun.sleep(0)
+  }
+})
+
+test('returns a successful storage warning without entering the error state', async () => {
+  const saveCodexCredentials = mock(() => ({
+    success: true,
+    warning: 'Warning: Storing credentials in plaintext.',
+  }))
+  let storageWarning: string | undefined
+  const onAuthenticated = mock(
+    async (
+      _tokens: typeof TOKENS,
+      persistCredentials: (
+        options?: { profileId?: string },
+      ) => { warning?: string } | void,
+    ) => {
+      const result = persistCredentials({
+        profileId: 'profile_codex_oauth',
+      })
+      storageWarning =
+        result && typeof result === 'object' ? result.warning : undefined
+    },
+  )
+  const cleanup = mock(() => {})
+  const deps = {
+    createOAuthService: () => ({
+      async startOAuthFlow(
+        onAuthorizationUrl: (authUrl: string) => void | Promise<void>,
+      ) {
+        await onAuthorizationUrl('https://chatgpt.com/codex')
+        return TOKENS
+      },
+      cleanup,
+      submitManualCallback: () => ({ ok: true as const }),
+    }),
+    openBrowser: async () => true,
+    saveCodexCredentials,
+    isBareMode: () => false,
+  }
+
+  const { useCodexOAuthFlow } = await import(
+    `./useCodexOAuthFlow.js?real-persist-warning-${Date.now()}-${Math.random()}`
+  )
+
+  function Harness(): React.ReactNode {
+    const handleAuthenticated = React.useCallback(onAuthenticated, [onAuthenticated])
+    const status = useCodexOAuthFlow({
+      onAuthenticated: handleAuthenticated,
+      deps,
+    })
+
+    return (
+      <Text>
+        {status.state === 'error'
+          ? `Codex OAuth failed: ${status.message}`
+          : status.state}
+      </Text>
+    )
+  }
+
+  const streams = createTestStreams()
+  const root = await createRoot({
+    stdout: streams.stdout as unknown as NodeJS.WriteStream,
+    stdin: streams.stdin as unknown as NodeJS.ReadStream,
+    patchConsole: false,
+  })
+  root.render(<Harness />)
+
+  try {
+    await waitForCondition(() => saveCodexCredentials.mock.calls.length === 1)
+    await Bun.sleep(0)
+    expect(storageWarning).toBe('Warning: Storing credentials in plaintext.')
+    expect(extractLastFrame(streams.getOutput())).not.toContain(
+      'Codex OAuth failed',
+    )
+  } finally {
+    root.unmount()
+    streams.stdin.end()
+    streams.stdout.end()
+    await Bun.sleep(0)
+  }
+})
+
+test('reports credential persistence failures without token values', async () => {
+  const saveCodexCredentials = mock(() => ({
+    success: false,
+    warning: 'secure storage unavailable',
+  }))
+  const onAuthenticated = mock(
+    async (
+      _tokens: typeof TOKENS,
+      persistCredentials: (options?: { profileId?: string }) => void,
+    ) => {
+      persistCredentials({ profileId: 'profile_codex_oauth' })
+    },
+  )
+  const cleanup = mock(() => {})
+  const deps = {
+    createOAuthService: () => ({
+      async startOAuthFlow(
+        onAuthorizationUrl: (authUrl: string) => void | Promise<void>,
+      ) {
+        await onAuthorizationUrl('https://chatgpt.com/codex')
+        return TOKENS
+      },
+      cleanup,
+      submitManualCallback: () => ({ ok: true as const }),
+    }),
+    openBrowser: async () => true,
+    saveCodexCredentials,
+    isBareMode: () => false,
+  }
+
+  const { useCodexOAuthFlow } = await import(
+    `./useCodexOAuthFlow.js?real-persist-failure-${Date.now()}-${Math.random()}`
+  )
+
+  function Harness(): React.ReactNode {
+    const handleAuthenticated = React.useCallback(onAuthenticated, [onAuthenticated])
+    const status = useCodexOAuthFlow({
+      onAuthenticated: handleAuthenticated,
+      deps,
+    })
+
+    return <Text>{status.state === 'error' ? status.message : status.state}</Text>
+  }
+
+  const streams = createTestStreams()
+  const root = await createRoot({
+    stdout: streams.stdout as unknown as NodeJS.WriteStream,
+    stdin: streams.stdin as unknown as NodeJS.ReadStream,
+    patchConsole: false,
+  })
+  root.render(<Harness />)
+
+  try {
+    await waitForCondition(() =>
+      extractLastFrame(streams.getOutput()).includes(
+        'secure storage unavailable',
+      ),
+    )
+    const frame = extractLastFrame(streams.getOutput())
+    expect(frame).toContain('secure storage unavailable')
+    for (const value of Object.values(TOKENS)) {
+      expect(frame).not.toContain(value)
+    }
+  } finally {
+    root.unmount()
+    streams.stdin.end()
+    streams.stdout.end()
+    await Bun.sleep(0)
+  }
+})
+
+test('exposes submitManualCallback in the waiting state and delegates success and failure results', async () => {
+  // The service's manual-callback result is what the ProviderManager UI relies
+  // on; verify the hook surfaces it in the waiting status and passes both the
+  // raw input and the service's result straight back to the caller.
+  const submitManualCallback = mock((input: string) =>
+    input.includes('code=good')
+      ? ({ ok: true as const })
+      : ({ ok: false as const, error: 'State mismatch' }),
+  )
+  const cleanup = mock(() => {})
+  const deps = {
+    createOAuthService: () => ({
+      async startOAuthFlow(
+        onAuthorizationUrl: (authUrl: string) => void | Promise<void>,
+      ) {
+        await onAuthorizationUrl('https://chatgpt.com/codex')
+        // Stay in the waiting state so the manual-callback path is reachable.
+        return new Promise<typeof TOKENS>(() => {})
+      },
+      cleanup,
+      submitManualCallback,
+    }),
+    openBrowser: async () => false,
+    saveCodexCredentials: mock(() => ({ success: true })),
+    isBareMode: () => false,
+  }
+
+  const { useCodexOAuthFlow } = await import(
+    `./useCodexOAuthFlow.js?waiting-manual-${Date.now()}-${Math.random()}`
+  )
+
+  let latestStatus:
+    | {
+        state: string
+        submitManualCallback?: (
+          input: string,
+        ) => { ok: boolean; error?: string }
+      }
+    | undefined
+
+  // Stable reference: a fresh inline `onAuthenticated` on every render would
+  // re-run the hook's effect each render, restarting the OAuth flow and
+  // looping setStatus → render → setStatus ("Maximum update depth exceeded").
+  // The other tests in this file memoize the callback for the same reason.
+  const onAuthenticated = async (): Promise<void> => {}
+
+  function Harness(): React.ReactNode {
+    const status = useCodexOAuthFlow({
+      onAuthenticated,
+      deps,
+    })
+    latestStatus = status as typeof latestStatus
+    return <Text>{status.state}</Text>
+  }
+
+  const streams = createTestStreams()
+  const root = await createRoot({
+    stdout: streams.stdout as unknown as NodeJS.WriteStream,
+    stdin: streams.stdin as unknown as NodeJS.ReadStream,
+    patchConsole: false,
+  })
+  root.render(<Harness />)
+
+  try {
+    await waitForCondition(() => latestStatus?.state === 'waiting')
+    expect(latestStatus?.state).toBe('waiting')
+    expect(typeof latestStatus?.submitManualCallback).toBe('function')
+
+    const okResult = latestStatus?.submitManualCallback?.(
+      'http://localhost:41100/auth/callback?code=good&state=s',
+    )
+    expect(okResult).toEqual({ ok: true })
+
+    const failResult = latestStatus?.submitManualCallback?.(
+      'http://localhost:41100/auth/callback?code=bad&state=s',
+    )
+    expect(failResult?.ok).toBe(false)
+    expect(failResult?.error).toBe('State mismatch')
+
+    expect(submitManualCallback).toHaveBeenCalledTimes(2)
+    expect(submitManualCallback).toHaveBeenCalledWith(
+      'http://localhost:41100/auth/callback?code=good&state=s',
+    )
+  } finally {
+    root.unmount()
+    streams.stdin.end()
+    streams.stdout.end()
+    await Bun.sleep(0)
+  }
+})

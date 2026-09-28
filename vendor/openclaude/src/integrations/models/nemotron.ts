@@ -1,0 +1,58 @@
+import { defineModel } from '../define.js'
+
+export default [
+  defineModel({
+    id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    label: 'Nemotron 3 Ultra (free)',
+    brandId: 'nemotron',
+    vendorId: 'openai',
+    classification: ['chat', 'reasoning', 'coding'],
+    defaultModel: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    capabilities: {
+      supportsVision: false,
+      supportsStreaming: true,
+      supportsFunctionCalling: true,
+      supportsJsonMode: true,
+      supportsReasoning: true,
+      supportsPreciseTokenCount: false,
+    },
+    contextWindow: 1_000_000,
+    maxOutputTokens: 65_536,
+  }),
+  defineModel({
+    id: 'nvidia/nemotron-3-ultra-550b-a55b',
+    label: 'Nemotron 3 Ultra',
+    brandId: 'nemotron',
+    vendorId: 'openai',
+    classification: ['chat', 'reasoning', 'coding'],
+    defaultModel: 'nvidia/nemotron-3-ultra-550b-a55b',
+    capabilities: {
+      supportsVision: false,
+      supportsStreaming: true,
+      supportsFunctionCalling: true,
+      supportsJsonMode: true,
+      supportsReasoning: true,
+      supportsPreciseTokenCount: false,
+    },
+    contextWindow: 512_288,
+    maxOutputTokens: 65_536,
+  }),
+  defineModel({
+    id: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    label: 'Llama 3.1 Nemotron 70B Instruct',
+    brandId: 'nemotron',
+    vendorId: 'openai',
+    classification: ['chat'],
+    defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    capabilities: {
+      supportsVision: false,
+      supportsStreaming: true,
+      supportsFunctionCalling: true,
+      supportsJsonMode: true,
+      supportsReasoning: false,
+      supportsPreciseTokenCount: false,
+    },
+    contextWindow: 128_000,
+    maxOutputTokens: 32_768,
+  }),
+]

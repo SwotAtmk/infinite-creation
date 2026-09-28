@@ -27,12 +27,12 @@
 **全程无需人工介入**，可以长时托管无需人工干预运行（跑一晚/一整天均可）；完成后可逐段**审查分镜**并对不满意的片段**单独重生成**。
 
 ## 我的电脑运行配置
-
+```text
 系统：Windows 11（也支持在Linux/Mac上运行）
 CPU：12th Gen Intel(R) Core(TM) i5-12400F
 显卡：NVIDIA GeForce RTX 3080 20G 
 内存：32GB DDR4 3200 MT/s (16GBx2)
-
+```
 **具体本地的显卡配置需要多大的显存，我这边暂时还没有做详细测试，如果有相关测试的结果，欢迎加入群聊分享，理论上来说8GB以上显存都是可以运行的**
 
 **注意**：须先安装ffmpeg，否则可能会影响最后的合并成片的功能，下载地址：[https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)

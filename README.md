@@ -193,6 +193,14 @@ pnpm test   # node --test tests/unit.test.mjs
 - 成片统一转码 H.264 + AAC（24fps），保证可播。
 - 任务为后台持久化任务，刷新页面/重启服务后可续跑（幂等跳过已完成项）。
 
+# 推荐一下我的工具站，里面有我收藏的很多实用小工具哦，感兴趣的可以了解一下\~
+- 可以获取最新的项目资讯和实用工具
+- [淘项Hub：http://tx3247.t.taoxiangyoushu.com/](http://tx3247.t.taoxiangyoushu.com/) 
+
+# 欢迎加入群聊，反馈问题或建议
+
+![jiaqun](images/jiaqun.png)
+
 ## 参考项目，特别鸣谢
 
 - [nextjs](https://nextjs.org/) 提供了 Next.js 框架，用于构建 Web 应用
@@ -211,10 +219,3 @@ Copyright (c) 2026 SwotAtmk
 
 > 说明：`skills/` 目录中的一些技能来源于 MiniMax-H3 官方仓库，`vendor/` 目录为第三方代码，均不在本项目的 MIT 授权范围内，请遵循其各自的授权条款。
 
-# 推荐一下我的工具站，里面有我收藏的很多实用小工具哦，感兴趣的可以了解一下\~
-- 可以获取最新的项目资讯和实用工具
-- [淘项Hub：http://tx3247.t.taoxiangyoushu.com/](http://tx3247.t.taoxiangyoushu.com/) 
-
-# 欢迎加入群聊，反馈问题或建议
-
-![jiaqun](images/jiaqun.png)

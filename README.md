@@ -195,7 +195,7 @@ pnpm test   # node --test tests/unit.test.mjs
 
 # 推荐一下我的工具站，里面有我收藏的很多实用小工具哦，感兴趣的可以了解一下\~
 - 可以获取最新的项目资讯和实用工具
-- [淘项Hub：http://tx3247.t.taoxiangyoushu.com/](http://tx3247.t.taoxiangyoushu.com/) 
+- [淘项Hub：https://tx3247.t.taoxiangyoushu.com/?f=0zv5vo2](https://tx3247.t.taoxiangyoushu.com/?f=0zv5vo2) 
 
 # 欢迎加入群聊，反馈问题或建议
 

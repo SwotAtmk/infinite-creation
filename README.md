@@ -6,6 +6,7 @@
  **小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频**
 
 ## 项目计划
+- [计划中] 支持提交参考素材，及Agent整理参考素材
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
 - [进行中] 接入在线RunningHub-ComfyUI工作流生成
 - [✅] 优化本地MiniMax H3人物语音电流声或者语音不清晰的问题

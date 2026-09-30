@@ -5,6 +5,14 @@
 ## 项目简介
  **小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频**
 
+## 生成样例
+- 《妈妈的时间》
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/3ace95ff-1ec1-46b0-abab-115c76734ee3" width="70%" poster=""> </video>
+</div>
+
+[更多样例](docs/run_demo.md)
+
 ## 项目计划
 - [计划中] 支持提交参考素材，及Agent整理参考素材
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频

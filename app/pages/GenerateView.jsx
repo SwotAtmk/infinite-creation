@@ -1,10 +1,19 @@
 'use client';
+import { useState } from 'react';
 import { api } from '../api-client.js';
 import ShotsTab from './ShotsTab';
 
 // ============ 页2 · 生成内容 ============
-export default function GenerateView({ projectId, chapters, cursor, setCursor, running, onRun, onStop, onRefresh }) {
+export default function GenerateView({ projectId, chapters, cursor, setCursor, running, onRun, onStop, onRefresh, onGoLogs }) {
   const cur = chapters[cursor] || chapters[0] || null;
+  const [runTip, setRunTip] = useState(false);
+  const [starting, setStarting] = useState(false);
+  async function startRun(title) {
+    if (!title) return;
+    setRunTip(true);
+    setStarting(true);
+    try { await onRun(title); } finally { setStarting(false); }
+  }
   async function regenChapter(mode) {
     if (!cur) return;
     const msg = mode === 'storyboard'
@@ -25,7 +34,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
         <div className="row" style={{ marginTop: 8 }}>
           {running
             ? <button className="danger" onClick={onStop}>■ 停止</button>
-            : <button className="primary" disabled={!cur} onClick={() => cur && onRun(cur.title)}>▶ 生成/继续 {cur ? cur.title : ''}</button>}
+            : <button className="primary" disabled={!cur} onClick={() => cur && startRun(cur.title)}>▶ 生成/继续 {cur ? cur.title : ''}</button>}
           {!running && <button onClick={() => onRun(null)}>生成全部章节</button>}
         </div>
         <div className="row" style={{ marginTop: 8 }}>
@@ -39,6 +48,22 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
         </p>
       </div>
       {cur && <ShotsTab projectId={projectId} chapter={cur.title} running={running} onRefresh={onRefresh} />}
+
+      {runTip && (
+        <div className="modal-bg" onClick={() => setRunTip(false)}>
+          <div className="modal" style={{ width: 'min(460px, 92vw)' }} onClick={(e) => e.stopPropagation()}>
+            <div className="row" style={{ gap: 10 }}>
+              {starting && <span className="spinner" />}
+              <h2 style={{ margin: 0 }}>正在生成</h2>
+            </div>
+            <p style={{ marginTop: 10, color: '#9aa4b2' }}>正在生成，可以前往「运行日志」查看运行状态……</p>
+            <div className="row" style={{ marginTop: 16 }}>
+              <button className="primary" onClick={() => { setRunTip(false); onGoLogs && onGoLogs(); }}>前往运行日志</button>
+              <button onClick={() => setRunTip(false)}>留在本页</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

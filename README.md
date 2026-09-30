@@ -218,7 +218,7 @@ pnpm test   # node --test tests/unit.test.mjs
 
 ## 开源协议
 
-本项目基于 [MIT License](LICENSE) 开源。
+本项目基于 [MIT License](LICENSE) 协议进行开源，MIT是自由度最高的开源协议，你可以拿去商用和二次开发，但是必须保留原版声明
 
 Copyright (c) 2026 SwotAtmk
 

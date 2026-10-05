@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import AdmZip from 'adm-zip';
 import {
-  analyzeWorkflow, buildWorkflow, getDefaultSpecById,
+  analyzeWorkflow, buildWorkflow, getDefaultSpecById, getSpecForKind,
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts,
@@ -67,6 +67,97 @@ test('buildWorkflow: r2v 媒体绑定', () => {
   assert.equal(wf['26'].inputs.audio, 'b.flac');
   assert.equal(wf['32'].inputs.image, 'c.png');
   assert.equal(wf['6'].inputs.noise_seed, 1);
+});
+
+// 本机 GGUF 工作流：角色值直写被连线占用的输入，并剪掉模板占位资源与 LLM 改写链
+function graphIssues(wf, outputClasses) {
+  const keep = new Set();
+  const stack = Object.keys(wf).filter((id) => outputClasses.includes(wf[id].class_type));
+  const roots = [...stack];
+  while (stack.length) {
+    const id = stack.pop();
+    if (keep.has(id) || !wf[id]) continue;
+    keep.add(id);
+    for (const v of Object.values(wf[id].inputs || {})) {
+      if (Array.isArray(v) && typeof v[0] === 'string' && wf[v[0]]) stack.push(v[0]);
+    }
+  }
+  const dangling = [];
+  for (const node of Object.values(wf)) {
+    for (const [f, v] of Object.entries(node.inputs || {})) {
+      if (Array.isArray(v) && typeof v[0] === 'string' && !wf[v[0]]) dangling.push(node.class_type + '.' + f);
+    }
+  }
+  return { roots, orphans: Object.keys(wf).filter((id) => !keep.has(id)), dangling };
+}
+
+test('GGUF t2i: prompt 直写编码节点并剪掉 LLM 改写链', () => {
+  const spec = getDefaultSpecById('qwen_image_2_1_t2i_gguf');
+  const wf = buildWorkflow(spec, {
+    positive_prompt: 'P', negative_prompt: 'N', width: 1344, height: 768, seed: 5, filename_prefix: 'assets/x',
+  });
+  assert.equal(wf['459:452'].inputs.prompt, 'P');
+  assert.equal(wf['459:452'].inputs.negative_prompt, 'N');
+  assert.equal(wf['459:456'].inputs.width, 1344);
+  assert.equal(wf['459:458'].inputs.seed, 5);
+  assert.equal(wf['461'].inputs.filename_prefix, 'assets/x');
+  const g = graphIssues(wf, ['SaveImageAdvanced']);
+  assert.deepEqual(g.roots, ['461']);
+  assert.deepEqual(g.dangling, []);
+  assert.ok(!wf['459:471'], 'TextGenerate 改写链应被剪掉');
+});
+
+test('GGUF i2i: 只绑第一张参考图，剪掉模板第二张与对比节点', () => {
+  const spec = getDefaultSpecById('qwen_image_2_1_i2i_gguf');
+  const wf = buildWorkflow(spec, { positive_prompt: 'P', image: 'ref.png', seed: 2, filename_prefix: 'assets/e' });
+  assert.equal(wf['459:474'].inputs.prompt, 'P');
+  assert.equal(wf['470'].inputs.image, 'ref.png');
+  assert.ok(!wf['475'], '模板自带的第二张参考图应被剪掉');
+  const g = graphIssues(wf, ['SaveImageAdvanced']);
+  assert.deepEqual(g.dangling, []);
+  assert.ok(!g.orphans.length, '不应有孤立节点');
+});
+
+test('GGUF r2v: Autogrow 媒体槽按类型各自从 0 编号，标签值翻译成节点枚举', () => {
+  const spec = getDefaultSpecById('minimax_h3_r2v_gguf');
+  const wf = buildWorkflow(spec, {
+    positive_prompt: 'P', seconds: 6, aspect_ratio: '16:9', resolution: '480P', seed: 1, filename_prefix: 'video/x',
+    references: [
+      { type: 'image', filename: 'a.png' },
+      { type: 'audio', filename: 'b.flac' },
+      { type: 'image', filename: 'c.png' },
+    ],
+  });
+  const inputs = wf['145'].inputs;
+  assert.equal(wf['145'].inputs.prompt, 'P');
+  assert.equal(wf['135'].inputs.value, 6, '时长注入 PrimitiveFloat，保留 17k+5 帧对齐表达式');
+  assert.equal(wf['115'].inputs.aspect_ratio, '16:9 (Widescreen)');
+  assert.equal(wf['115'].inputs.megapixels, 0.5);
+  assert.deepEqual(inputs['ref_images.ref_image_0'], ['149', 0]);
+  assert.deepEqual(inputs['ref_images.ref_image_1'], ['1002', 0]);
+  assert.deepEqual(inputs['ref_audios.ref_audio_0'], ['153', 0]);
+  assert.equal(wf['149'].inputs.image, 'a.png');
+  assert.equal(wf['153'].inputs.audio, 'b.flac');
+  assert.equal(wf['131'].inputs.noise_seed, 1);
+  const g = graphIssues(wf, ['SaveVideo']);
+  assert.deepEqual(g.dangling, []);
+  assert.ok(!g.orphans.length, '未用的视频占位节点应被剪掉');
+});
+
+test('GGUF r2v: 未绑定音频时不留悬空的音频槽', () => {
+  const spec = getDefaultSpecById('minimax_h3_r2v_gguf');
+  const wf = buildWorkflow(spec, { positive_prompt: 'P', references: [{ type: 'image', filename: 'a.png' }] });
+  const inputs = wf['145'].inputs;
+  assert.ok(!Object.keys(inputs).some((k) => k.startsWith('ref_audios.')), '音频槽应被清空');
+  assert.ok(!wf['153'], '未使用的 LoadAudio 占位应被删');
+  assert.deepEqual(graphIssues(wf, ['SaveVideo']).dangling, []);
+});
+
+test('getSpecForKind: config 覆盖规格 id，缺失时抛错', () => {
+  assert.equal(getSpecForKind({ workflows: { t2i: 'qwen_image_2_1_t2i_gguf' } }, 't2i').id, 'qwen_image_2_1_t2i_gguf');
+  assert.equal(getSpecForKind({}, 'i2i').id, 'qwen_image_edit_2511_i2i');
+  assert.equal(getSpecForKind({}, 'r2v').id, 'minimax_h3_r2v');
+  assert.throws(() => getSpecForKind({ workflows: { t2i: 'nope' } }, 't2i'), /未找到工作流规格/);
 });
 
 test('fallbackVideoPrompt: 占位符与一致性描述', () => {

@@ -31,6 +31,22 @@ Web「生成」按钮
             → 流式 onProgress → Web 界面实时展示
 ```
 
+## 分阶段运行（生成页 4 阶段拆批）
+
+`GET/POST /api/projects/:id/stages`：把整条流水线拆成 4 个独立阶段，生成页勾选后由 `lib/agent/stages.js` 串行跑选中阶段。
+
+| 阶段 | 进程依赖 | 内容 |
+|------|----------|------|
+| llm（文本创作/分镜） | LLM | 启动 Agent，写完全部文本，渲染工具全部禁用 |
+| image（资产生图） | ComfyUI（禁 CK） | `generate_assets_batch(only:['image'])` 文生图/图生图 |
+| tts（音色设计） | ComfyUI | `generate_assets_batch(only:['tts'])` Qwen3-TTS |
+| video（分镜视频 + 成片） | ComfyUI（CK 加速） | 逐章串行出镜头视频 + ffmpeg 合并成片 |
+
+- **待办数由代码算**（`pendingByStage`，与各批量工具的跳过条件逐字一致），不启动 27B LLM 去问"还剩什么"——省一次大模型拉起（原设计的缺口）。
+- **preflight 预检**：提交前校验所选阶段的 CK 开关与当前 ComfyUI 实例是否匹配、显存是否够（video 必须接 CK 实例、image 必须禁 CK），不通过直接 400 报原因，避免白等。
+- **video 阶段每 N 个视频自动调 ComfyUI `/free`**（`generation.videoFreeAfterEvery`，默认 3、0=关闭，可设置页调整），对抗 AMD Dynamic VRAM 连续生成后的速度退化。
+- 设计动机：本机 24GB 显存 + 32GB 内存，LLM（27B GGUF ≈15.7GB）与 ComfyUI 无法同时常驻，拆批后每批只拉起所需进程。
+
 ## 三个「打通」分别落在哪里
 
 | 目标 | 落地方式 | 位置 |
@@ -44,8 +60,9 @@ Web「生成」按钮
 
 - `vendor/openclaude/` —— openclaude 完整源码（3450 文件）+ 构建产物 dist/（构建物不入库）
 - `lib/agent/openclaude-agent.js` —— 对接层：provider/工具/persona/禁用工具/流式进度
-- `lib/agent/job-runner.js` —— startCreateJob 驱动 openclaude agent
-- `lib/agent/tools.js` —— 21 个领域工具定义 + runTool 分派（复用）
+- `lib/agent/job-runner.js` —— startCreateJob 驱动 openclaude agent；runExclusiveVideo 视频任务串行闸门；startStageJob 分阶段任务入口
+- `lib/agent/stages.js` —— 分阶段调度（阶段定义 / pendingByStage 待办 / preflight 预检 / 串行执行）
+- `lib/agent/tools.js` —— 21 个领域工具定义 + runTool 分派（复用），含视频任务每 N 个自动 /free 释放显存
 - `lib/agent/skill-engine.js` —— 技能加载（复用）
 - `lib/core/llm.js` —— 本项目自带 llmChat（用于 skill-factory/兜底，openclaude 用自己的 client 打同一端点）
 

@@ -115,9 +115,11 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
             </div>
             {stageErr && <p style={{ margin: '8px 0 0', color: '#e5534b' }}>{stageErr}</p>}
             <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>
-              本机 LLM 与 ComfyUI 不能同时跑（抢显存），所以拆成阶段分别启动进程：勾「LLM 创作」只写文本（渲染工具已被禁用），
-              勾「资产图」需用 run_amd_gpu_no_ck_attention.bat 起的 ComfyUI，勾「分镜视频」需用带 CK 的那个。
-              同一批不能混勾 LLM 与渲染项。待办数由后端统计，不消耗 LLM。
+              受全部模型本地部署的硬件限制（显存有限），LLM 与 ComfyUI 不能同时运行，故按阶段拆分执行：勾「LLM 创作」只写文本（渲染工具已禁用），
+              勾「资产图」「分镜视频」为渲染阶段，同一批不能混勾 LLM 与渲染项；待办数由后端统计，不消耗 LLM。
+              注意：ComfyUI 的 --use-ck-attention 启动参数与 Qwen-Image 2 存在兼容性问题（生图质量异常、超长提示词丢失），
+              生图需使用未开启 CK 的 ComfyUI 实例。
+              由于视频生成耗时较长，强烈建议在生成视频前先检查分镜与素材是否符合预期，再启动视频生成，避免素材不合格导致返工。
             </p>
           </div>
         )}

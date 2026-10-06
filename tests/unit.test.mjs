@@ -13,6 +13,8 @@ import {
 } from '../lib/core/index.js';
 import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
+import { ckBroken, STAGES, STAGE_MAP } from '../lib/agent/stages.js';
+import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool } from '../lib/agent/tools.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -346,3 +348,70 @@ test('installSkillsFromZip: 无 SKILL.md 时抛错', () => {
 });
 
 console.log('全部单元测试通过');
+
+// ================= 阶段调度（分阶段运行） =================
+
+test('阶段表：4 项且 each带 need/ck', () => {
+  assert.equal(STAGES.length, 4);
+  assert.deepEqual(STAGES.map((s) => s.id), ['llm', 'image', 'tts', 'video']);
+  for (const s of STAGES) {
+    assert.ok(['llm', 'comfyui'].includes(s.need), s.id + ' need 非法');
+    assert.ok([true, false, null].includes(s.ck), s.id + ' ck 非法');
+    assert.equal(STAGE_MAP[s.id], s);
+  }
+  // 关键不变式：只有 llm 阶段需要 LLM 进程；只有 video 强制要 CK；只有 image 强制不要 CK
+  assert.equal(STAGE_MAP.llm.need, 'llm');
+  assert.equal(STAGE_MAP.video.ck, true);
+  assert.equal(STAGE_MAP.image.ck, false);
+  assert.equal(STAGE_MAP.tts.ck, null, '音色阶段 CK 均可（实测 CK 下 TTS 无问题）');
+});
+
+test('ckBroken: 关 CK 一律不坏；开 CK 按 comfy-kitchen 版本判', () => {
+  assert.equal(ckBroken({ ckAttention: false, ckKitchen: '0.2.36' }), false);
+  assert.equal(ckBroken({ ckAttention: false, ckKitchen: '9.9.9' }), false);
+  assert.equal(ckBroken(null), false);
+  // 已知坏区间
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.36' }), true);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.35' }), true);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.1.99' }), true);
+  // 修好的版本自动放行（上游修好后改 CK_BAD_MAX 即可，其余代码不用动）
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.37' }), false);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '1.0.0' }), false);
+  // 读不到版本 -> 保守判坏
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '' }), true);
+});
+
+test('renderDisabled：渲染工具被跳过且不抛错（防 Agent 反复重试）', async () => {
+  const reports = [];
+  const ctx = { renderDisabled: true, report: (x) => reports.push(x) };
+  const r = JSON.parse(await runTool(ctx, 'generate_asset_image', { asset_id: 'x' }));
+  assert.equal(r.skipped, true);
+  assert.equal(r.tool, 'generate_asset_image');
+  assert.ok(r.reason.includes('另起一批'));
+  assert.equal(reports.length, 1, '跳过时也要上报，否则界面看不出发生了什么');
+
+  // 不开开关时不拦（真的去执行handler，这里会因为无效 asset_id 而失败 —— 证明没被跳过）
+  const live = { renderDisabled: false };
+  await assert.rejects(() => runTool(live, 'generate_asset_image', { asset_id: 'x' }));
+});
+
+test('RENDER_TOOLS 覆盖全部需外部进程的渲染工具', () => {
+  for (const n of ['generate_asset_image', 'edit_asset_image', 'change_outfit', 'design_outfits',
+    'generate_assets_batch', 'design_voice', 'generate_shot_video', 'regenerate_shot',
+    'generate_chapter_videos', 'assemble_video']) {
+    assert.ok(RENDER_TOOLS.has(n), n + ' 应属于渲染工具');
+  }
+  // 纯 DB/文本工具不得被误伤，否则 LLM 阶段连提示词都写不了
+  for (const n of ['update_asset', 'set_storyboard', 'list_shots', 'save_context', 'skill', 'report']) {
+    assert.equal(RENDER_TOOLS.has(n), false, n + ' 不该被拦');
+  }
+});
+
+test('待办统计与批量工具口径一致：图片类别不含 costume', () => {
+  // costume 走 change_outfit/design_outfits（图生图），不在文生图批处理内
+  assert.ok(!IMAGE_ASSET_CATEGORIES.includes('costume'));
+  assert.ok(IMAGE_ASSET_CATEGORIES.includes('character'));
+  assert.ok(IMAGE_ASSET_CATEGORIES.includes('scene'));
+  // ASSET_CATEGORY_IDS 里真实存在的类别不能写错
+  for (const c of IMAGE_ASSET_CATEGORIES) assert.ok(ASSET_CATEGORIES.some((x) => x.id === c), c + ' 不是合法资产类别');
+});

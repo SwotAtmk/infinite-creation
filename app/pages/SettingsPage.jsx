@@ -47,7 +47,7 @@ export default function SettingsPage({ onBack }) {
       <p className="muted" style={{ marginTop: 4 }}>开启后，写分镜/图生图提示词时会把参考图提交给大模型；请确认所用模型确实支持视觉输入。</p>
       <br />
 
-      <h3 style={{ marginTop: 8, color: '#c0392b' }}>生成维护</h3>
+      <h3 style={{ marginTop: 8, color: '#c0392b', fontSize: 22 }}>生成维护</h3>
       <label className="row" style={{ gap: 8, alignItems: 'center' }}>
         <span>每 N 个视频后释放 ComfyUI 显存</span>
         <input style={{ width: 64 }} type="number" min={0} max={20} value={cfg.generation.videoFreeAfterEvery ?? 3} onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, videoFreeAfterEvery: Math.max(0, Math.min(20, Math.round(Number(e.target.value) || 0))) } })} />

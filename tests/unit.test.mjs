@@ -10,6 +10,7 @@ import {
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts,
+  freeComfy, checkComfyUI,
 } from '../lib/core/index.js';
 import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
@@ -414,4 +415,42 @@ test('待办统计与批量工具口径一致：图片类别不含 costume', () 
   assert.ok(IMAGE_ASSET_CATEGORIES.includes('scene'));
   // ASSET_CATEGORY_IDS 里真实存在的类别不能写错
   for (const c of IMAGE_ASSET_CATEGORIES) assert.ok(ASSET_CATEGORIES.some((x) => x.id === c), c + ' 不是合法资产类别');
+});
+
+// ================= 显存释放（/free） =================
+
+test('freeComfy: POST /free 携带 unload_models + free_memory', async () => {
+  const calls = [];
+  const orig = global.fetch;
+  global.fetch = async (url, opts) => {
+    calls.push({ url: String(url), method: opts?.method, body: opts?.body });
+    return { ok: true, json: async () => ({}) };
+  };
+  try {
+    await freeComfy('http://127.0.0.1:8188/');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'http://127.0.0.1:8188/free', 'baseUrl 尾部斜杠应被归一');
+    assert.equal(calls[0].method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0].body), { unload_models: true, free_memory: true });
+  } finally {
+    global.fetch = orig;
+  }
+});
+
+test('checkComfyUI: dynamicVram 探测（--disable-dynamic-vram 关闭，否则开启）', async () => {
+  const orig = global.fetch;
+  try {
+    global.fetch = async () => ({ ok: true, json: async () => ({ system: { comfyui_version: '0.3.x', argv: ['python', 'main.py', '--use-ck-attention'] }, devices: [{ name: 'RX 7900 XTX', vram_free: 100 }] }) });
+    const on = await checkComfyUI('http://x');
+    assert.equal(on.ok, true);
+    assert.equal(on.dynamicVram, true);
+    assert.equal(on.ckAttention, true);
+
+    global.fetch = async () => ({ ok: true, json: async () => ({ system: { argv: ['python', 'main.py', '--disable-dynamic-vram'] }, devices: [] }) });
+    const off = await checkComfyUI('http://x');
+    assert.equal(off.ok, true);
+    assert.equal(off.dynamicVram, false);
+  } finally {
+    global.fetch = orig;
+  }
 });

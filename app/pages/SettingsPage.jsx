@@ -10,12 +10,18 @@ export default function SettingsPage({ onBack }) {
   const toast = useToast();
   const [cfg, setCfg] = useState(null);
   const [test, setTest] = useState('');
-  useEffect(() => { api.get('/api/config').then(setCfg).catch((e) => toast.error(e.message)); }, []);
+  const [comfyInfo, setComfyInfo] = useState(null);
+  useEffect(() => {
+    api.get('/api/config').then((c) => { setCfg(c); detectComfy(c.comfyui.baseUrl); }).catch((e) => toast.error(e.message));
+  }, []);
+  async function detectComfy(baseUrl) {
+    try { setComfyInfo(await api.post('/api/comfyui/test', { baseUrl })); } catch { setComfyInfo({ ok: false, error: '连接失败' }); }
+  }
   async function save() {
     try { await api.put('/api/config', cfg); toast.success('已保存'); } catch (e) { toast.error(e.message); }
   }
   async function testComfy() {
-    try { const r = await api.post('/api/comfyui/test', { baseUrl: cfg.comfyui.baseUrl }); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }
+    try { const r = await api.post('/api/comfyui/test', { baseUrl: cfg.comfyui.baseUrl }); setComfyInfo(r); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }
   }
   if (!cfg) return <div className="muted">加载中…</div>;
   return (
@@ -39,6 +45,24 @@ export default function SettingsPage({ onBack }) {
         <span>支持图片输入（多模态/视觉模型）</span>
       </label>
       <p className="muted" style={{ marginTop: 4 }}>开启后，写分镜/图生图提示词时会把参考图提交给大模型；请确认所用模型确实支持视觉输入。</p>
+      <br />
+
+      <h3 style={{ marginTop: 8 }}>生成维护</h3>
+      <label className="row" style={{ gap: 8, alignItems: 'center' }}>
+        <input type="checkbox" checked={(cfg.generation.videoFreeAfterEvery || 0) > 0} onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, videoFreeAfterEvery: e.target.checked ? Math.max(1, cfg.generation.videoFreeAfterEvery || 3) : 0 } })} />
+        <span>每 N 个视频后释放 ComfyUI 显存</span>
+        <input style={{ width: 64 }} type="number" min={1} max={20} disabled={(cfg.generation.videoFreeAfterEvery || 0) <= 0} value={(cfg.generation.videoFreeAfterEvery || 0) > 0 ? cfg.generation.videoFreeAfterEvery : ''} onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, videoFreeAfterEvery: Math.max(1, Math.min(20, Number(e.target.value) || 1)) } })} />
+        <span className="muted">个视频</span>
+      </label>
+      <p className="muted" style={{ marginTop: 4 }}>
+        利：AMD 显卡 + Dynamic VRAM 下连续生成多个视频后，显存状态累积会让速度逐步变慢；定期释放可保持稳定。
+        弊：每次释放后下一个视频需重新加载模型，多花 1~3 分钟；次数设得太小会频繁重载。
+        （0 = 关闭）
+      </p>
+      {comfyInfo && comfyInfo.ok === false && <p className="muted" style={{ marginTop: 4 }}>⚠ 当前 ComfyUI 连接失败，无法判断 Dynamic VRAM 状态，建议点「测试连接」确认。</p>}
+      {comfyInfo && comfyInfo.ok && !comfyInfo.dynamicVram && (cfg.generation.videoFreeAfterEvery || 0) > 0 && (
+        <p className="muted" style={{ marginTop: 4 }}>⚠ 检测到当前 ComfyUI 未启用 Dynamic VRAM（--disable-dynamic-vram），连续生成不会产生该退化，建议关闭此功能（把 N 设为 0）。</p>
+      )}
       <br />
       <button className="primary" onClick={save}>保存配置</button>
 

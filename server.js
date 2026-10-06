@@ -29,17 +29,36 @@ const MIME = {
   '.json': 'application/json', '.txt': 'text/plain', '.md': 'text/plain', '.zip': 'application/zip',
 };
 
-function serveFile(res, abs) {
+function serveFile(res, req, abs) {
   try {
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return false;
     const ext = path.extname(abs).toLowerCase();
-    const buf = fs.readFileSync(abs);
-    res.writeHead(200, {
+    const total = fs.statSync(abs).size;
+    const headers = {
       'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Content-Length': buf.length,
+      'Accept-Ranges': 'bytes',
       'Cache-Control': 'public, max-age=3600',
-    });
-    res.end(buf);
+    };
+    const range = req.headers.range;
+    if (range) {
+      // Range 支持：浏览器 <video>/<audio> 拖进度条靠它（206 分段返回），缺失则无法 seek
+      const m = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (!m || !m[1] && !m[2]) { res.writeHead(416, { 'Content-Range': 'bytes */' + total }); res.end(); return true; }
+      let start = m[1] ? parseInt(m[1], 10) : 0;
+      let end = m[2] ? parseInt(m[2], 10) : total - 1;
+      if (start >= total || start > end) { res.writeHead(416, { 'Content-Range': 'bytes */' + total }); res.end(); return true; }
+      end = Math.min(end, total - 1);
+      res.writeHead(206, {
+        ...headers,
+        'Content-Range': `bytes ${start}-${end}/${total}`,
+        'Content-Length': end - start + 1,
+      });
+      fs.createReadStream(abs, { start, end }).pipe(res);
+    } else {
+      // 无 Range：整文件返回（流式，避免大文件全量进内存）
+      res.writeHead(200, { ...headers, 'Content-Length': total });
+      fs.createReadStream(abs).pipe(res);
+    }
     return true;
   } catch {
     return false;
@@ -54,7 +73,7 @@ app.prepare().then(() => {
       const rel = decodeURIComponent(url.pathname.slice('/files/'.length));
       const abs = path.resolve(DATA_DIR, '.' + path.sep + rel.replace(/^\/+/, ''));
       const safe = path.relative(DATA_DIR, abs);
-      if (safe && !safe.startsWith('..') && !path.isAbsolute(safe) && serveFile(res, abs)) return;
+      if (safe && !safe.startsWith('..') && !path.isAbsolute(safe) && serveFile(res, req, abs)) return;
       res.writeHead(404).end();
       return;
     }

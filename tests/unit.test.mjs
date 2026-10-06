@@ -153,6 +153,20 @@ test('GGUF r2v: 未绑定音频时不留悬空的音频槽', () => {
   assert.deepEqual(graphIssues(wf, ['SaveVideo']).dangling, []);
 });
 
+test('GUFF tts: 台词/音色描述直写 PrimitiveStringMultiline 并留住模型加载器', () => {
+  const spec = getDefaultSpecById('qwen3_tts_voice_design_guff');
+  const wf = buildWorkflow(spec, {
+    text: '台词内容', voice_description: '清润少女音', seed: 42, filename_prefix: 'voice/v1',
+  });
+  assert.equal(wf['74'].inputs.value, '台词内容');
+  assert.equal(wf['75'].inputs.value, '清润少女音');
+  assert.equal(wf['77'].inputs.seed, 42);
+  assert.equal(wf['47'].inputs.filename_prefix, 'voice/v1');
+  assert.equal(wf['2'].class_type, 'QwenTTSModelsLoader', '按 repo_id 拉模型的加载器必须保留');
+  assert.deepEqual(wf['77'].inputs.qwen_tts_model, ['2', 0]);
+  assert.deepEqual(graphIssues(wf, ['SaveAudio']).dangling, []);
+});
+
 test('getSpecForKind: config 覆盖规格 id，缺失时抛错', () => {
   assert.equal(getSpecForKind({ workflows: { t2i: 'qwen_image_2_1_t2i_gguf' } }, 't2i').id, 'qwen_image_2_1_t2i_gguf');
   assert.equal(getSpecForKind({}, 'i2i').id, 'qwen_image_edit_2511_i2i');

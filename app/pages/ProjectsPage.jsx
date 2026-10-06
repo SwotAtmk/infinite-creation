@@ -2,23 +2,25 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api-client.js';
 import { STATUS_TAG } from './shared';
+import { useToast } from '../toast';
 
 // ============ 项目列表 ============
 export default function ProjectsPage({ onOpen }) {
+  const toast = useToast();
   const [projects, setProjects] = useState([]);
   const [form, setForm] = useState({ name: '', novel: '', idea: '', style: '' });
-  const load = useCallback(() => api.get('/api/projects').then(setProjects).catch(alert), []);
+  const load = useCallback(() => api.get('/api/projects').then(setProjects).catch((e) => toast.error(e.message)), []);
   useEffect(() => { load(); }, [load]);
 
   async function create() {
     try {
       const p = await api.post('/api/projects', form);
       onOpen(p.id);
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast.error(e.message); }
   }
   async function del(id) {
-    if (!confirm('删除该项目及其所有素材？')) return;
-    await api.del('/api/projects/' + id); load();
+    if (!(await toast.confirm('删除该项目及其所有素材？', { danger: true }))) return;
+    try { await api.del('/api/projects/' + id); toast.success('已删除'); load(); } catch (e) { toast.error(e.message); }
   }
 
   return (

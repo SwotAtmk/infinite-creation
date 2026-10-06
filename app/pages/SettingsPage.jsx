@@ -1,16 +1,18 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { api } from '../api-client.js';
+import { useToast } from '../toast';
 import SkillsTab from './SkillsTab';
 import WorkflowsTab from './WorkflowsTab';
 
 // ============ 设置 ============
 export default function SettingsPage({ onBack }) {
+  const toast = useToast();
   const [cfg, setCfg] = useState(null);
   const [test, setTest] = useState('');
-  useEffect(() => { api.get('/api/config').then(setCfg).catch(alert); }, []);
+  useEffect(() => { api.get('/api/config').then(setCfg).catch((e) => toast.error(e.message)); }, []);
   async function save() {
-    try { await api.put('/api/config', cfg); alert('已保存'); } catch (e) { alert(e.message); }
+    try { await api.put('/api/config', cfg); toast.success('已保存'); } catch (e) { toast.error(e.message); }
   }
   async function testComfy() {
     try { const r = await api.post('/api/comfyui/test', { baseUrl: cfg.comfyui.baseUrl }); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }

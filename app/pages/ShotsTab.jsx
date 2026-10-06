@@ -2,9 +2,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api-client.js';
 import { STATUS_TAG, fileUrl, dialogueSpeakers } from './shared';
+import { useToast } from '../toast';
 
 // ============ 分镜审查 ============
 export default function ShotsTab({ projectId, chapter: chapterProp = '', running = false, onRefresh }) {
+  const toast = useToast();
   const [shots, setShots] = useState([]);
   const [assets, setAssets] = useState([]);
   const [project, setProject] = useState(null);
@@ -12,8 +14,8 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const [feedback, setFeedback] = useState({});
   const [zipping, setZipping] = useState(false);
   const load = useCallback(() => {
-    api.get('/api/projects/' + projectId + '/shots').then(setShots).catch(alert);
-    api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch(alert);
+    api.get('/api/projects/' + projectId + '/shots').then(setShots).catch((e) => toast.error(e.message));
+    api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch((e) => toast.error(e.message));
     api.get('/api/projects/' + projectId).then(setProject).catch(() => {});
   }, [projectId]);
   // 生成期间定时拉取，实时反映每个分镜的生成结果（Agent 逐镜写库，没有逐镜的 WS 事件）
@@ -46,7 +48,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
 
   async function regen(shotId) {
     const fb = feedback[shotId] || undefined;
-    try { await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb }); alert('已提交重生成'); load(); } catch (e) { alert(e.message); }
+    try { await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb }); toast.success('已提交重生成'); load(); } catch (e) { toast.error(e.message); }
   }
   async function exportChapter() {
     try {
@@ -58,9 +60,9 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       document.body.appendChild(a);
       a.click();
       a.remove();
-      alert('导出成功，已开始下载。成片可到「🎞 成片」页预览和下载。');
+      toast.success('导出成功，已开始下载。成片可到「🎞 成片」页预览和下载。');
       onRefresh();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast.error(e.message); }
   }
   async function zipShots() {
     setZipping(true);
@@ -85,7 +87,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    } catch (e) { alert('打包失败：' + e.message); }
+    } catch (e) { toast.error('打包失败：' + e.message); }
     finally { setZipping(false); }
   }
 

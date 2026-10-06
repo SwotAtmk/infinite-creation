@@ -1,13 +1,15 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../api-client.js';
+import { useToast } from '../toast';
 
 // ============ 技能 ============
 export default function SkillsTab() {
+  const toast = useToast();
   const [skills, setSkills] = useState([]);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
-  const load = useCallback(() => api.get('/api/skills').then(setSkills).catch(alert), []);
+  const load = useCallback(() => api.get('/api/skills').then(setSkills).catch((e) => toast.error(e.message)), []);
   useEffect(() => { load(); }, [load]);
   async function rescan() { await api.post('/api/skills/rescan'); load(); }
   function pickZip() { if (fileRef.current) fileRef.current.click(); }
@@ -23,9 +25,9 @@ export default function SkillsTab() {
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error || ('HTTP ' + res.status));
-      alert('已安装技能：' + (j.installed || []).map((s) => s.name).join('、'));
+      toast.success('已安装技能：' + (j.installed || []).map((s) => s.name).join('、'));
       load();
-    } catch (e) { alert('上传失败：' + e.message); }
+    } catch (e) { toast.error('上传失败：' + e.message); }
     finally { setUploading(false); }
   }
   return (

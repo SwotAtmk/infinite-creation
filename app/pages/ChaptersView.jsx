@@ -1,28 +1,30 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { api } from '../api-client.js';
+import { useToast } from '../toast';
 
 // ============ 页1 · 章节管理 ============
 export default function ChaptersView({ projectId, chapters, cursor, setCursor, onRefresh }) {
+  const toast = useToast();
   const cur = chapters[cursor] || chapters[0] || null;
   const [title, setTitle] = useState('');
   const [novel, setNovel] = useState('');
   const [dirty, setDirty] = useState(false);
   useEffect(() => { if (cur) { setTitle(cur.title); setNovel(cur.novel || ''); setDirty(false); } }, [cur && cur.id]);
   async function save() {
-    try { await api.patch('/api/projects/' + projectId + '/chapters/' + cur.id, { title, novel }); alert('已保存「' + title + '」'); setDirty(false); onRefresh(); } catch (e) { alert(e.message); }
+    try { await api.patch('/api/projects/' + projectId + '/chapters/' + cur.id, { title, novel }); toast.success('已保存「' + title + '」'); setDirty(false); onRefresh(); } catch (e) { toast.error(e.message); }
   }
   async function addChapter() {
-    try { const c = await api.post('/api/projects/' + projectId + '/chapters', { title: '第' + (chapters.length + 1) + '章' }); onRefresh(); setCursor(Math.max(0, chapters.length)); } catch (e) { alert(e.message); }
+    try { const c = await api.post('/api/projects/' + projectId + '/chapters', { title: '第' + (chapters.length + 1) + '章' }); toast.success('已新增章节'); onRefresh(); setCursor(Math.max(0, chapters.length)); } catch (e) { toast.error(e.message); }
   }
   async function removeChapter(c) {
-    if (!window.confirm('删除「' + c.title + '」及其分镜？此操作不可逆。')) return;
-    try { await api.del('/api/projects/' + projectId + '/chapters/' + c.id); onRefresh(); } catch (e) { alert(e.message); }
+    if (!(await toast.confirm('删除「' + c.title + '」及其分镜？此操作不可逆。', { danger: true }))) return;
+    try { await api.del('/api/projects/' + projectId + '/chapters/' + c.id); toast.success('已删除「' + c.title + '」'); onRefresh(); } catch (e) { toast.error(e.message); }
   }
   async function move(i, dir) {
     const target = i + dir; if (target < 0 || target >= chapters.length) return;
     const a = chapters[i], b = chapters[target];
-    try { await api.patch('/api/projects/' + projectId + '/chapters/' + a.id, { seq: b.seq }); await api.patch('/api/projects/' + projectId + '/chapters/' + b.id, { seq: a.seq }); onRefresh(); } catch (e) { alert(e.message); }
+    try { await api.patch('/api/projects/' + projectId + '/chapters/' + a.id, { seq: b.seq }); await api.patch('/api/projects/' + projectId + '/chapters/' + b.id, { seq: a.seq }); onRefresh(); } catch (e) { toast.error(e.message); }
   }
   const label = { empty: '无分镜', pending: '待生成', running: '生成中', done: '完成', failed: '失败' };
   const tag = { done: 'tag done', running: 'tag running', failed: 'tag failed', pending: '', empty: '' };

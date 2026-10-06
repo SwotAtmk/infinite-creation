@@ -2,9 +2,11 @@
 import { useState } from 'react';
 import { api } from '../api-client.js';
 import { VIDEO_RESOLUTIONS, VIDEO_RATIOS } from './shared';
+import { useToast } from '../toast';
 
 // ============ 项目设置（名称/风格） ============
 export default function EditProject({ project, onClose, onSaved }) {
+  const toast = useToast();
   const [name, setName] = useState(project.name);
   const [style, setStyle] = useState(project.style || '');
   const [res, setRes] = useState(project.video_resolution || '480P');
@@ -22,9 +24,9 @@ export default function EditProject({ project, onClose, onSaved }) {
         video_width: Number(cw) || 0,
         video_height: Number(ch) || 0,
       });
-      alert('已保存'); onClose(); onSaved();
+      toast.success('已保存'); onClose(); onSaved();
     }
-    catch (e) { alert(e.message); }
+    catch (e) { toast.error(e.message); }
     finally { setSaving(false); }
   }
   return (

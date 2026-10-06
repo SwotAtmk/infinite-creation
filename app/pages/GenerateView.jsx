@@ -1,29 +1,42 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { api } from '../api-client.js';
+import { useToast } from '../toast';
 import ShotsTab from './ShotsTab';
 
 // ============ 页2 · 生成内容 ============
 export default function GenerateView({ projectId, chapters, cursor, setCursor, running, onRun, onStop, onRefresh, onGoLogs }) {
+  const toast = useToast();
   const cur = chapters[cursor] || chapters[0] || null;
-  const [runTip, setRunTip] = useState(false);
-  const [starting, setStarting] = useState(false);
   // 分阶段运行：待办数由后端算（不启 LLM），勾选后单独起一批
   const [stageList, setStageList] = useState(null);
   const [pending, setPending] = useState({});
   const [picked, setPicked] = useState(() => new Set());
   const [stageErr, setStageErr] = useState('');
 
+  // 待办数刷新：进入/离开运行态 + 运行期间每 4s 拉一次。
+  // 不这么做的话，阶段跑完后数字还是旧的，只能靠整页刷新恢复（这是本次修的 UI 痛点）。
   useEffect(() => {
     let alive = true;
-    api.get('/api/projects/' + projectId + '/stages')
+    const load = () => api.get('/api/projects/' + projectId + '/stages')
       .then((d) => { if (alive) { setStageList(d.stages); setPending(d.pending || {}); } })
       .catch(() => {});
-    return () => { alive = false; };
-  }, [projectId]);
+    load();
+    if (!running) return () => { alive = false; };
+    const t = setInterval(load, 4000);
+    return () => { alive = false; clearInterval(t); };
+  }, [projectId, running]);
 
   function toggleStage(id) {
     setPicked((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+
+  function submittedToast(text) {
+    toast.open({
+      kind: 'info',
+      message: text,
+      buttons: [{ label: '前往运行日志', tone: 'primary', onClick: () => onGoLogs && onGoLogs() }],
+    });
   }
 
   async function runStages() {
@@ -32,26 +45,31 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
     setStageErr('');
     try {
       const r = await api.post('/api/projects/' + projectId + '/stages', { stages: ids, chapter: cur ? cur.title : '' });
-      if (r.warns && r.warns.length) alert(r.warns.join('\n'));
+      if (r.warns && r.warns.length) toast.open({ kind: 'warn', message: r.warns.join('\n') });
       setPicked(new Set());
-      setRunTip(true);
+      const labels = ids.map((i) => (stageList.find((s) => s.id === i) || {}).label || i).join('、');
+      submittedToast('已提交阶段：' + labels + '（待办数变化会实时刷新）');
       onRefresh();
     } catch (e) { setStageErr(e.message); }
   }
 
   async function startRun(title) {
     if (!title) return;
-    setRunTip(true);
-    setStarting(true);
-    try { await onRun(title); } finally { setStarting(false); }
+    try {
+      await onRun(title);
+      submittedToast('已提交「' + title + '」生成，进度可在「运行日志」查看');
+    } catch (e) { toast.error(e.message); }
   }
   async function regenChapter(mode) {
     if (!cur) return;
     const msg = mode === 'storyboard'
       ? '将清空「' + cur.title + '」当前的分镜，重新拆分并生成全部视频（素材保留）。确定继续？'
       : '将清空「' + cur.title + '」已生成的视频，按现有分镜重新生成全部视频（分镜与素材保留）。确定继续？';
-    if (!window.confirm(msg)) return;
-    try { await api.post('/api/projects/' + projectId + '/chapters/' + cur.id + '/regenerate' + (mode === 'storyboard' ? '?mode=full' : '')); onRun(cur.title); } catch (e) { alert(e.message); }
+    if (!(await toast.confirm(msg, { danger: true }))) return;
+    try {
+      await api.post('/api/projects/' + projectId + '/chapters/' + cur.id + '/regenerate' + (mode === 'storyboard' ? '?mode=full' : ''));
+      submittedToast('已重新生成「' + cur.title + '」' + (mode === 'storyboard' ? '分镜' : '视频'));
+    } catch (e) { toast.error(e.message); }
   }
   return (
     <div>
@@ -105,22 +123,6 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
         )}
       </div>
       {cur && <ShotsTab projectId={projectId} chapter={cur.title} running={running} onRefresh={onRefresh} />}
-
-      {runTip && (
-        <div className="modal-bg" onClick={() => setRunTip(false)}>
-          <div className="modal" style={{ width: 'min(460px, 92vw)' }} onClick={(e) => e.stopPropagation()}>
-            <div className="row" style={{ gap: 10 }}>
-              {starting && <span className="spinner" />}
-              <h2 style={{ margin: 0 }}>正在生成</h2>
-            </div>
-            <p style={{ marginTop: 10, color: '#9aa4b2' }}>正在生成，可以前往「运行日志」查看运行状态……</p>
-            <div className="row" style={{ marginTop: 16 }}>
-              <button className="primary" onClick={() => { setRunTip(false); onGoLogs && onGoLogs(); }}>前往运行日志</button>
-              <button onClick={() => setRunTip(false)}>留在本页</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

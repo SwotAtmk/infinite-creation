@@ -6,11 +6,13 @@ import BackToTop from './pages/BackToTop';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectView from './pages/ProjectView';
 import SettingsPage from './pages/SettingsPage';
+import { ToastProvider } from './toast';
 
 export default function App() {
   const [view, setView] = useState({ type: 'list' });
   return (
-    <div className="container">
+    <ToastProvider>
+      <div className="container">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>
           Agent无限创作 <span className="muted">小说 → 视频 · 全自动 Agent · 项目地址：</span>{' '}
@@ -22,6 +24,7 @@ export default function App() {
       {view.type === 'project' && <ProjectView id={view.id} onBack={() => setView({ type: 'list' })} />}
       {view.type === 'settings' && <SettingsPage onBack={() => setView({ type: 'list' })} />}
       <BackToTop />
-    </div>
+      </div>
+    </ToastProvider>
   );
 }

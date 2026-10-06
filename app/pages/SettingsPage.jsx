@@ -47,17 +47,15 @@ export default function SettingsPage({ onBack }) {
       <p className="muted" style={{ marginTop: 4 }}>开启后，写分镜/图生图提示词时会把参考图提交给大模型；请确认所用模型确实支持视觉输入。</p>
       <br />
 
-      <h3 style={{ marginTop: 8 }}>生成维护</h3>
+      <h3 style={{ marginTop: 8, color: '#c0392b' }}>生成维护</h3>
       <label className="row" style={{ gap: 8, alignItems: 'center' }}>
-        <input type="checkbox" checked={(cfg.generation.videoFreeAfterEvery || 0) > 0} onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, videoFreeAfterEvery: e.target.checked ? Math.max(1, cfg.generation.videoFreeAfterEvery || 3) : 0 } })} />
         <span>每 N 个视频后释放 ComfyUI 显存</span>
-        <input style={{ width: 64 }} type="number" min={1} max={20} disabled={(cfg.generation.videoFreeAfterEvery || 0) <= 0} value={(cfg.generation.videoFreeAfterEvery || 0) > 0 ? cfg.generation.videoFreeAfterEvery : ''} onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, videoFreeAfterEvery: Math.max(1, Math.min(20, Number(e.target.value) || 1)) } })} />
-        <span className="muted">个视频</span>
+        <input style={{ width: 64 }} type="number" min={0} max={20} value={cfg.generation.videoFreeAfterEvery ?? 3} onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, videoFreeAfterEvery: Math.max(0, Math.min(20, Math.round(Number(e.target.value) || 0))) } })} />
+        <span className="muted">个视频（0 = 关闭）</span>
       </label>
       <p className="muted" style={{ marginTop: 4 }}>
         利：AMD 显卡 + Dynamic VRAM 下连续生成多个视频后，显存状态累积会让速度逐步变慢；定期释放可保持稳定。
         弊：每次释放后下一个视频需重新加载模型，多花 1~3 分钟；次数设得太小会频繁重载。
-        （0 = 关闭）
       </p>
       {comfyInfo && comfyInfo.ok === false && <p className="muted" style={{ marginTop: 4 }}>⚠ 当前 ComfyUI 连接失败，无法判断 Dynamic VRAM 状态，建议点「测试连接」确认。</p>}
       {comfyInfo && comfyInfo.ok && !comfyInfo.dynamicVram && (cfg.generation.videoFreeAfterEvery || 0) > 0 && (

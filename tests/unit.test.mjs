@@ -153,8 +153,8 @@ test('GGUF r2v: 未绑定音频时不留悬空的音频槽', () => {
   assert.deepEqual(graphIssues(wf, ['SaveVideo']).dangling, []);
 });
 
-test('GUFF tts: 台词/音色描述直写 PrimitiveStringMultiline 并留住模型加载器', () => {
-  const spec = getDefaultSpecById('qwen3_tts_voice_design_guff');
+test('GGUF tts: 台词/音色描述直写 PrimitiveStringMultiline 并留住模型加载器', () => {
+  const spec = getDefaultSpecById('qwen3_tts_voice_design_gguf');
   const wf = buildWorkflow(spec, {
     text: '台词内容', voice_description: '清润少女音', seed: 42, filename_prefix: 'voice/v1',
   });

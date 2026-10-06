@@ -44,7 +44,7 @@ Web「生成」按钮
 
 - **待办数由代码算**（`pendingByStage`，与各批量工具的跳过条件逐字一致），不启动 27B LLM 去问"还剩什么"——省一次大模型拉起（原设计的缺口）。
 - **preflight 预检**：提交前校验所选阶段的 CK 开关与当前 ComfyUI 实例是否匹配、显存是否够（video 必须接 CK 实例、image 必须禁 CK），不通过直接 400 报原因，避免白等。
-- **video 阶段每 N 个视频自动调 ComfyUI `/free`**（`generation.videoFreeAfterEvery`，默认 3、0=关闭，可设置页调整），对抗 AMD Dynamic VRAM 连续生成后的速度退化。
+- **所有 ComfyUI 生成自动调 `/free`**（`generation.freeAfterEvery`，默认 3、0=关闭，可设置页调整；兼容旧键 `videoFreeAfterEvery`）：计数在 `runWorkflow` 统一出口按「生成任务」累计——文生图/图生图/换装/音色/视频都计入（AMD Dynamic VRAM 的显存累积不只在视频触发），对抗任意连续生成的退化。
 - 设计动机：本机 24GB 显存 + 32GB 内存，LLM（27B GGUF ≈15.7GB）与 ComfyUI 无法同时常驻，拆批后每批只拉起所需进程。
 
 ## 三个「打通」分别落在哪里

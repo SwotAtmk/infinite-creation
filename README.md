@@ -57,7 +57,7 @@ CPU：12th Gen Intel(R) Core(TM) i5-12400F
 - **断点续跑**：任务持久化 + 幂等跳过，进程崩溃/重启后可继续，不重复生成。
 - **审查/重生成**：分镜级预览与重生成（换种子 / 按反馈改写提示词）。
 - **分阶段运行**：生成拆成 文本创作 / 资产生图 / 音色设计 / 分镜视频 四个独立阶段，可任意勾选单独跑或续跑 —— 按显存约束自动拆批，不需要的阶段不拉起对应进程。
-- **显存维护**：设置页可配「每 N 个视频自动释放 ComfyUI 显存」（默认 3，0 = 关闭），对抗 AMD Dynamic VRAM 连续生成后的速度退化；未启用 Dynamic VRAM 时界面会提示关闭。
+- **显存维护**：设置页可配「每 N 个生成后自动释放 ComfyUI 显存」（默认 3，0 = 关闭），覆盖文生图/图生图/换装/音色/视频全部渲染——AMD Dynamic VRAM 的显存累积不只在视频触发；未启用 Dynamic VRAM 时界面会提示关闭。
 - **在线预览**：成片/分镜视频经后端 Range 流式传输，进度条可随意拖动、即时跳转。
 
 # 截图演示
@@ -153,7 +153,7 @@ pnpm run build && pnpm start
 
 1. ComfyUI 服务地址：默认 `http://127.0.0.1:8188`，点「测试连接」确认。
 2. LLM（Agent 大脑，OpenAI 兼容）：填 Base URL（需以 `/v1` 结尾）、模型、API Key。默认使用 deepseek-v4-flash-vision-exp 模型。
-3. 生成维护（可选）：设置「每 N 个视频后释放 ComfyUI 显存」（默认开启 = 3，0 = 关闭）。AMD 显卡 + Dynamic VRAM 下连续生成多个视频后会逐步变慢，定期释放可保持稳定 —— 代价是释放后下一个视频需重新加载模型（多花约 1~3 分钟）。检测到 ComfyUI 未启用 Dynamic VRAM 时界面会提示建议关闭。
+3. 生成维护（可选）：设置「每 N 个生成后释放 ComfyUI 显存」（默认开启 = 3，0 = 关闭），按**所有 ComfyUI 生成任务**计数（文生图/图生图/换装/音色/视频都计入——AMD 显卡 + Dynamic VRAM 下任意连续生成都会逐步变慢）。释放后下一个生成需重新加载模型（多花约 1~3 分钟）。检测到 ComfyUI 未启用 Dynamic VRAM 时界面会提示建议关闭。
 
 配置保存在根目录 config.json（不入库）。生成参数（超时分钟、并发、释放频率）可直接编辑 config.json 的 `generation` 节。
 
@@ -212,7 +212,7 @@ pnpm test   # node --test tests/unit.test.mjs
 - 成片统一转码 H.264 + AAC（24fps），保证可播。
 - 任务为后台持久化任务，刷新页面/重启服务后可续跑（幂等跳过已完成项）。
 - 单视频任务超时默认 90 分钟（正常单镜远低于此，仅兜底），可在 config.json 的 `generation.videoTimeoutMinutes` 调整。
-- 每 N 个视频自动调用一次 ComfyUI `/free` 释放显存（`generation.videoFreeAfterEvery`，默认 3、0 = 关闭），对抗 AMD Dynamic VRAM 连续生成后的速度退化；清理在下一个任务完成后生效，失败不影响产物。
+- 每 N 个生成任务自动调用一次 ComfyUI `/free` 释放显存（`generation.freeAfterEvery`，默认 3、0 = 关闭；兼容旧键 `videoFreeAfterEvery`），覆盖全部渲染、对抗 AMD Dynamic VRAM 连续生成后的速度退化；清理在下一个任务完成后生效，失败不影响产物。
 
 # 推荐一下我的工具站，里面有我收藏的很多实用小工具哦，感兴趣的可以了解一下\~
 - 可以获取最新的项目资讯和实用工具

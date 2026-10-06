@@ -19,6 +19,6 @@
     "retryTimes": 3,
     "videoTimeoutMinutes": 30,
     "imageTimeoutMinutes": 10,
-    "videoFreeAfterEvery": 3
+    "freeAfterEvery": 3
   }
 }

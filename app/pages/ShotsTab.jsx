@@ -13,6 +13,8 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const [preview, setPreview] = useState(null);
   const [feedback, setFeedback] = useState({});
   const [zipping, setZipping] = useState(false);
+  // 有反馈=需要 LLM：弹窗问「LLM 改写后是否还要渲染视频」
+  const [ask, setAsk] = useState(null);
   const load = useCallback(() => {
     api.get('/api/projects/' + projectId + '/shots').then(setShots).catch((e) => toast.error(e.message));
     api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch((e) => toast.error(e.message));
@@ -46,9 +48,18 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
     );
   }
 
-  async function regen(shotId) {
-    const fb = feedback[shotId] || undefined;
-    try { await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb }); toast.success('已提交重生成'); load(); } catch (e) { toast.error(e.message); }
+  async function regen(shotId, render = true) {
+    const fb = (feedback[shotId] || '').trim();
+    try {
+      await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb || undefined, render });
+      toast.success(render ? '已提交重生成' : '已提交：仅 LLM 改写提示词，不渲染视频');
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+  // 左侧反馈框有值 → 需要 LLM，弹窗确认；留空 → 直接渲染视频
+  function onRegen(shotId) {
+    if ((feedback[shotId] || '').trim()) setAsk(shotId);
+    else regen(shotId, true);
   }
   async function exportChapter() {
     try {
@@ -157,8 +168,8 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
             {s.video_path && <video className="video" controls src={fileUrl(projectId, s.video_path)} />}
             {s.error && <p style={{ color: '#ff8080' }}>错误：{s.error}</p>}
             <div className="row" style={{ marginTop: 8 }}>
-              <input placeholder="反馈（如：镜头拉近 / 让人物微笑），留空则换种子重生成" value={feedback[s.id] || ''} onChange={(e) => setFeedback({ ...feedback, [s.id]: e.target.value })} style={{ flex: 1 }} />
-              <button onClick={() => regen(s.id)}>↻ 重新生成</button>
+              <input placeholder="反馈（如：镜头拉近 / 让人物微笑），留空直接渲染；有内容会先问是否 LLM 改写" value={feedback[s.id] || ''} onChange={(e) => setFeedback({ ...feedback, [s.id]: e.target.value })} style={{ flex: 1 }} />
+              <button onClick={() => onRegen(s.id)}>↻ 重新生成</button>
             </div>
           </div>
         );
@@ -169,6 +180,20 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90vw', textAlign: 'center' }}>
             <img src={fileUrl(projectId, preview.image_path)} style={{ maxWidth: '100%', maxHeight: '78vh', borderRadius: 6 }} />
             <div style={{ marginTop: 8 }}><b>{preview.name}</b> <span className="muted">{preview.category}</span></div>
+          </div>
+        </div>
+      )}
+      {ask && (
+        <div className="modal-bg" onClick={() => setAsk(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, textAlign: 'left' }}>
+            <h3 style={{ marginTop: 0 }}>检测到反馈，需要 LLM 改写提示词</h3>
+            <p className="muted" style={{ whiteSpace: 'pre-wrap' }}>反馈：{feedback[ask] || ''}</p>
+            <p>LLM 改写完成后，是否继续调用 ComfyUI 渲染视频？</p>
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+              <button className="primary" onClick={() => { const id = ask; setAsk(null); regen(id, true); }}>是 · LLM 后渲染视频</button>
+              <button onClick={() => { const id = ask; setAsk(null); regen(id, false); }}>否 · 只做 LLM，不渲染</button>
+              <button onClick={() => setAsk(null)}>取消</button>
+            </div>
           </div>
         </div>
       )}

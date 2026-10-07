@@ -10,12 +10,13 @@ import {
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts,
-  freeComfy, checkComfyUI,
+  freeComfy, checkComfyUI, generate,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool } from '../lib/agent/tools.js';
+import { runExclusiveVideo } from '../lib/agent/job-runner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -453,4 +454,128 @@ test('checkComfyUI: dynamicVram 探测（--disable-dynamic-vram 关闭，否则�
   } finally {
     global.fetch = orig;
   }
+});
+
+// —— 截断/停滞看门狗（防「Response truncated 后任务永远 running」）——
+const truncMsg = () => ({ type: 'assistant', message: { content: [{ type: 'text', text: '\n\n[Response truncated — reached length limit or upstream stalled. Ask the model to continue.]' }] } });
+const toolMsg = () => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'generateImage', input: {} }] } });
+const plainMsg = () => ({ type: 'assistant', message: { content: [{ type: 'text', text: '正常输出' }] } });
+
+test('isTruncatedText: 识别 openclaude 截断标记', () => {
+  assert.equal(isTruncatedText('[Response truncated — reached length limit or upstream stalled. Ask the model to continue.]'), true);
+  assert.equal(isTruncatedText('Response truncated'), true);
+  assert.equal(isTruncatedText('正常输出'), false);
+  assert.equal(isTruncatedText(''), false);
+  assert.equal(isTruncatedText(null), false);
+});
+
+test('classifyAgentMsg: 截断/工具/正常文本分类', () => {
+  assert.deepEqual(classifyAgentMsg(truncMsg()), { hasToolUse: false, hasTrunc: true, hasPlainText: false });
+  assert.deepEqual(classifyAgentMsg(toolMsg()), { hasToolUse: true, hasTrunc: false, hasPlainText: false });
+  assert.deepEqual(classifyAgentMsg(plainMsg()), { hasToolUse: false, hasTrunc: false, hasPlainText: true });
+  assert.deepEqual(classifyAgentMsg({ type: 'result', result: 'x' }), { hasToolUse: false, hasTrunc: false, hasPlainText: false });
+  assert.deepEqual(classifyAgentMsg(null), { hasToolUse: false, hasTrunc: false, hasPlainText: false });
+});
+
+test('watchdogStep: 连续纯截断 3 次熔断', () => {
+  const t0 = 1_000_000;
+  let st = { lastAt: t0, sawToolUse: false, truncStreak: 0 };
+  // 第 1、2 次截断：不熔断，streak 递增
+  st = watchdogStep(st, truncMsg(), t0 + 1000).next;
+  assert.equal(st.truncStreak, 1);
+  st = watchdogStep(st, truncMsg(), t0 + 2000).next;
+  assert.equal(st.truncStreak, 2);
+  // 第 3 次截断：熔断
+  const r = watchdogStep(st, truncMsg(), t0 + 3000);
+  assert.ok(r.halted, '第 3 次连续截断应熔断');
+  assert.match(r.halted, /连续被截断/);
+});
+
+test('watchdogStep: 中间有工具调用/正常文本则重置截断计数', () => {
+  let st = { lastAt: 0, sawToolUse: false, truncStreak: 0 };
+  st = watchdogStep(st, truncMsg(), 1000).next;
+  assert.equal(st.truncStreak, 1);
+  // 工具调用 = 实质进展，streak 归零
+  st = watchdogStep(st, toolMsg(), 2000).next;
+  assert.equal(st.truncStreak, 0);
+  // 正常文本 = 实质进展，streak 归零
+  st = watchdogStep(st, truncMsg(), 3000).next;
+  assert.equal(st.truncStreak, 1);
+  st = watchdogStep(st, plainMsg(), 4000).next;
+  assert.equal(st.truncStreak, 0);
+});
+
+test('watchdogStep: 停滞超时熔断（非工具窗口）', () => {
+  const now = 5_000_000;
+  let st = { lastAt: now - AGENT_WATCHDOG.STALL_MS - 1000, sawToolUse: false, truncStreak: 0 };
+  const r = watchdogStep(st, plainMsg(), now);
+  assert.ok(r.halted, '间隔超过 STALL_MS 且非工具窗口应判停滞');
+  assert.match(r.halted, /停滞/);
+});
+
+test('watchdogStallCheck: 工具执行窗口豁免，非工具窗口超时判定', () => {
+  const now = 5_000_000;
+  // 上一条是工具调用 → 不判停滞（渲染可能很久）
+  assert.equal(watchdogStallCheck({ lastAt: now - 3600_000, sawToolUse: true, truncStreak: 0 }, now), null);
+  // 非工具窗口超时 → 判停滞
+  assert.ok(watchdogStallCheck({ lastAt: now - AGENT_WATCHDOG.STALL_MS - 1, sawToolUse: false, truncStreak: 0 }, now));
+  // 非工具窗口未超时 → 不判停滞
+  assert.equal(watchdogStallCheck({ lastAt: now - 1000, sawToolUse: false, truncStreak: 0 }, now), null);
+});
+
+test('watchdogStep: 截断后可恢复（截断→工具→截断→截断不熔断）', () => {
+  let st = { lastAt: 0, sawToolUse: false, truncStreak: 0 };
+  st = watchdogStep(st, truncMsg(), 1000).next;   // streak 1
+  st = watchdogStep(st, toolMsg(), 2000).next;    // 归零
+  st = watchdogStep(st, truncMsg(), 3000).next;   // streak 1
+  st = watchdogStep(st, toolMsg(), 4000).next;    // 归零
+  const r = watchdogStep(st, truncMsg(), 5000);   // streak 1，不熔断
+  assert.equal(r.halted, null);
+  assert.equal(r.next.truncStreak, 1);
+});
+
+// —— 主动查询任务状态（不干等分钟级超时兜底） ——
+
+test('generate: 主动查询——任务从 ComfyUI 队列消失则主动失败（不干等 timeoutMs）', async () => {
+  const orig = global.fetch;
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/prompt')) return { ok: true, json: async () => ({ prompt_id: 'lost-1' }) };
+    if (u.includes('/history/')) return { ok: true, json: async () => ({}) }; // 查不到产出
+    if (u.includes('/queue')) return { ok: true, json: async () => ({ queue_running: [], queue_pending: [] }) }; // 也不在队列
+    return { ok: true, json: async () => ({}) };
+  };
+  try {
+    await assert.rejects(
+      generate('http://127.0.0.1:1', { n1: {} }, { timeoutMs: 10_000, pollMs: 2 }),
+      /任务丢失/,
+    );
+  } finally {
+    global.fetch = orig;
+  }
+});
+
+test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时→主动放弃', async () => {
+  // 占住唯一视频槽位，让后续任务进入排队分支
+  let releaseBlock;
+  const blocked = new Promise((r) => { releaseBlock = r; });
+  const holder = runExclusiveVideo(() => blocked);
+
+  // 排队前已带停止标记 → 直接拒绝，不进队列
+  await assert.rejects(
+    runExclusiveVideo(() => Promise.resolve('不该跑'), () => true),
+    /已被停止/,
+  );
+
+  // 排队中等待超时（queueTimeoutMs=30ms）→ 主动放弃而不是无限等
+  const t0 = Date.now();
+  await assert.rejects(
+    runExclusiveVideo(() => Promise.resolve('不该跑'), () => false, { queueTimeoutMs: 30 }),
+    /等待视频槽位超时/,
+  );
+  assert.ok(Date.now() - t0 >= 25, '应确实等待了排队超时');
+
+  // 释放占位任务，清理槽位
+  releaseBlock();
+  await holder.catch(() => {});
 });

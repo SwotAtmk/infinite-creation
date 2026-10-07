@@ -213,6 +213,7 @@ pnpm test   # node --test tests/unit.test.mjs
 - 任务为后台持久化任务，刷新页面/重启服务后可续跑（幂等跳过已完成项）。
 - 单视频任务超时默认 90 分钟（正常单镜远低于此，仅兜底），可在 config.json 的 `generation.videoTimeoutMinutes` 调整。
 - 每 N 个生成任务自动调用一次 ComfyUI `/free` 释放显存（`generation.freeAfterEvery`，默认 3、0 = 关闭；兼容旧键 `videoFreeAfterEvery`），覆盖全部渲染、对抗 AMD Dynamic VRAM 连续生成后的速度退化；清理在下一个任务完成后生效，失败不影响产物。
+- LLM 运行看门狗：模型输出被截断（`[Response truncated …]`）或上游停滞后，任务不再无限挂起——连续 3 次纯截断无进展、或 20 分钟无消息（工具渲染窗口不计入）会自动中止并标失败；慢速本地模型可调 `generation.agentStallMinutes`（默认 20）放宽无消息阈值。
 
 # 推荐一下我的工具站，里面有我收藏的很多实用小工具哦，感兴趣的可以了解一下\~
 - 可以获取最新的项目资讯和实用工具

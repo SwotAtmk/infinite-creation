@@ -4,6 +4,7 @@ a { color: #6ea8fe; }
 button { cursor: pointer; border: 1px solid #2a2f3a; background: #1b2028; color: #e6e8eb; border-radius: 6px; padding: 6px 12px; }
 button:hover { background: #252b36; }
 button.primary { background: #2f6feb; border-color: #2f6feb; color: #fff; }
+button.success { background: #2f9e44; border-color: #2f9e44; color: #fff; }
 button.danger { background: #b02a2a; border-color: #b02a2a; color: #fff; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 input, textarea, select { background: #151a22; border: 1px solid #2a2f3a; color: #e6e8eb; border-radius: 6px; padding: 6px 8px; }

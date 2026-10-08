@@ -1,4 +1,5 @@
-# Agent无限创作 · infinite-creation
+# Agent无限创作 · 把你的故事变成亿帧画面
+
 
 ![](images/banner.jpg)
 
@@ -26,7 +27,7 @@
 - [✅] 支持人物服装管理，每个人物可以支持设计多套服装
 
 ## 项目宗旨
-提供Agent生成视频全链路整合方案
+提供Agent生成超长视频全链路整合方案
 
 ## 项目架构
 基于**本地 ComfyUI**（MiniMax H3 视频 GGUF 版 + Qwen-Image 2.1 文生图/图生图 + Krea2 文生图 + Qwen3-TTS）的**全自动「小说/剧本 → 视频」Agent 工作流**。项目目前整理了27个Skill技能，其中包含MiniMax-H3提示词优化，分镜剧本生成，小说转剧本等。

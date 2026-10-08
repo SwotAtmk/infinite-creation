@@ -17,7 +17,7 @@
 - [计划中] 前端页面整理及美化
 - [✅] 支持提交参考素材，及Agent整理参考素材
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
-- [进行中] 接入在线RunningHub-ComfyUI工作流生成
+- [进行中] 接入在线RunningHub-ComfyUI工作流生成，会员MiniMax-H3夜间免费运行
 - [✅] 优化本地MiniMax H3人物语音电流声或者语音不清晰的问题
 - [✅] 上传小说/剧本生成视频本地全链路Agent全自动工作流生成方案
 - [✅] 优化图片素材生成的质量

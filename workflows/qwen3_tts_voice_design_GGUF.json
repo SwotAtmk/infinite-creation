@@ -1,0 +1,72 @@
+{
+  "2": {
+    "inputs": {
+      "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+      "source": "HuggingFace",
+      "precision": "bf16",
+      "attention": "auto"
+    },
+    "class_type": "QwenTTSModelsLoader",
+    "_meta": {
+      "title": "Qwen3-TTS Models Loader ⚡"
+    }
+  },
+  "47": {
+    "inputs": {
+      "filename_prefix": "audio/ComfyUI",
+      "audio": [
+        "77",
+        0
+      ]
+    },
+    "class_type": "SaveAudio",
+    "_meta": {
+      "title": "保存音频"
+    }
+  },
+  "74": {
+    "inputs": {
+      "value": "你好呀，我是沈舒妍，喜欢安静的午后和温暖的光，很高兴认识你。"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "字符串（多行）"
+    }
+  },
+  "75": {
+    "inputs": {
+      "value": "16-18软甜清润的少女音，甜而不腻，温柔里透着精致的大小姐质感。"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "字符串（多行）"
+    }
+  },
+  "77": {
+    "inputs": {
+      "qwen_tts_model": [
+        "2",
+        0
+      ],
+      "text": [
+        "74",
+        0
+      ],
+      "voice_description": [
+        "75",
+        0
+      ],
+      "language": "Auto",
+      "seed": 798671063927382,
+      "max_new_tokens": 2048,
+      "top_p": 0.8,
+      "top_k": 20,
+      "temperature": 1,
+      "repetition_penalty": 1.1
+    },
+    "class_type": "QwenTTSVoiceDesignGenerate",
+    "_meta": {
+      "title": "Qwen3-TTS Voice Design ⚡"
+    }
+  }
+}

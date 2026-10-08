@@ -1,11 +1,13 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api-client.js';
+import { useToast } from '../toast';
 
 // ============ 工作流（仅展示系统已注册） ============
 export default function WorkflowsTab() {
+  const toast = useToast();
   const [workflows, setWorkflows] = useState([]);
-  const load = useCallback(() => api.get('/api/workflows').then(setWorkflows).catch(alert), []);
+  const load = useCallback(() => api.get('/api/workflows').then(setWorkflows).catch((e) => toast.error(e.message)), []);
   useEffect(() => { load(); }, [load]);
 
   return (

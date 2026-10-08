@@ -1,11 +1,13 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api-client.js';
+import { useToast } from '../toast';
 
 // ============ 成片（导出视频） ============
 export default function ExportsTab({ projectId }) {
+  const toast = useToast();
   const [files, setFiles] = useState([]);
-  const load = useCallback(() => api.get('/api/projects/' + projectId + '/exports').then((r) => setFiles(r.files || [])).catch(alert), [projectId]);
+  const load = useCallback(() => api.get('/api/projects/' + projectId + '/exports').then((r) => setFiles(r.files || [])).catch((e) => toast.error(e.message)), [projectId]);
   useEffect(() => { load(); }, [load]);
 
   function fmtBytes(n) {

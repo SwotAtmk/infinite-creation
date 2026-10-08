@@ -6,13 +6,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import AdmZip from 'adm-zip';
 import {
-  analyzeWorkflow, buildWorkflow, getDefaultSpecById,
+  analyzeWorkflow, buildWorkflow, getDefaultSpecById, getSpecForKind,
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks,
+  freeComfy, checkComfyUI, generate, resolveHardwareConfig, HW_PRESETS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
+import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
+import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool } from '../lib/agent/tools.js';
+import { runExclusiveVideo } from '../lib/agent/job-runner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -67,6 +71,162 @@ test('buildWorkflow: r2v 媒体绑定', () => {
   assert.equal(wf['26'].inputs.audio, 'b.flac');
   assert.equal(wf['32'].inputs.image, 'c.png');
   assert.equal(wf['6'].inputs.noise_seed, 1);
+});
+
+// 本机 GGUF 工作流：角色值直写被连线占用的输入，并剪掉模板占位资源与 LLM 改写链
+function graphIssues(wf, outputClasses) {
+  const keep = new Set();
+  const stack = Object.keys(wf).filter((id) => outputClasses.includes(wf[id].class_type));
+  const roots = [...stack];
+  while (stack.length) {
+    const id = stack.pop();
+    if (keep.has(id) || !wf[id]) continue;
+    keep.add(id);
+    for (const v of Object.values(wf[id].inputs || {})) {
+      if (Array.isArray(v) && typeof v[0] === 'string' && wf[v[0]]) stack.push(v[0]);
+    }
+  }
+  const dangling = [];
+  for (const node of Object.values(wf)) {
+    for (const [f, v] of Object.entries(node.inputs || {})) {
+      if (Array.isArray(v) && typeof v[0] === 'string' && !wf[v[0]]) dangling.push(node.class_type + '.' + f);
+    }
+  }
+  return { roots, orphans: Object.keys(wf).filter((id) => !keep.has(id)), dangling };
+}
+
+test('GGUF t2i: prompt 直写编码节点并剪掉 LLM 改写链', () => {
+  const spec = getDefaultSpecById('qwen_image_2_1_t2i_gguf');
+  const wf = buildWorkflow(spec, {
+    positive_prompt: 'P', negative_prompt: 'N', width: 1344, height: 768, seed: 5, filename_prefix: 'assets/x',
+  });
+  assert.equal(wf['459:452'].inputs.prompt, 'P');
+  assert.equal(wf['459:452'].inputs.negative_prompt, 'N');
+  assert.equal(wf['459:456'].inputs.width, 1344);
+  assert.equal(wf['459:458'].inputs.seed, 5);
+  assert.equal(wf['461'].inputs.filename_prefix, 'assets/x');
+  const g = graphIssues(wf, ['SaveImageAdvanced']);
+  assert.deepEqual(g.roots, ['461']);
+  assert.deepEqual(g.dangling, []);
+  assert.ok(!wf['459:471'], 'TextGenerate 改写链应被剪掉');
+});
+
+test('GGUF i2i: 只绑第一张参考图，剪掉模板第二张与对比节点', () => {
+  const spec = getDefaultSpecById('qwen_image_2_1_i2i_gguf');
+  const wf = buildWorkflow(spec, { positive_prompt: 'P', image: 'ref.png', seed: 2, filename_prefix: 'assets/e' });
+  assert.equal(wf['459:474'].inputs.prompt, 'P');
+  assert.equal(wf['470'].inputs.image, 'ref.png');
+  assert.ok(!wf['475'], '模板自带的第二张参考图应被剪掉');
+  const g = graphIssues(wf, ['SaveImageAdvanced']);
+  assert.deepEqual(g.dangling, []);
+  assert.ok(!g.orphans.length, '不应有孤立节点');
+});
+
+test('GGUF r2v: Autogrow 媒体槽按类型各自从 0 编号，标签值翻译成节点枚举', () => {
+  const spec = getDefaultSpecById('minimax_h3_r2v_gguf');
+  const wf = buildWorkflow(spec, {
+    positive_prompt: 'P', seconds: 6, aspect_ratio: '16:9', resolution: '480P', seed: 1, filename_prefix: 'video/x',
+    references: [
+      { type: 'image', filename: 'a.png' },
+      { type: 'audio', filename: 'b.flac' },
+      { type: 'image', filename: 'c.png' },
+    ],
+  });
+  const inputs = wf['145'].inputs;
+  assert.equal(wf['145'].inputs.prompt, 'P');
+  assert.equal(wf['135'].inputs.value, 6, '时长注入 PrimitiveFloat，保留 17k+5 帧对齐表达式');
+  assert.equal(wf['115'].inputs.aspect_ratio, '16:9 (Widescreen)');
+  assert.equal(wf['115'].inputs.megapixels, 0.5);
+  assert.deepEqual(inputs['ref_images.ref_image_0'], ['149', 0]);
+  assert.deepEqual(inputs['ref_images.ref_image_1'], ['1002', 0]);
+  assert.deepEqual(inputs['ref_audios.ref_audio_0'], ['153', 0]);
+  assert.equal(wf['149'].inputs.image, 'a.png');
+  assert.equal(wf['153'].inputs.audio, 'b.flac');
+  assert.equal(wf['131'].inputs.noise_seed, 1);
+  const g = graphIssues(wf, ['SaveVideo']);
+  assert.deepEqual(g.dangling, []);
+  assert.ok(!g.orphans.length, '未用的视频占位节点应被剪掉');
+});
+
+test('GGUF r2v: 未绑定音频时不留悬空的音频槽', () => {
+  const spec = getDefaultSpecById('minimax_h3_r2v_gguf');
+  const wf = buildWorkflow(spec, { positive_prompt: 'P', references: [{ type: 'image', filename: 'a.png' }] });
+  const inputs = wf['145'].inputs;
+  assert.ok(!Object.keys(inputs).some((k) => k.startsWith('ref_audios.')), '音频槽应被清空');
+  assert.ok(!wf['153'], '未使用的 LoadAudio 占位应被删');
+  assert.deepEqual(graphIssues(wf, ['SaveVideo']).dangling, []);
+});
+
+test('GGUF tts: 台词/音色描述直写 PrimitiveStringMultiline 并留住模型加载器', () => {
+  const spec = getDefaultSpecById('qwen3_tts_voice_design_gguf');
+  const wf = buildWorkflow(spec, {
+    text: '台词内容', voice_description: '清润少女音', seed: 42, filename_prefix: 'voice/v1',
+  });
+  assert.equal(wf['74'].inputs.value, '台词内容');
+  assert.equal(wf['75'].inputs.value, '清润少女音');
+  assert.equal(wf['77'].inputs.seed, 42);
+  assert.equal(wf['47'].inputs.filename_prefix, 'voice/v1');
+  assert.equal(wf['2'].class_type, 'QwenTTSModelsLoader', '按 repo_id 拉模型的加载器必须保留');
+  assert.deepEqual(wf['77'].inputs.qwen_tts_model, ['2', 0]);
+  assert.deepEqual(graphIssues(wf, ['SaveAudio']).dangling, []);
+});
+
+test('getSpecForKind: config 覆盖规格 id，缺失时抛错', () => {
+  assert.equal(getSpecForKind({ workflows: { t2i: 'qwen_image_2_1_t2i_gguf' } }, 't2i').id, 'qwen_image_2_1_t2i_gguf');
+  assert.equal(getSpecForKind({}, 'i2i').id, 'qwen_image_edit_2511_i2i');
+  assert.equal(getSpecForKind({}, 'r2v').id, 'minimax_h3_r2v');
+  assert.throws(() => getSpecForKind({ workflows: { t2i: 'nope' } }, 't2i'), /未找到工作流规格/);
+});
+
+test('getSpecForKind: 可按 hardware.mode 选规格（amd → GGUF）', () => {
+  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 't2i').id, 'qwen_image_2_1_t2i_gguf');
+  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'i2i').id, 'qwen_image_2_1_i2i_gguf');
+  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'r2v').id, 'minimax_h3_r2v_gguf');
+  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'tts').id, 'qwen3_tts_voice_design_gguf');
+  assert.equal(getSpecForKind({ hardware: { mode: 'nvidia' } }, 't2i').id, 'krea2_hyperreal_t2i');
+});
+
+test('resolveHardwareConfig: 模式切换工作流预设与显存释放默认值', () => {
+  const nv = resolveHardwareConfig({});
+  assert.equal(nv.hardware.mode, 'nvidia', '默认英伟达');
+  assert.deepEqual(nv.workflows, HW_PRESETS.nvidia);
+  assert.equal(nv.generation.freeAfterEvery, 0, 'N 卡默认不做显存释放');
+  assert.equal(nv.generation.videoFreeAfterEvery, undefined, '旧键应被迁移掉');
+
+  const amd = resolveHardwareConfig({ hardware: { mode: 'amd' } });
+  assert.deepEqual(amd.workflows, HW_PRESETS.amd);
+  assert.equal(amd.generation.freeAfterEvery, 3, 'AMD 默认每 3 个生成释放一次');
+
+  // 用户手写的自定义映射不跟随模式，且覆盖模式预设
+  const custom = resolveHardwareConfig({ hardware: { mode: 'amd' }, workflows: { t2i: 'my_custom_t2i' } });
+  assert.equal(custom.workflows.t2i, 'my_custom_t2i');
+  assert.equal(custom.workflows.r2v, HW_PRESETS.amd.r2v);
+
+  // 显式配置优先；旧键 videoFreeAfterEvery 兼容迁移
+  assert.equal(resolveHardwareConfig({ generation: { freeAfterEvery: 7 } }).generation.freeAfterEvery, 7);
+  assert.equal(resolveHardwareConfig({ generation: { videoFreeAfterEvery: 5 } }).generation.freeAfterEvery, 5);
+  assert.equal(resolveHardwareConfig({ hardware: { mode: 'amd' }, generation: { freeAfterEvery: 0 } }).generation.freeAfterEvery, 0);
+
+  // 未知 mode 回退英伟达，不炸
+  assert.equal(resolveHardwareConfig({ hardware: { mode: 'weird' } }).hardware.mode, 'nvidia');
+});
+
+test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前后端共用同一份常量）', () => {
+  assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.nvidia), true);
+  assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.amd), true);
+  assert.deepEqual(SHARED_HW_PRESETS, HW_PRESETS, 'shared 与 core 转出的预设必须是同一份');
+  assert.equal(isPresetWorkflows({ ...SHARED_HW_PRESETS.nvidia, t2i: 'my_custom_t2i' }), false, '手改过 → 不随模式切换');
+  assert.equal(isPresetWorkflows({ t2i: 'krea2_hyperreal_t2i' }), false, '缺键 → 不算预设');
+  assert.equal(isPresetWorkflows(null), false);
+});
+
+test('preflight: 英伟达模式不拦 LLM/ComfyUI 同批与 vision，AMD 模式拦下', async () => {
+  const base = { llm: { baseUrl: 'http://127.0.0.1:1', vision: false }, comfyui: { baseUrl: 'http://127.0.0.1:1' } };
+  await assert.rejects(() => preflight(['llm', 'image'], { ...base, hardware: { mode: 'amd' } }), /不能同一批跑/);
+  await assert.rejects(() => preflight(['image'], { ...base, hardware: { mode: 'amd' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /llm\.vision/);
+  // 英伟达模式：同批不再被拦，走到「LLM 未就绪」这一步（说明互斥与 vision 拦截已放行）
+  await assert.rejects(() => preflight(['llm', 'image'], { ...base, hardware: { mode: 'nvidia' } }), /LLM 未就绪/);
+  await assert.rejects(() => preflight(['image'], { ...base, hardware: { mode: 'nvidia' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /ComfyUI 未就绪/);
 });
 
 test('fallbackVideoPrompt: 占位符与一致性描述', () => {
@@ -276,3 +436,232 @@ test('filterReferenceImages: 无目标全量 / 指定章过滤', () => {
 });
 
 console.log('全部单元测试通过');
+
+// ================= 阶段调度（分阶段运行） =================
+
+test('阶段表：4 项且 each带 need/ck', () => {
+  assert.equal(STAGES.length, 4);
+  assert.deepEqual(STAGES.map((s) => s.id), ['llm', 'image', 'tts', 'video']);
+  for (const s of STAGES) {
+    assert.ok(['llm', 'comfyui'].includes(s.need), s.id + ' need 非法');
+    assert.ok([true, false, null].includes(s.ck), s.id + ' ck 非法');
+    assert.equal(STAGE_MAP[s.id], s);
+  }
+  // 关键不变式：只有 llm 阶段需要 LLM 进程；只有 video 强制要 CK；只有 image 强制不要 CK
+  assert.equal(STAGE_MAP.llm.need, 'llm');
+  assert.equal(STAGE_MAP.video.ck, true);
+  assert.equal(STAGE_MAP.image.ck, false);
+  assert.equal(STAGE_MAP.tts.ck, null, '音色阶段 CK 均可（实测 CK 下 TTS 无问题）');
+});
+
+test('ckBroken: 关 CK 一律不坏；开 CK 按 comfy-kitchen 版本判', () => {
+  assert.equal(ckBroken({ ckAttention: false, ckKitchen: '0.2.36' }), false);
+  assert.equal(ckBroken({ ckAttention: false, ckKitchen: '9.9.9' }), false);
+  assert.equal(ckBroken(null), false);
+  // 已知坏区间
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.36' }), true);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.35' }), true);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.1.99' }), true);
+  // 修好的版本自动放行（上游修好后改 CK_BAD_MAX 即可，其余代码不用动）
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.37' }), false);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '1.0.0' }), false);
+  // 读不到版本 -> 保守判坏
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '' }), true);
+});
+
+test('renderDisabled：渲染工具被跳过且不抛错（防 Agent 反复重试）', async () => {
+  const reports = [];
+  const ctx = { renderDisabled: true, report: (x) => reports.push(x) };
+  const r = JSON.parse(await runTool(ctx, 'generate_asset_image', { asset_id: 'x' }));
+  assert.equal(r.skipped, true);
+  assert.equal(r.tool, 'generate_asset_image');
+  assert.ok(r.reason.includes('另起一批'));
+  assert.equal(reports.length, 1, '跳过时也要上报，否则界面看不出发生了什么');
+
+  // 不开开关时不拦（真的去执行handler，这里会因为无效 asset_id 而失败 —— 证明没被跳过）
+  const live = { renderDisabled: false };
+  await assert.rejects(() => runTool(live, 'generate_asset_image', { asset_id: 'x' }));
+});
+
+test('RENDER_TOOLS 覆盖全部需外部进程的渲染工具', () => {
+  for (const n of ['generate_asset_image', 'edit_asset_image', 'change_outfit', 'design_outfits',
+    'generate_assets_batch', 'design_voice', 'generate_shot_video', 'regenerate_shot',
+    'generate_chapter_videos', 'assemble_video']) {
+    assert.ok(RENDER_TOOLS.has(n), n + ' 应属于渲染工具');
+  }
+  // 纯 DB/文本工具不得被误伤，否则 LLM 阶段连提示词都写不了
+  for (const n of ['update_asset', 'set_storyboard', 'list_shots', 'save_context', 'skill', 'report']) {
+    assert.equal(RENDER_TOOLS.has(n), false, n + ' 不该被拦');
+  }
+});
+
+test('待办统计与批量工具口径一致：图片类别不含 costume', () => {
+  // costume 走 change_outfit/design_outfits（图生图），不在文生图批处理内
+  assert.ok(!IMAGE_ASSET_CATEGORIES.includes('costume'));
+  assert.ok(IMAGE_ASSET_CATEGORIES.includes('character'));
+  assert.ok(IMAGE_ASSET_CATEGORIES.includes('scene'));
+  // ASSET_CATEGORY_IDS 里真实存在的类别不能写错
+  for (const c of IMAGE_ASSET_CATEGORIES) assert.ok(ASSET_CATEGORIES.some((x) => x.id === c), c + ' 不是合法资产类别');
+});
+
+// ================= 显存释放（/free） =================
+
+test('freeComfy: POST /free 携带 unload_models + free_memory', async () => {
+  const calls = [];
+  const orig = global.fetch;
+  global.fetch = async (url, opts) => {
+    calls.push({ url: String(url), method: opts?.method, body: opts?.body });
+    return { ok: true, json: async () => ({}) };
+  };
+  try {
+    await freeComfy('http://127.0.0.1:8188/');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'http://127.0.0.1:8188/free', 'baseUrl 尾部斜杠应被归一');
+    assert.equal(calls[0].method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0].body), { unload_models: true, free_memory: true });
+  } finally {
+    global.fetch = orig;
+  }
+});
+
+test('checkComfyUI: dynamicVram 探测（--disable-dynamic-vram 关闭，否则开启）', async () => {
+  const orig = global.fetch;
+  try {
+    global.fetch = async () => ({ ok: true, json: async () => ({ system: { comfyui_version: '0.3.x', argv: ['python', 'main.py', '--use-ck-attention'] }, devices: [{ name: 'RX 7900 XTX', vram_free: 100 }] }) });
+    const on = await checkComfyUI('http://x');
+    assert.equal(on.ok, true);
+    assert.equal(on.dynamicVram, true);
+    assert.equal(on.ckAttention, true);
+
+    global.fetch = async () => ({ ok: true, json: async () => ({ system: { argv: ['python', 'main.py', '--disable-dynamic-vram'] }, devices: [] }) });
+    const off = await checkComfyUI('http://x');
+    assert.equal(off.ok, true);
+    assert.equal(off.dynamicVram, false);
+  } finally {
+    global.fetch = orig;
+  }
+});
+
+// —— 截断/停滞看门狗（防「Response truncated 后任务永远 running」）——
+const truncMsg = () => ({ type: 'assistant', message: { content: [{ type: 'text', text: '\n\n[Response truncated — reached length limit or upstream stalled. Ask the model to continue.]' }] } });
+const toolMsg = () => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'generateImage', input: {} }] } });
+const plainMsg = () => ({ type: 'assistant', message: { content: [{ type: 'text', text: '正常输出' }] } });
+
+test('isTruncatedText: 识别 openclaude 截断标记', () => {
+  assert.equal(isTruncatedText('[Response truncated — reached length limit or upstream stalled. Ask the model to continue.]'), true);
+  assert.equal(isTruncatedText('Response truncated'), true);
+  assert.equal(isTruncatedText('正常输出'), false);
+  assert.equal(isTruncatedText(''), false);
+  assert.equal(isTruncatedText(null), false);
+});
+
+test('classifyAgentMsg: 截断/工具/正常文本分类', () => {
+  assert.deepEqual(classifyAgentMsg(truncMsg()), { hasToolUse: false, hasTrunc: true, hasPlainText: false });
+  assert.deepEqual(classifyAgentMsg(toolMsg()), { hasToolUse: true, hasTrunc: false, hasPlainText: false });
+  assert.deepEqual(classifyAgentMsg(plainMsg()), { hasToolUse: false, hasTrunc: false, hasPlainText: true });
+  assert.deepEqual(classifyAgentMsg({ type: 'result', result: 'x' }), { hasToolUse: false, hasTrunc: false, hasPlainText: false });
+  assert.deepEqual(classifyAgentMsg(null), { hasToolUse: false, hasTrunc: false, hasPlainText: false });
+});
+
+test('watchdogStep: 连续纯截断 3 次熔断', () => {
+  const t0 = 1_000_000;
+  let st = { lastAt: t0, sawToolUse: false, truncStreak: 0 };
+  // 第 1、2 次截断：不熔断，streak 递增
+  st = watchdogStep(st, truncMsg(), t0 + 1000).next;
+  assert.equal(st.truncStreak, 1);
+  st = watchdogStep(st, truncMsg(), t0 + 2000).next;
+  assert.equal(st.truncStreak, 2);
+  // 第 3 次截断：熔断
+  const r = watchdogStep(st, truncMsg(), t0 + 3000);
+  assert.ok(r.halted, '第 3 次连续截断应熔断');
+  assert.match(r.halted, /连续被截断/);
+});
+
+test('watchdogStep: 中间有工具调用/正常文本则重置截断计数', () => {
+  let st = { lastAt: 0, sawToolUse: false, truncStreak: 0 };
+  st = watchdogStep(st, truncMsg(), 1000).next;
+  assert.equal(st.truncStreak, 1);
+  // 工具调用 = 实质进展，streak 归零
+  st = watchdogStep(st, toolMsg(), 2000).next;
+  assert.equal(st.truncStreak, 0);
+  // 正常文本 = 实质进展，streak 归零
+  st = watchdogStep(st, truncMsg(), 3000).next;
+  assert.equal(st.truncStreak, 1);
+  st = watchdogStep(st, plainMsg(), 4000).next;
+  assert.equal(st.truncStreak, 0);
+});
+
+test('watchdogStep: 停滞超时熔断（非工具窗口）', () => {
+  const now = 5_000_000;
+  let st = { lastAt: now - AGENT_WATCHDOG.STALL_MS - 1000, sawToolUse: false, truncStreak: 0 };
+  const r = watchdogStep(st, plainMsg(), now);
+  assert.ok(r.halted, '间隔超过 STALL_MS 且非工具窗口应判停滞');
+  assert.match(r.halted, /停滞/);
+});
+
+test('watchdogStallCheck: 工具执行窗口豁免，非工具窗口超时判定', () => {
+  const now = 5_000_000;
+  // 上一条是工具调用 → 不判停滞（渲染可能很久）
+  assert.equal(watchdogStallCheck({ lastAt: now - 3600_000, sawToolUse: true, truncStreak: 0 }, now), null);
+  // 非工具窗口超时 → 判停滞
+  assert.ok(watchdogStallCheck({ lastAt: now - AGENT_WATCHDOG.STALL_MS - 1, sawToolUse: false, truncStreak: 0 }, now));
+  // 非工具窗口未超时 → 不判停滞
+  assert.equal(watchdogStallCheck({ lastAt: now - 1000, sawToolUse: false, truncStreak: 0 }, now), null);
+});
+
+test('watchdogStep: 截断后可恢复（截断→工具→截断→截断不熔断）', () => {
+  let st = { lastAt: 0, sawToolUse: false, truncStreak: 0 };
+  st = watchdogStep(st, truncMsg(), 1000).next;   // streak 1
+  st = watchdogStep(st, toolMsg(), 2000).next;    // 归零
+  st = watchdogStep(st, truncMsg(), 3000).next;   // streak 1
+  st = watchdogStep(st, toolMsg(), 4000).next;    // 归零
+  const r = watchdogStep(st, truncMsg(), 5000);   // streak 1，不熔断
+  assert.equal(r.halted, null);
+  assert.equal(r.next.truncStreak, 1);
+});
+
+// —— 主动查询任务状态（不干等分钟级超时兜底） ——
+
+test('generate: 主动查询——任务从 ComfyUI 队列消失则主动失败（不干等 timeoutMs）', async () => {
+  const orig = global.fetch;
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/prompt')) return { ok: true, json: async () => ({ prompt_id: 'lost-1' }) };
+    if (u.includes('/history/')) return { ok: true, json: async () => ({}) }; // 查不到产出
+    if (u.includes('/queue')) return { ok: true, json: async () => ({ queue_running: [], queue_pending: [] }) }; // 也不在队列
+    return { ok: true, json: async () => ({}) };
+  };
+  try {
+    await assert.rejects(
+      generate('http://127.0.0.1:1', { n1: {} }, { timeoutMs: 10_000, pollMs: 2 }),
+      /任务丢失/,
+    );
+  } finally {
+    global.fetch = orig;
+  }
+});
+
+test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时→主动放弃', async () => {
+  // 占住唯一视频槽位，让后续任务进入排队分支
+  let releaseBlock;
+  const blocked = new Promise((r) => { releaseBlock = r; });
+  const holder = runExclusiveVideo(() => blocked);
+
+  // 排队前已带停止标记 → 直接拒绝，不进队列
+  await assert.rejects(
+    runExclusiveVideo(() => Promise.resolve('不该跑'), () => true),
+    /已被停止/,
+  );
+
+  // 排队中等待超时（queueTimeoutMs=30ms）→ 主动放弃而不是无限等
+  const t0 = Date.now();
+  await assert.rejects(
+    runExclusiveVideo(() => Promise.resolve('不该跑'), () => false, { queueTimeoutMs: 30 }),
+    /等待视频槽位超时/,
+  );
+  assert.ok(Date.now() - t0 >= 25, '应确实等待了排队超时');
+
+  // 释放占位任务，清理槽位
+  releaseBlock();
+  await holder.catch(() => {});
+});

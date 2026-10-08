@@ -6,6 +6,9 @@
   "comfyui": {
     "baseUrl": "http://127.0.0.1:8188"
   },
+  "hardware": {
+    "mode": "nvidia"
+  },
   "llm": {
     "baseUrl": "http://tx3247.t.taoxiangyoushu.com",
     "apiKey": "sk-xxx",

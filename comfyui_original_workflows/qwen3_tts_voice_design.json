@@ -6,14 +6,14 @@
   "nodes": [
     {
       "id": 2,
-      "type": "Qwen3TTSModelLoader",
+      "type": "QwenTTSModelsLoader",
       "pos": [
         1146.8838319646738,
         576.4834810350848
       ],
       "size": [
         312.828125,
-        198
+        220
       ],
       "flags": {},
       "order": 0,
@@ -30,22 +30,22 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "Qwen3TTSModelLoader",
+        "Node name for S&R": "QwenTTSModelsLoader",
         "widget_ue_connectable": {}
       },
       "widgets_values": [
         "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
-        "cuda:0",
-        "bfloat16",
-        true,
-        false
+        "HuggingFace",
+        "bf16",
+        "auto",
+        ""
       ],
       "widgets_values_named": {
-        "model_name": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
-        "device": "cuda:0",
-        "dtype": "bfloat16",
-        "keep_model_loaded": true,
-        "use_flash_attn": false
+        "repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+        "source": "HuggingFace",
+        "precision": "bf16",
+        "attention": "auto",
+        "local_model_path": ""
       }
     },
     {
@@ -418,21 +418,21 @@
     },
     {
       "id": 77,
-      "type": "Qwen3TTSVoiceDesign",
+      "type": "QwenTTSVoiceDesignGenerate",
       "pos": [
         1626.0484238621657,
         705.5566973676719
       ],
       "size": [
         400,
-        362
+        400
       ],
       "flags": {},
       "order": 11,
       "mode": 0,
       "inputs": [
         {
-          "name": "model",
+          "name": "qwen_tts_model",
           "type": "QWEN_TTS_MODEL",
           "link": 83
         },
@@ -463,7 +463,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "Qwen3TTSVoiceDesign"
+        "Node name for S&R": "QwenTTSVoiceDesignGenerate"
       },
       "widgets_values": [
         "Hello, this is a test.",
@@ -472,9 +472,11 @@
         798671063927382,
         "randomize",
         2048,
-        1,
         0.8,
-        1.1
+        20,
+        1,
+        1.1,
+        false
       ],
       "widgets_values_named": {
         "text": "Hello, this is a test.",
@@ -483,9 +485,11 @@
         "seed": 798671063927382,
         "control_after_generate": "randomize",
         "max_new_tokens": 2048,
-        "temperature": 1,
         "top_p": 0.8,
-        "repetition_penalty": 1.1
+        "top_k": 20,
+        "temperature": 1,
+        "repetition_penalty": 1.1,
+        "unload_model_after_generate": false
       }
     },
     {

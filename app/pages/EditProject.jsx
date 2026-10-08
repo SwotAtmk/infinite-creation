@@ -2,9 +2,11 @@
 import { useState } from 'react';
 import { api } from '../api-client.js';
 import { VIDEO_RESOLUTIONS, VIDEO_RATIOS, STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, splitStyle } from './shared';
+import { useToast } from '../toast';
 
 // ============ 项目设置（名称/风格） ============
 export default function EditProject({ project, onClose, onSaved }) {
+  const toast = useToast();
   const initStyle = splitStyle(project.style);
   const [name, setName] = useState(project.name);
   const [styleSel, setStyleSel] = useState(initStyle.sel);
@@ -24,9 +26,9 @@ export default function EditProject({ project, onClose, onSaved }) {
         video_width: Number(cw) || 0,
         video_height: Number(ch) || 0,
       });
-      alert('已保存'); onClose(); onSaved();
+      toast.success('已保存'); onClose(); onSaved();
     }
-    catch (e) { alert(e.message); }
+    catch (e) { toast.error(e.message); }
     finally { setSaving(false); }
   }
   return (

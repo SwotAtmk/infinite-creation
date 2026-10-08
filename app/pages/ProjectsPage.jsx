@@ -3,15 +3,17 @@ import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api-client.js';
 import { STATUS_TAG, STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle } from './shared';
 import ReferencePicker from './ReferencePicker';
+import { useToast } from '../toast';
 
 // ============ 项目列表 ============
 export default function ProjectsPage({ onOpen }) {
+  const toast = useToast();
   const [projects, setProjects] = useState([]);
   const [form, setForm] = useState({ name: '', novel: '', idea: '', style: '' });
   const [customStyle, setCustomStyle] = useState('');
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
-  const load = useCallback(() => api.get('/api/projects').then(setProjects).catch(alert), []);
+  const load = useCallback(() => api.get('/api/projects').then(setProjects).catch((e) => toast.error(e.message)), []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {}); }, []);
 
@@ -40,11 +42,11 @@ export default function ProjectsPage({ onOpen }) {
         await uploadReferences(p.id, (chapters[0] && chapters[0].id) || '');
       }
       onOpen(p.id);
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast.error(e.message); }
   }
   async function del(id) {
-    if (!confirm('删除该项目及其所有素材？')) return;
-    await api.del('/api/projects/' + id); load();
+    if (!(await toast.confirm('删除该项目及其所有素材？', { danger: true }))) return;
+    try { await api.del('/api/projects/' + id); toast.success('已删除'); load(); } catch (e) { toast.error(e.message); }
   }
 
   return (

@@ -32,6 +32,7 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 
 ### 3. 资产生成（技能驱动：先加载技能写参数，再统一提交）
 - **先加载技能**：调用 skill(image-prompt-writing) 与 skill(tts-voice-design)，严格按其规范为每个资产产出参数（不要凭感觉写，也不要让工具用描述兜底）。
+- **角色 voice_desc（声音画像）**：create_asset 创建角色时，必须把该角色声音特征（性别+年龄段+音色质感，如「青年男性，嗓音低沉」）作为 voice_desc 传入；已创建的缺 voice_desc 用 update_asset 补。voice_desc 是 design_voice 的性别/年龄依据，缺失时 TTS 会自由发挥成女声。
 - **视觉参考（若系统提示说明当前 LLM 支持图片输入）**：写图片/图生图提示词前，先用 view_asset(asset_id) 查看资产当前参考图，基于真实图写提示词；不支持图片输入则跳过此步。
 - **图片提示词**：对每个图片资产（人物/场景/道具），按 image-prompt-writing 写出 prompt 与 negative_prompt，用 update_asset(id, {prompt, negative_prompt}) 写入。
 - **音色参数**：对每个角色，按 tts-voice-design 写出 text（**20~30 字左右的简短自我介绍，约 5 秒，禁止长篇大论**）与 voice_description（**音色描述，不限制字数，可详细写**），连续调用 design_voice(asset_id, text, voice_description) 生成音色样本（落盘 voice_ref）。

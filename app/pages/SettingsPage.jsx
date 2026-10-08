@@ -1,19 +1,27 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { api } from '../api-client.js';
+import { useToast } from '../toast';
 import SkillsTab from './SkillsTab';
 import WorkflowsTab from './WorkflowsTab';
 
 // ============ 设置 ============
 export default function SettingsPage({ onBack }) {
+  const toast = useToast();
   const [cfg, setCfg] = useState(null);
   const [test, setTest] = useState('');
-  useEffect(() => { api.get('/api/config').then(setCfg).catch(alert); }, []);
+  const [comfyInfo, setComfyInfo] = useState(null);
+  useEffect(() => {
+    api.get('/api/config').then((c) => { setCfg(c); detectComfy(c.comfyui.baseUrl); }).catch((e) => toast.error(e.message));
+  }, []);
+  async function detectComfy(baseUrl) {
+    try { setComfyInfo(await api.post('/api/comfyui/test', { baseUrl })); } catch { setComfyInfo({ ok: false, error: '连接失败' }); }
+  }
   async function save() {
-    try { await api.put('/api/config', cfg); alert('已保存'); } catch (e) { alert(e.message); }
+    try { await api.put('/api/config', cfg); toast.success('已保存'); } catch (e) { toast.error(e.message); }
   }
   async function testComfy() {
-    try { const r = await api.post('/api/comfyui/test', { baseUrl: cfg.comfyui.baseUrl }); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }
+    try { const r = await api.post('/api/comfyui/test', { baseUrl: cfg.comfyui.baseUrl }); setComfyInfo(r); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }
   }
   if (!cfg) return <div className="muted">加载中…</div>;
   return (
@@ -37,6 +45,22 @@ export default function SettingsPage({ onBack }) {
         <span>支持图片输入（多模态/视觉模型）</span>
       </label>
       <p className="muted" style={{ marginTop: 4 }}>开启后，写分镜/图生图提示词时会把参考图提交给大模型；请确认所用模型确实支持视觉输入。</p>
+      <br />
+
+      <h3 style={{ marginTop: 8, color: '#c0392b', fontSize: 22 }}>生成维护</h3>
+      <label className="row" style={{ gap: 8, alignItems: 'center' }}>
+        <span>每 N 个生成后释放 ComfyUI 显存</span>
+        <input style={{ width: 64 }} type="number" min={0} max={20} value={cfg.generation.freeAfterEvery ?? cfg.generation.videoFreeAfterEvery ?? 3} onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, freeAfterEvery: Math.max(0, Math.min(20, Math.round(Number(e.target.value) || 0))) } })} />
+        <span className="muted">个生成任务（0 = 关闭）</span>
+      </label>
+      <p className="muted" style={{ marginTop: 4 }}>
+        利：AMD 显卡 + Dynamic VRAM 下，任意连续生成（文生图/图生图/换装/音色/视频）都会让显存状态累积、速度逐步变慢；定期释放可保持稳定。
+        弊：每次释放后下一个生成需重新加载模型，多花 1~3 分钟；次数设得太小会频繁重载。
+      </p>
+      {comfyInfo && comfyInfo.ok === false && <p className="muted" style={{ marginTop: 4 }}>⚠ 当前 ComfyUI 连接失败，无法判断 Dynamic VRAM 状态，建议点「测试连接」确认。</p>}
+      {comfyInfo && comfyInfo.ok && !comfyInfo.dynamicVram && (cfg.generation.freeAfterEvery ?? cfg.generation.videoFreeAfterEvery ?? 0) > 0 && (
+        <p className="muted" style={{ marginTop: 4 }}>⚠ 检测到当前 ComfyUI 未启用 Dynamic VRAM（--disable-dynamic-vram），连续生成不会产生该退化，建议关闭此功能（把 N 设为 0）。</p>
+      )}
       <br />
       <button className="primary" onClick={save}>保存配置</button>
 

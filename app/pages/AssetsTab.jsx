@@ -2,9 +2,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../api-client.js';
 import { CATEGORIES, STATUS_TAG, fileUrl } from './shared';
+import { useToast } from '../toast';
 
 // ============ 资产库 ============
 export default function AssetsTab({ projectId }) {
+  const toast = useToast();
   const [assets, setAssets] = useState([]);
   const [cat, setCat] = useState('');
   const [form, setForm] = useState({ category: 'character', name: '', description: '' });
@@ -13,13 +15,13 @@ export default function AssetsTab({ projectId }) {
   const [preview, setPreview] = useState(null);
   const [outfits, setOutfits] = useState({});
   const fileRef = useRef(null);
-  const load = useCallback(() => api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch(alert), [projectId]);
+  const load = useCallback(() => api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch((e) => toast.error(e.message)), [projectId]);
   useEffect(() => { load(); }, [load]);
   const shownAssets = cat ? assets.filter((a) => a.category === cat) : assets;
   const costumesOfChar = (charId) => assets.filter((a) => a.category === 'costume' && a.parent_id === charId);
 
   async function designVoice(a) {
-    try { await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/design-voice'); alert('已提交音色设计，稍后在「运行日志」查看进度'); load(); } catch (e) { alert(e.message); }
+    try { await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/design-voice'); toast.success('已提交音色设计，稍后在「运行日志」查看进度'); load(); } catch (e) { toast.error(e.message); }
   }
   function pickUpload(a) { setUploadTarget(a.id); if (fileRef.current) fileRef.current.click(); }
   async function doUpload(aid, file) {
@@ -36,35 +38,35 @@ export default function AssetsTab({ projectId }) {
         throw new Error(j.error || ('HTTP ' + res.status));
       }
       load();
-    } catch (e) { alert('上传失败：' + e.message); }
+    } catch (e) { toast.error('上传失败：' + e.message); }
   }
 
   async function create() {
-    try { await api.post('/api/projects/' + projectId + '/assets', form); setForm({ ...form, name: '', description: '' }); load(); } catch (e) { alert(e.message); }
+    try { await api.post('/api/projects/' + projectId + '/assets', form); setForm({ ...form, name: '', description: '' }); load(); } catch (e) { toast.error(e.message); }
   }
   async function del(a) {
-    if (!window.confirm('删除资产「' + a.name + '」？此操作不可逆。')) return;
-    try { await api.del('/api/projects/' + projectId + '/assets/' + a.id); load(); } catch (e) { alert(e.message); }
+    if (!(await toast.confirm('删除资产「' + a.name + '」？此操作不可逆。', { danger: true }))) return;
+    try { await api.del('/api/projects/' + projectId + '/assets/' + a.id); toast.success('已删除「' + a.name + '」'); load(); } catch (e) { toast.error(e.message); }
   }
   async function regenImage(a, mode) {
     try {
       await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/generate', { mode: mode || 't2i' });
-      alert((mode === 'i2i' ? '已提交重新生成（图生图，基于现有图）' : '已提交生成图片') + '，稍后在「运行日志」查看进度');
+      toast.success((mode === 'i2i' ? '已提交重新生成（图生图，基于现有图）' : '已提交生成图片') + '，稍后在「运行日志」查看进度');
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast.error(e.message); }
   }
   async function changeOutfit(a) {
-    const outfit = window.prompt('输入服装描述（如：冬季红色斗篷 / 校园制服 / 战斗铠甲）', outfits[a.id] || '');
-    if (!outfit || !outfit.trim()) return;
-    setOutfits({ ...outfits, [a.id]: outfit.trim() });
+    const outfit = await toast.prompt('输入服装描述（如：冬季红色斗篷 / 校园制服 / 战斗铠甲）', { defaultValue: outfits[a.id] || '', placeholder: '服装描述' });
+    if (!outfit) return;
+    setOutfits({ ...outfits, [a.id]: outfit });
     try {
-      await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/change-outfit', { outfit: outfit.trim() });
-      alert('已提交换装（图生图），稍后在「生成内容」的运行日志查看进度');
+      await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/change-outfit', { outfit });
+      toast.success('已提交换装（图生图），稍后在「运行日志」查看进度');
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast.error(e.message); }
   }
   async function saveEdit() {
-    try { await api.patch('/api/projects/' + projectId + '/assets/' + edit.id, { name: edit.name, description: edit.description, prompt: edit.prompt }); setEdit(null); load(); } catch (e) { alert(e.message); }
+    try { await api.patch('/api/projects/' + projectId + '/assets/' + edit.id, { name: edit.name, description: edit.description, prompt: edit.prompt }); toast.success('已保存'); setEdit(null); load(); } catch (e) { toast.error(e.message); }
   }
 
   return (

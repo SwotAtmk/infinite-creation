@@ -18,6 +18,7 @@
     "videoConcurrency": 1,
     "retryTimes": 3,
     "videoTimeoutMinutes": 30,
-    "imageTimeoutMinutes": 10
+    "imageTimeoutMinutes": 10,
+    "freeAfterEvery": 3
   }
 }

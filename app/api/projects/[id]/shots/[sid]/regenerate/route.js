@@ -11,6 +11,6 @@ export async function POST(req, { params }) {
   const body = await req.json().catch(() => ({}));
   const shot = Shots.get(sid);
   if (!shot) return NextResponse.json({ error: '分镜不存在' }, { status: 404 });
-  const job = startRegenerateJob({ projectId: id, shotId: sid, feedback: body?.feedback, onProgress: (p) => broadcast(p) });
+  const job = startRegenerateJob({ projectId: id, shotId: sid, feedback: body?.feedback, render: body?.render, onProgress: (p) => broadcast(p) });
   return NextResponse.json(job);
 }

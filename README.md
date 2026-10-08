@@ -28,7 +28,7 @@
 提供Agent生成视频全链路整合方案
 
 ## 项目架构
-基于**本地 ComfyUI**（MiniMax H3 视频调优版 + Qwen-Image 图生图 + Krea2 文生图 + Qwen3\_TTS）的**全自动「小说/剧本 → 视频」Agent 工作流**。项目目前整理了27个Skill技能，其中包含MiniMax-H3提示词优化，分镜剧本生成，小说转剧本等。
+基于**本地 ComfyUI**（MiniMax H3 视频 GGUF 版 + Qwen-Image 2.1 文生图/图生图 + Krea2 文生图 + Qwen3-TTS）的**全自动「小说/剧本 → 视频」Agent 工作流**。项目目前整理了27个Skill技能，其中包含MiniMax-H3提示词优化，分镜剧本生成，小说转剧本等。
 
 只要把一部小说/剧本粘贴进项目，点一下「开始」，Agent 会全自动完成：
 
@@ -57,6 +57,9 @@ CPU：12th Gen Intel(R) Core(TM) i5-12400F
 - **自迭代（技能工厂）**：上传一个新的 ComfyUI 工作流 JSON，自动解析节点 → 生成工作流规格 + 起草对应技能，Agent 立即可调用。
 - **断点续跑**：任务持久化 + 幂等跳过，进程崩溃/重启后可继续，不重复生成。
 - **审查/重生成**：分镜级预览与重生成（换种子 / 按反馈改写提示词）。
+- **分阶段运行**：生成拆成 文本创作 / 资产生图 / 音色设计 / 分镜视频 四个独立阶段，可任意勾选单独跑或续跑 —— 按显存约束自动拆批，不需要的阶段不拉起对应进程。
+- **显存维护**：设置页可配「每 N 个生成后自动释放 ComfyUI 显存」（默认 3，0 = 关闭），覆盖文生图/图生图/换装/音色/视频全部渲染——AMD Dynamic VRAM 的显存累积不只在视频触发；未启用 Dynamic VRAM 时界面会提示关闭。
+- **在线预览**：成片/分镜视频经后端 Range 流式传输，进度条可随意拖动、即时跳转。
 
 # 截图演示
 
@@ -82,7 +85,7 @@ CPU：12th Gen Intel(R) Core(TM) i5-12400F
 - 后端：Node.js（Next.js 自定义 server）+ node:sqlite + ComfyUI REST/WebSocket + ffmpeg，零原生编译依赖。
 - Agent：自研 ReAct 循环（原生 function-calling，JSON 动作块兜底），工具注册表 + 技能引擎 + 技能工厂。
 - 前端：Next.js 15 + React 18（App Router）。
-- 结构：单包 —— `app/`（页面 + 30 个 API 端点）· `lib/`（core/agent/shared 复用逻辑）· `server.js`（自定义 server：WebSocket 进度推送 + `/files` 静态托管）。
+- 结构：单包 —— `app/`（页面 + 30+ 个 API 端点）· `lib/`（core/agent/shared 复用逻辑）· `server.js`（自定义 server：WebSocket 进度推送 + `/files` 静态托管，支持 Range 流式播放视频）。
 
 ## 目录结构
 
@@ -90,8 +93,10 @@ CPU：12th Gen Intel(R) Core(TM) i5-12400F
 infinite-creation/
 ├── app/                 # Next.js App Router（页面 + API 端点）
 ├── lib/                 # 复用逻辑：core（ComfyUI/LLM/DB/ffmpeg）· agent（运行时+技能）· shared（常量）
-├── server.js            # 自定义 server（WebSocket 进度推送 + /files 静态托管）
-├── workflows/           # 三个默认 ComfyUI 工作流模板（r2v / t2i / i2i）
+├── server.js            # 自定义 server（WebSocket 进度推送 + /files 静态托管，Range 流式）
+├── workflows/           # ComfyUI 工作流模板（MiniMax H3 视频 / Qwen-Image 2.1 图·文 / Krea2 / Qwen3-TTS，含 GGUF 量化版）
+├── start-infinite-creation.bat    # Windows 一键后台启动（自动装依赖 + 等服务就绪）
+├── stop-infinite-creation.bat     # Windows 停止服务
 ├── skills/              # 技能库（9 官方 + novel-to-video + 自定义）
 ├── scripts/install-skills.mjs   # 拉取 MiniMax-H3 官方技能
 ├── tests/unit.test.mjs          # 单元测试
@@ -139,6 +144,8 @@ pnpm run build && pnpm start
 # 浏览器打开 http://127.0.0.1:4600
 ```
 
+> Windows 用户也可直接双击根目录 `start-infinite-creation.bat` 一键后台启动（自动检测端口/安装依赖/等待就绪，并提示 ComfyUI 状态），停止用 `stop-infinite-creation.bat`。
+
 > Agent 内核 `vendor/openclaude/dist/` 是构建产物、不入库，`pnpm install` 会自动构建一次（幂等，已存在则跳过）。只有当你改动了 `vendor/openclaude/src/` 源码后，才需要手动重跑 `pnpm build:agent`。构建细节见 [docs/agent-architecture.md](docs/agent-architecture.md)。
 
 ## 首次配置
@@ -147,8 +154,9 @@ pnpm run build && pnpm start
 
 1. ComfyUI 服务地址：默认 `http://127.0.0.1:8188`，点「测试连接」确认。
 2. LLM（Agent 大脑，OpenAI 兼容）：填 Base URL（需以 `/v1` 结尾）、模型、API Key。默认使用 deepseek-v4-flash-vision-exp 模型。
+3. 生成维护（可选）：设置「每 N 个生成后释放 ComfyUI 显存」（默认开启 = 3，0 = 关闭），按**所有 ComfyUI 生成任务**计数（文生图/图生图/换装/音色/视频都计入——AMD 显卡 + Dynamic VRAM 下任意连续生成都会逐步变慢）。释放后下一个生成需重新加载模型（多花约 1~3 分钟）。检测到 ComfyUI 未启用 Dynamic VRAM 时界面会提示建议关闭。
 
-配置保存在根目录 config.json（不入库）。
+配置保存在根目录 config.json（不入库）。生成参数（超时分钟、并发、释放频率）可直接编辑 config.json 的 `generation` 节。
 
 ### ComfyUI 所需工作流和模型
 
@@ -168,9 +176,9 @@ pnpm run build && pnpm start
 ## 使用流程
 
 1. 新建项目 → 粘贴小说原文（或一句话想法）+ 风格。
-2. 点 ▶ 开始全自动生成 → 控制台实时看进度（无需任何中途操作）。
-3. 完成后到 分镜审查 逐段预览；对不满意的镜头点 ↻ 重新生成（可填反馈）。
-4. 合并导出成片 下载。
+2. 在「生成内容」页勾选要跑的阶段（文本创作 / 资产生图 / 音色设计 / 分镜视频，可只勾一部分用于续跑），点 ▶ 开始 → 控制台实时看进度（无需任何中途操作）。
+3. 视频阶段跑完自动合并成片；到 分镜审查 逐段预览，对不满意的镜头点 ↻ 重新生成（可填反馈）。
+4. 到「成片」页在线预览（进度条可拖动）并 ⬇ 下载。
 
 ## 自迭代：新工作流 → 新技能
 
@@ -187,6 +195,8 @@ pnpm run build && pnpm start
 | GET      | /api/projects/:id/shots                 | 分镜              |
 | POST     | /api/projects/:id/shots/:sid/regenerate | 单分镜重生成          |
 | POST     | /api/projects/:id/export                | 合并导出成片          |
+| GET      | /api/projects/:id/stages                | 各阶段待办数 + 阶段定义  |
+| POST     | /api/projects/:id/stages                | 分阶段运行（勾选 llm/image/tts/video 起一批，含预检） |
 | GET      | /api/skills                             | 技能列表            |
 | GET/POST | /api/workflows                          | 工作流列表 / 注册（自迭代） |
 | GET/PUT  | /api/config                             | 配置              |
@@ -202,6 +212,9 @@ pnpm test   # node --test tests/unit.test.mjs
 - H3 参考上限：图 ≤9、音视频 ≤3（超出自动报错）。
 - 成片统一转码 H.264 + AAC（24fps），保证可播。
 - 任务为后台持久化任务，刷新页面/重启服务后可续跑（幂等跳过已完成项）。
+- 单视频任务超时默认 90 分钟（正常单镜远低于此，仅兜底），可在 config.json 的 `generation.videoTimeoutMinutes` 调整。
+- 每 N 个生成任务自动调用一次 ComfyUI `/free` 释放显存（`generation.freeAfterEvery`，默认 3、0 = 关闭；兼容旧键 `videoFreeAfterEvery`），覆盖全部渲染、对抗 AMD Dynamic VRAM 连续生成后的速度退化；清理在下一个任务完成后生效，失败不影响产物。
+- LLM 运行看门狗：模型输出被截断（`[Response truncated …]`）或上游停滞后，任务不再无限挂起——连续 3 次纯截断无进展、或 20 分钟无消息（工具渲染窗口不计入）会自动中止并标失败；慢速本地模型可调 `generation.agentStallMinutes`（默认 20）放宽无消息阈值。
 
 # 推荐一下我的工具站，里面有我收藏的很多实用小工具哦，感兴趣的可以了解一下\~
 - 可以获取最新的项目资讯和实用工具

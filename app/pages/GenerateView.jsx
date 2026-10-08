@@ -36,10 +36,8 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
             ? <button className="danger" onClick={onStop}>■ 停止</button>
             : <button className="primary" disabled={!cur} onClick={() => cur && startRun(cur.title)}>▶ 生成/继续 {cur ? cur.title : ''}</button>}
           {!running && <button onClick={() => onRun(null)}>生成全部章节</button>}
-        </div>
-        <div className="row" style={{ marginTop: 8 }}>
-          {!running && <button onClick={() => regenChapter('storyboard')} disabled={!cur}>↻ 重新生成分镜</button>}
-          {!running && <button onClick={() => regenChapter('videos')} disabled={!cur}>↻ 重新生成视频</button>}
+          {!running && <button onClick={() => regenChapter('storyboard')} disabled={!cur}>↻ 重新生成本章分镜</button>}
+          {!running && <button onClick={() => regenChapter('videos')} disabled={!cur}>↻ 重新生成本章视频</button>}
         </div>
         <p className="muted" style={{ marginTop: 8 }}>
           点「生成/继续」就接着上次进度跑（已完成的素材/分镜/视频自动跳过），中断或失败后点它即可继续。

@@ -9,9 +9,9 @@ import {
   analyzeWorkflow, buildWorkflow, getDefaultSpecById,
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
-  extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts,
+  extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -238,6 +238,41 @@ test('installSkillsFromZip: 无 SKILL.md 时抛错', () => {
   const buf = zipOf({ 'readme.txt': 'hello' });
   assert.throws(() => installSkillsFromZip(buf, { targetDir: dir }), /未在 zip 中找到/);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('buildVisionContentBlocks: 空图返回纯文本块', () => {
+  const blocks = buildVisionContentBlocks('你好', []);
+  assert.equal(blocks.length, 1);
+  assert.deepEqual(blocks[0], { type: 'text', text: '你好' });
+});
+
+test('buildVisionContentBlocks: 文本 + 图片块（Anthropic source.base64）', () => {
+  const blocks = buildVisionContentBlocks('看这张图', [{ data: 'abc123', mimeType: 'image/png' }]);
+  assert.equal(blocks.length, 2);
+  assert.deepEqual(blocks[0], { type: 'text', text: '看这张图' });
+  assert.deepEqual(blocks[1], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc123' } });
+});
+
+test('buildVisionContentBlocks: 跳过无 data/mimeType 的项', () => {
+  const blocks = buildVisionContentBlocks('x', [{ data: '', mimeType: 'image/png' }, null, { data: 'd', mimeType: '' }]);
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].type, 'text');
+});
+
+test('filterReferenceImages: 项目级 + 指定章 / 无目标全量', () => {
+  const list = [
+    { chapter_id: '' },
+    { chapter_id: 'c1' },
+    { chapter_id: 'c2' },
+  ];
+  // 生成全部章节：全量
+  assert.equal(filterReferenceImages(list, null).length, 3);
+  // 指定 c1：项目级 + c1
+  const r = filterReferenceImages(list, new Set(['c1']));
+  assert.deepEqual(r.map((x) => x.chapter_id), ['', 'c1']);
+  // 指定 c2：项目级 + c2
+  const r2 = filterReferenceImages(list, new Set(['c2']));
+  assert.deepEqual(r2.map((x) => x.chapter_id), ['', 'c2']);
 });
 
 console.log('全部单元测试通过');

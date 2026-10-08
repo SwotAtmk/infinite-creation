@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api-client.js';
-import { fileUrl } from './shared';
 import ReferencePicker from './ReferencePicker';
 
 // ============ 页1 · 章节管理 ============
@@ -16,11 +15,13 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
 
   useEffect(() => { if (cur) { setTitle(cur.title); setNovel(cur.novel || ''); setDirty(false); } }, [cur && cur.id]);
   useEffect(() => { api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {}); }, []);
-  const loadSavedRefs = useCallback(() => {
-    if (!cur) return;
-    api.get('/api/projects/' + projectId + '/references?chapter_id=' + cur.id).then(setSavedRefs).catch(alert);
-  }, [projectId, cur && cur.id]);
-  useEffect(() => { loadSavedRefs(); }, [loadSavedRefs]);
+  const loadRefs = useCallback(() => {
+    api.get('/api/projects/' + projectId + '/references').then(setSavedRefs).catch(alert);
+  }, [projectId]);
+  useEffect(() => { loadRefs(); }, [loadRefs]);
+
+  // 参考素材按章节归属：仅展示当前章（chapter_id = cur.id）的参考素材
+  const chapterRefs = cur ? savedRefs.filter((r) => r.chapter_id === cur.id) : [];
 
   async function save() {
     try { await api.patch('/api/projects/' + projectId + '/chapters/' + cur.id, { title, novel }); alert('已保存「' + title + '」'); setDirty(false); onRefresh(); } catch (e) { alert(e.message); }
@@ -46,6 +47,7 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
       fd.append('mode', it.mode);
       fd.append('category', it.category || 'other');
       fd.append('chapter_id', cur.id);
+      fd.append('description', it.description || '');
       const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -53,10 +55,17 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
       }
     }
     setRefs([]);
-    loadSavedRefs();
+    loadRefs();
   }
   async function delRef(rid) {
-    try { await api.del('/api/projects/' + projectId + '/references/' + rid); loadSavedRefs(); } catch (e) { alert(e.message); }
+    try { await api.del('/api/projects/' + projectId + '/references/' + rid); loadRefs(); } catch (e) { alert(e.message); }
+  }
+  async function updateRef(rid, patch) {
+    // 乐观更新，失败回滚重载
+    setSavedRefs((prev) => prev.map((r) => (r.id === rid ? { ...r, ...patch } : r)));
+    try {
+      await api.patch('/api/projects/' + projectId + '/references/' + rid, patch);
+    } catch (e) { alert(e.message); loadRefs(); }
   }
 
   const label = { empty: '无分镜', pending: '待生成', running: '生成中', done: '完成', failed: '失败' };
@@ -91,29 +100,19 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
                 </div>
                 <h3 style={{ margin: '8px 0 4px' }}>本章小说原文</h3>
                 <textarea value={novel} onChange={(e) => { setNovel(e.target.value); setDirty(true); }} style={{ minHeight: 130 }} placeholder="粘贴或编辑本章原文…" />
-                {vision && (
-                  <>
-                    <ReferencePicker items={refs} onChange={setRefs} />
-                    <div className="row" style={{ marginTop: 8 }}>
-                      <button className="primary" disabled={!refs.length} onClick={uploadRefs}>上传本章参考素材</button>
-                    </div>
-                    {savedRefs.length > 0 && (
-                      <div style={{ marginTop: 8 }}>
-                        <div className="muted" style={{ marginBottom: 4 }}>本章已上传参考素材（{savedRefs.length}）</div>
-                        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                          {savedRefs.map((r) => (
-                            <div key={r.id} style={{ textAlign: 'center', width: 68 }}>
-                              {r.image_path
-                                ? <img src={fileUrl(projectId, r.image_path)} style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4 }} title={r.name} />
-                                : <div className="thumb" style={{ width: 60, height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>图</div>}
-                              <div className="muted" style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{r.mode === 'library' ? '素材库' : '参考生成'}</div>
-                              <button onClick={() => delRef(r.id)} style={{ fontSize: 11, padding: '2px 6px' }}>删除</button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
+                <ReferencePicker
+                  projectId={projectId}
+                  items={refs}
+                  onChange={setRefs}
+                  saved={chapterRefs}
+                  onUpdateSaved={updateRef}
+                  onDeleteSaved={delRef}
+                  allowAdd={vision}
+                />
+                {vision && refs.length > 0 && (
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <button className="primary" onClick={uploadRefs}>上传本章参考素材</button>
+                  </div>
                 )}
               </div>
             )}

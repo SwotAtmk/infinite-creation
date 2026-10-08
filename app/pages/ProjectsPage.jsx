@@ -15,13 +15,14 @@ export default function ProjectsPage({ onOpen }) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {}); }, []);
 
-  async function uploadReferences(projectId) {
+  async function uploadReferences(projectId, chapterId) {
     for (const it of refs) {
       const fd = new FormData();
       fd.append('file', it.file);
       fd.append('mode', it.mode);
       fd.append('category', it.category || 'other');
-      fd.append('chapter_id', '');
+      fd.append('chapter_id', chapterId);
+      fd.append('description', it.description || '');
       const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -34,7 +35,10 @@ export default function ProjectsPage({ onOpen }) {
     try {
       const style = resolveStyle(form.style, customStyle);
       const p = await api.post('/api/projects', { ...form, style });
-      await uploadReferences(p.id);
+      if (refs.length) {
+        const chapters = await api.get('/api/projects/' + p.id + '/chapters');
+        await uploadReferences(p.id, (chapters[0] && chapters[0].id) || '');
+      }
       onOpen(p.id);
     } catch (e) { alert(e.message); }
   }

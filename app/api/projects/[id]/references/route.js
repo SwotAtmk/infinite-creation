@@ -28,6 +28,7 @@ export async function POST(req, { params }) {
   const category = String(fd.get('category') || 'other');
   const chapter_id = String(fd.get('chapter_id') || '');
   const name = String(fd.get('name') || '');
+  const description = String(fd.get('description') || '');
   if (!file || typeof file.arrayBuffer !== 'function') return NextResponse.json({ error: '缺少文件' }, { status: 400 });
   const buf = Buffer.from(await file.arrayBuffer());
   if (!buf.length) return NextResponse.json({ error: '缺少文件内容' }, { status: 400 });
@@ -50,7 +51,7 @@ export async function POST(req, { params }) {
 
   let asset = null;
   if (mode === 'library') {
-    asset = Assets.create(id, { category, name: baseName, description: '' });
+    asset = Assets.create(id, { category, name: baseName, description });
     Assets.update(asset.id, { image_path: rel, source: 'uploaded', status: 'done' });
   }
   const reference = ReferenceImages.create(id, {
@@ -60,7 +61,7 @@ export async function POST(req, { params }) {
     image_path: rel,
     mode,
     category,
-    description: '',
+    description,
   });
   return NextResponse.json({ reference, asset });
 }

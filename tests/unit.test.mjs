@@ -259,20 +259,20 @@ test('buildVisionContentBlocks: 跳过无 data/mimeType 的项', () => {
   assert.equal(blocks[0].type, 'text');
 });
 
-test('filterReferenceImages: 项目级 + 指定章 / 无目标全量', () => {
+test('filterReferenceImages: 无目标全量 / 指定章过滤', () => {
   const list = [
-    { chapter_id: '' },
     { chapter_id: 'c1' },
     { chapter_id: 'c2' },
+    { chapter_id: 'c3' },
   ];
   // 生成全部章节：全量
   assert.equal(filterReferenceImages(list, null).length, 3);
-  // 指定 c1：项目级 + c1
+  // 指定 c1：只保留 c1
   const r = filterReferenceImages(list, new Set(['c1']));
-  assert.deepEqual(r.map((x) => x.chapter_id), ['', 'c1']);
-  // 指定 c2：项目级 + c2
+  assert.deepEqual(r.map((x) => x.chapter_id), ['c1']);
+  // 指定 c2：只保留 c2
   const r2 = filterReferenceImages(list, new Set(['c2']));
-  assert.deepEqual(r2.map((x) => x.chapter_id), ['', 'c2']);
+  assert.deepEqual(r2.map((x) => x.chapter_id), ['c2']);
 });
 
 console.log('全部单元测试通过');

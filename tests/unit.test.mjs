@@ -10,11 +10,11 @@ import {
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks,
-  freeComfy, checkComfyUI, generate,
+  freeComfy, checkComfyUI, generate, resolveHardwareConfig, HW_PRESETS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
-import { ckBroken, STAGES, STAGE_MAP } from '../lib/agent/stages.js';
+import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool } from '../lib/agent/tools.js';
 import { runExclusiveVideo } from '../lib/agent/job-runner.js';
 
@@ -176,6 +176,57 @@ test('getSpecForKind: config 覆盖规格 id，缺失时抛错', () => {
   assert.equal(getSpecForKind({}, 'i2i').id, 'qwen_image_edit_2511_i2i');
   assert.equal(getSpecForKind({}, 'r2v').id, 'minimax_h3_r2v');
   assert.throws(() => getSpecForKind({ workflows: { t2i: 'nope' } }, 't2i'), /未找到工作流规格/);
+});
+
+test('getSpecForKind: 可按 hardware.mode 选规格（amd → GGUF）', () => {
+  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 't2i').id, 'qwen_image_2_1_t2i_gguf');
+  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'i2i').id, 'qwen_image_2_1_i2i_gguf');
+  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'r2v').id, 'minimax_h3_r2v_gguf');
+  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'tts').id, 'qwen3_tts_voice_design_gguf');
+  assert.equal(getSpecForKind({ hardware: { mode: 'nvidia' } }, 't2i').id, 'krea2_hyperreal_t2i');
+});
+
+test('resolveHardwareConfig: 模式切换工作流预设与显存释放默认值', () => {
+  const nv = resolveHardwareConfig({});
+  assert.equal(nv.hardware.mode, 'nvidia', '默认英伟达');
+  assert.deepEqual(nv.workflows, HW_PRESETS.nvidia);
+  assert.equal(nv.generation.freeAfterEvery, 0, 'N 卡默认不做显存释放');
+  assert.equal(nv.generation.videoFreeAfterEvery, undefined, '旧键应被迁移掉');
+
+  const amd = resolveHardwareConfig({ hardware: { mode: 'amd' } });
+  assert.deepEqual(amd.workflows, HW_PRESETS.amd);
+  assert.equal(amd.generation.freeAfterEvery, 3, 'AMD 默认每 3 个生成释放一次');
+
+  // 用户手写的自定义映射不跟随模式，且覆盖模式预设
+  const custom = resolveHardwareConfig({ hardware: { mode: 'amd' }, workflows: { t2i: 'my_custom_t2i' } });
+  assert.equal(custom.workflows.t2i, 'my_custom_t2i');
+  assert.equal(custom.workflows.r2v, HW_PRESETS.amd.r2v);
+
+  // 显式配置优先；旧键 videoFreeAfterEvery 兼容迁移
+  assert.equal(resolveHardwareConfig({ generation: { freeAfterEvery: 7 } }).generation.freeAfterEvery, 7);
+  assert.equal(resolveHardwareConfig({ generation: { videoFreeAfterEvery: 5 } }).generation.freeAfterEvery, 5);
+  assert.equal(resolveHardwareConfig({ hardware: { mode: 'amd' }, generation: { freeAfterEvery: 0 } }).generation.freeAfterEvery, 0);
+
+  // 未知 mode 回退英伟达，不炸
+  assert.equal(resolveHardwareConfig({ hardware: { mode: 'weird' } }).hardware.mode, 'nvidia');
+});
+
+test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前后端共用同一份常量）', () => {
+  assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.nvidia), true);
+  assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.amd), true);
+  assert.deepEqual(SHARED_HW_PRESETS, HW_PRESETS, 'shared 与 core 转出的预设必须是同一份');
+  assert.equal(isPresetWorkflows({ ...SHARED_HW_PRESETS.nvidia, t2i: 'my_custom_t2i' }), false, '手改过 → 不随模式切换');
+  assert.equal(isPresetWorkflows({ t2i: 'krea2_hyperreal_t2i' }), false, '缺键 → 不算预设');
+  assert.equal(isPresetWorkflows(null), false);
+});
+
+test('preflight: 英伟达模式不拦 LLM/ComfyUI 同批与 vision，AMD 模式拦下', async () => {
+  const base = { llm: { baseUrl: 'http://127.0.0.1:1', vision: false }, comfyui: { baseUrl: 'http://127.0.0.1:1' } };
+  await assert.rejects(() => preflight(['llm', 'image'], { ...base, hardware: { mode: 'amd' } }), /不能同一批跑/);
+  await assert.rejects(() => preflight(['image'], { ...base, hardware: { mode: 'amd' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /llm\.vision/);
+  // 英伟达模式：同批不再被拦，走到「LLM 未就绪」这一步（说明互斥与 vision 拦截已放行）
+  await assert.rejects(() => preflight(['llm', 'image'], { ...base, hardware: { mode: 'nvidia' } }), /LLM 未就绪/);
+  await assert.rejects(() => preflight(['image'], { ...base, hardware: { mode: 'nvidia' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /ComfyUI 未就绪/);
 });
 
 test('fallbackVideoPrompt: 占位符与一致性描述', () => {

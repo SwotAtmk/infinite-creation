@@ -9,3 +9,4 @@ vendor/openclaude/dist/
 *.log
 .pnpm-store/
 .idea/
+.trae/

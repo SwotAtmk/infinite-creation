@@ -1,4 +1,5 @@
-# Agent无限创作 · infinite-creation
+# Agent无限创作 · 把你的故事变成亿帧画面
+
 
 ![](images/banner.jpg)
 
@@ -14,9 +15,11 @@
 [更多样例](docs/run_demo.md)
 
 ## 项目计划
-- [计划中] 支持提交参考素材，及Agent整理参考素材
+- [进行中……] 把文生图、图生图工作流进行整合使用最新Qwen-Image2.1的文生图+图生图工作流
+- [计划中] 前端页面整理及美化
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
-- [进行中] 接入在线RunningHub-ComfyUI工作流生成
+- [计划中] 接入在线RunningHub-ComfyUI工作流生成，会员MiniMax-H3夜间免费运行
+- [✅] 支持提交参考素材，及Agent整理参考素材
 - [✅] 优化本地MiniMax H3人物语音电流声或者语音不清晰的问题
 - [✅] 上传小说/剧本生成视频本地全链路Agent全自动工作流生成方案
 - [✅] 优化图片素材生成的质量
@@ -24,7 +27,7 @@
 - [✅] 支持人物服装管理，每个人物可以支持设计多套服装
 
 ## 项目宗旨
-提供Agent生成视频全链路整合方案
+提供Agent生成超长视频全链路整合方案
 
 ## 项目架构
 基于**本地 ComfyUI**（MiniMax H3 视频 GGUF 版 + Qwen-Image 2.1 文生图/图生图 + Krea2 文生图 + Qwen3-TTS）的**全自动「小说/剧本 → 视频」Agent 工作流**。项目目前整理了27个Skill技能，其中包含MiniMax-H3提示词优化，分镜剧本生成，小说转剧本等。
@@ -236,6 +239,8 @@ pnpm test   # node --test tests/unit.test.mjs
 ## 作者致辞：
 本项目由个人开发者独立完成，欢迎各位同行多提提意见，多找找bug帮忙多多宣传，做出更好的产品让更多的人发现。项目刚开源里面可能会有很多地方需要调整优化的地方，欢迎各位提交issues或者在我的基础上做更多的优化，感谢每一位对这个项目做出贡献的人。
 
+## 致谢
+- 感谢开发者 [happymy](https://github.com/happymy) 为此项目提供了AMD+GGUF适配的解决方案以及解决项目中存在的部分bug，见 preview 分支
 
 ## 开源协议
 

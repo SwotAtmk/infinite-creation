@@ -3,6 +3,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api-client.js';
 import { STATUS_TAG, fileUrl, dialogueSpeakers } from './shared';
 import { useToast } from '../toast';
+import ShotMaterialPicker from './ShotMaterialPicker';
+
+const MATERIAL_FIELD = { character: 'character_ids', scene: 'scene_ids', prop: 'prop_ids', costume: 'costume_ids' };
 
 // ============ 分镜审查 ============
 export default function ShotsTab({ projectId, chapter: chapterProp = '', running = false, onRefresh }) {
@@ -15,14 +18,19 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const [zipping, setZipping] = useState(false);
   // 有反馈=需要 LLM：弹窗问「LLM 改写后是否还要渲染视频」
   const [ask, setAsk] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [materialPicker, setMaterialPicker] = useState(null);
   const load = useCallback(() => {
-    api.get('/api/projects/' + projectId + '/shots').then(setShots).catch((e) => toast.error(e.message));
-    api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch((e) => toast.error(e.message));
-    api.get('/api/projects/' + projectId).then(setProject).catch(() => {});
+    return Promise.all([
+      api.get('/api/projects/' + projectId + '/shots').then(setShots).catch((e) => toast.error(e.message)),
+      api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch((e) => toast.error(e.message)),
+      api.get('/api/projects/' + projectId).then(setProject).catch(() => {}),
+    ]);
   }, [projectId]);
   // 生成期间定时拉取，实时反映每个分镜的生成结果（Agent 逐镜写库，没有逐镜的 WS 事件）
   useEffect(() => {
-    load();
+    setLoading(true);
+    load().finally(() => setLoading(false));
     if (!running) return;
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
@@ -37,13 +45,19 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const propsOf = (s) => asArr(s.prop_ids).map(byId).filter(Boolean);
   const costumesOf = (s) => asArr(s.costume_ids).map(byId).filter(Boolean);
 
-  function RefThumb({ a }) {
+  function RefThumb({ a, onReplace, onRemove }) {
     return (
-      <div style={{ textAlign: 'center', width: 76 }}>
+      <div style={{ textAlign: 'center', width: 88 }}>
         {a.image_path
           ? <img className="thumb" src={fileUrl(projectId, a.image_path)} onClick={() => setPreview(a)} style={{ width: 64, height: 64, objectFit: 'cover', cursor: 'zoom-in' }} title="点击预览" />
           : <div className="thumb" style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>{a.category}</div>}
         <div className="muted" style={{ fontSize: 11, wordBreak: 'break-all' }}>{a.name}</div>
+        {(onReplace || onRemove) && (
+          <div className="row" style={{ justifyContent: 'center', gap: 4, marginTop: 2 }}>
+            {onReplace && <button style={{ padding: '0 6px', fontSize: 10 }} onClick={onReplace}>替换</button>}
+            {onRemove && <button style={{ padding: '0 6px', fontSize: 10 }} onClick={onRemove}>×</button>}
+          </div>
+        )}
       </div>
     );
   }
@@ -102,6 +116,45 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
     finally { setZipping(false); }
   }
 
+  function openMaterial(shotId, category, mode, replaceAssetId) {
+    setMaterialPicker({ shotId, category, mode, replaceAssetId });
+  }
+  async function applyMaterial(assetId) {
+    const p = materialPicker; if (!p) return;
+    const shot = shots.find((s) => s.id === p.shotId);
+    const field = MATERIAL_FIELD[p.category];
+    if (!shot || !field) return;
+    const cur = asArr(shot[field]);
+    let next;
+    if (p.mode === 'replace' && p.replaceAssetId) next = cur.map((id) => (id === p.replaceAssetId ? assetId : id));
+    else next = cur.includes(assetId) ? cur : [...cur, assetId];
+    setMaterialPicker(null);
+    try {
+      await api.patch('/api/projects/' + projectId + '/shots/' + p.shotId, { [field]: next });
+      toast.success('素材已更新');
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+  async function removeMaterial(shotId, category, assetId) {
+    const shot = shots.find((s) => s.id === shotId);
+    const field = MATERIAL_FIELD[category];
+    if (!shot || !field) return;
+    const next = asArr(shot[field]).filter((id) => id !== assetId);
+    try {
+      await api.patch('/api/projects/' + projectId + '/shots/' + shotId, { [field]: next });
+      toast.success('素材已移除');
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  if (loading) {
+    return (
+      <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 40 }}>
+        <span className="spinner" />
+        <span className="muted">分镜数据加载中…</span>
+      </div>
+    );
+  }
   return (
     <div>
       <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -132,13 +185,23 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
             <div className="muted">时长 {s.duration}s · 分辨率 {resoLabel} · 比例 {s.aspect_ratio || '16:9'} · seed {s.seed || '-'}</div>
 
             <div style={{ marginTop: 8 }}>
-              <div className="muted" style={{ marginBottom: 4 }}>参考素材（角色 / 场景 / 道具 / 服装 / 语音〔仅台词角色〕）</div>
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <div className="muted">参考素材（角色 / 场景 / 道具 / 服装 / 语音〔仅台词角色〕）</div>
+                {!running && (
+                  <div className="row" style={{ gap: 4 }}>
+                    <button onClick={() => openMaterial(s.id, 'character', 'add')}>＋角色</button>
+                    <button onClick={() => openMaterial(s.id, 'scene', 'add')}>＋场景</button>
+                    <button onClick={() => openMaterial(s.id, 'prop', 'add')}>＋道具</button>
+                    <button onClick={() => openMaterial(s.id, 'costume', 'add')}>＋服装</button>
+                  </div>
+                )}
+              </div>
               {allRefs.length || voices.length ? (
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                  {chars.map((a) => <RefThumb key={a.id} a={a} />)}
-                  {scenes.map((a) => <RefThumb key={a.id} a={a} />)}
-                  {props.map((a) => <RefThumb key={a.id} a={a} />)}
-                  {costumes.map((a) => <RefThumb key={a.id} a={a} />)}
+                  {chars.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'character', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'character', a.id) : null} />)}
+                  {scenes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'scene', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'scene', a.id) : null} />)}
+                  {props.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'prop', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'prop', a.id) : null} />)}
+                  {costumes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'costume', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'costume', a.id) : null} />)}
                   {voices.map((v, i) => (
                     <div key={i} style={{ textAlign: 'center', width: 190 }}>
                       <audio controls src={fileUrl(projectId, v.voice_ref)} style={{ width: '100%', height: 38 }} title="角色参考音色" />
@@ -169,12 +232,12 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
             {s.error && <p style={{ color: '#ff8080' }}>错误：{s.error}</p>}
             <div className="row" style={{ marginTop: 8 }}>
               <input placeholder="反馈（如：镜头拉近 / 让人物微笑），留空直接渲染；有内容会先问是否 LLM 改写" value={feedback[s.id] || ''} onChange={(e) => setFeedback({ ...feedback, [s.id]: e.target.value })} style={{ flex: 1 }} />
-              <button onClick={() => onRegen(s.id)}>↻ 重新生成</button>
+              <button disabled={running} onClick={() => onRegen(s.id)}>↻ 重新生成</button>
             </div>
           </div>
         );
       })}
-      {!shots.length && <p className="muted">暂无分镜</p>}
+      {!shots.length && <p className="muted">暂无分镜-请先生成素材</p>}
       {preview && (
         <div className="modal-bg" onClick={() => setPreview(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90vw', textAlign: 'center' }}>
@@ -196,6 +259,18 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
             </div>
           </div>
         </div>
+      )}
+      {materialPicker && (
+        <ShotMaterialPicker
+          projectId={projectId}
+          assets={assets}
+          category={materialPicker.category}
+          mode={materialPicker.mode}
+          replaceAssetId={materialPicker.replaceAssetId}
+          assignedIds={asArr((shots.find((s) => s.id === materialPicker.shotId) || {})[MATERIAL_FIELD[materialPicker.category]])}
+          onPick={applyMaterial}
+          onCancel={() => setMaterialPicker(null)}
+        />
       )}
     </div>
   );

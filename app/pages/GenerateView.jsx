@@ -83,12 +83,10 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
         <div className="row" style={{ marginTop: 8 }}>
           {running
             ? <button className="danger" onClick={onStop}>■ 停止</button>
-            : <button className="primary" disabled={!cur} onClick={() => cur && startRun(cur.title)}>▶ 生成/继续 {cur ? cur.title : ''}</button>}
+            : <button className="success" disabled={!cur} onClick={() => cur && startRun(cur.title)}>▶ 生成/继续 {cur ? cur.title : ''}</button>}
           {!running && <button onClick={() => onRun(null)}>生成全部章节</button>}
-        </div>
-        <div className="row" style={{ marginTop: 8 }}>
-          {!running && <button onClick={() => regenChapter('storyboard')} disabled={!cur}>↻ 重新生成分镜</button>}
-          {!running && <button onClick={() => regenChapter('videos')} disabled={!cur}>↻ 重新生成视频</button>}
+          {!running && <button onClick={() => regenChapter('storyboard')} disabled={!cur}>↻ 重新生成本章分镜</button>}
+          {!running && <button onClick={() => regenChapter('videos')} disabled={!cur}>↻ 重新生成本章视频</button>}
         </div>
         <p className="muted" style={{ marginTop: 8 }}>
           点「生成/继续」就接着上次进度跑（已完成的素材/分镜/视频自动跳过），中断或失败后点它即可继续。
@@ -117,8 +115,6 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
             <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>
               受全部模型本地部署的硬件限制（显存有限），LLM 与 ComfyUI 不能同时运行，故按阶段拆分执行：勾「LLM 创作」只写文本（渲染工具已禁用），
               勾「资产图」「分镜视频」为渲染阶段，同一批不能混勾 LLM 与渲染项；待办数由后端统计，不消耗 LLM。
-              注意：ComfyUI 的 --use-ck-attention 启动参数与 Qwen-Image 2 存在兼容性问题（生图质量异常、超长提示词丢失），
-              生图需使用未开启 CK 的 ComfyUI 实例。
               由于视频生成耗时较长，强烈建议在生成视频前先检查分镜与素材是否符合预期，再启动视频生成，避免素材不合格导致返工。
             </p>
           </div>

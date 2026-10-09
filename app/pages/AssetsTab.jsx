@@ -5,7 +5,7 @@ import { CATEGORIES, STATUS_TAG, fileUrl } from './shared';
 import { useToast } from '../toast';
 
 // ============ 资产库 ============
-export default function AssetsTab({ projectId }) {
+export default function AssetsTab({ projectId, running = false }) {
   const toast = useToast();
   const [assets, setAssets] = useState([]);
   const [cat, setCat] = useState('');
@@ -125,12 +125,12 @@ export default function AssetsTab({ projectId }) {
                   <div className="row" style={{ marginTop: 6 }}>
                     {['character', 'scene', 'prop', 'other'].includes(a.category) && (
                       <>
-                        <button onClick={() => regenImage(a, 't2i')}>生成图</button>
-                        {a.image_path && <button onClick={() => regenImage(a, 'i2i')} title="基于现有图重新生成（图生图，保持一致性）">重新生成</button>}
+                        <button disabled={running} onClick={() => regenImage(a, 't2i')}>生成图</button>
+                        {a.image_path && <button disabled={running} onClick={() => regenImage(a, 'i2i')} title="基于现有图重新生成（图生图，保持一致性）">重新生成</button>}
                       </>
                     )}
-                    {a.category === 'character' && a.image_path && <button onClick={() => changeOutfit(a)} title="基于角色图用图生图生成一套新服装">换装</button>}
-                    {(a.category === 'character' || a.category === 'voice') && <button onClick={() => designVoice(a)}>设计音色</button>}
+                    {a.category === 'character' && a.image_path && <button disabled={running} onClick={() => changeOutfit(a)} title="基于角色图用图生图生成一套新服装">换装</button>}
+                    {(a.category === 'character' || a.category === 'voice') && <button disabled={running} onClick={() => designVoice(a)}>设计音色</button>}
                     <button onClick={() => pickUpload(a)}>上传/替换</button>
                     <button onClick={() => setEdit({ id: a.id, name: a.name, description: a.description || '', prompt: a.prompt || '' })}>编辑</button>
                     <button onClick={() => del(a)}>删除</button>

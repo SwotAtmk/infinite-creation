@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import next from 'next';
 import { WebSocketServer } from 'ws';
-import { DATA_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger } from './lib/core/index.js';
+import { DATA_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger, startupCleanup } from './lib/core/index.js';
 import { scanSkills } from './lib/agent/index.js';
 import { setBroadcaster } from './lib/ws.js';
 
@@ -15,6 +15,7 @@ const handle = app.getRequestHandler();
 
 // 启动时注册默认工作流 + 扫描技能
 ensureDirs();
+startupCleanup();
 for (const spec of DEFAULT_SPECS) {
   Workflows.upsert({ name: spec.name, kind: spec.kind, sourceFile: spec.sourceFile, spec, status: 'active' });
 }

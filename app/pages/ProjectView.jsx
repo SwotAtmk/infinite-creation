@@ -88,7 +88,7 @@ export default function ProjectView({ id, onBack }) {
       <div style={{ marginTop: 16 }}>
         {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} onRefresh={loadProject} />}
         {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={running} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setPview('logs')} />}
-        {pview === 'assets' && <AssetsTab projectId={id} />}
+        {pview === 'assets' && <AssetsTab projectId={id} running={running} />}
         {pview === 'exports' && <ExportsTab projectId={id} />}
         {pview === 'logs' && <ConsoleTab projectId={id} events={events} jobs={jobs} onRefresh={loadProject} />}
       </div>

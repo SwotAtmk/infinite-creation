@@ -156,8 +156,13 @@ export function getDb() {
         }
       }
     } catch (e) { /* 忽略迁移失败 */ }
-    // 启动清理：上次进程中断仍在 running 的任务标记为 interrupted
-    db.prepare("UPDATE jobs SET status='interrupted', error='服务重启，任务中断', finished_at=? WHERE status='running'").run(now());
+    // 启动清理：上次进程中断仍在 running 的任务标记为 interrupted（中断≠失败，不写错误信息），
+    // 同时把对应项目从 running 复位为 idle，避免界面卡在「运行中」无法继续。
+    const orphanProjects = db.prepare("SELECT DISTINCT project_id FROM jobs WHERE status='running'").all();
+    db.prepare("UPDATE jobs SET status='interrupted', error='', finished_at=? WHERE status='running'").run(now());
+    for (const p of orphanProjects) {
+      db.prepare("UPDATE projects SET status='idle', updated_at=? WHERE id=? AND status='running'").run(now(), p.project_id);
+    }
   }
   return db;
 }

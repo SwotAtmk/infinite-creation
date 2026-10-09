@@ -4,7 +4,7 @@ import { api } from '../api-client.js';
 import { fileUrl } from './shared';
 import { useToast } from '../toast';
 
-const LABEL = { character: '角色', scene: '场景', prop: '道具', costume: '服装' };
+const LABEL = { character: '角色', scene: '场景', prop: '道具', costume: '服装', age: '年龄' };
 
 export default function ShotMaterialPicker({ projectId, assets, category, mode, replaceAssetId, assignedIds = [], onPick, onCancel }) {
   const toast = useToast();

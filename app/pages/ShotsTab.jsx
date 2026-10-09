@@ -5,7 +5,7 @@ import { STATUS_TAG, fileUrl, dialogueSpeakers } from './shared';
 import { useToast } from '../toast';
 import ShotMaterialPicker from './ShotMaterialPicker';
 
-const MATERIAL_FIELD = { character: 'character_ids', scene: 'scene_ids', prop: 'prop_ids', costume: 'costume_ids' };
+const MATERIAL_FIELD = { character: 'character_ids', scene: 'scene_ids', prop: 'prop_ids', costume: 'costume_ids', age: 'age_ids' };
 
 // ============ 分镜审查 ============
 export default function ShotsTab({ projectId, chapter: chapterProp = '', running = false, onRefresh }) {
@@ -44,6 +44,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const scenesOf = (s) => asArr(s.scene_ids).map(byId).filter(Boolean);
   const propsOf = (s) => asArr(s.prop_ids).map(byId).filter(Boolean);
   const costumesOf = (s) => asArr(s.costume_ids).map(byId).filter(Boolean);
+  const agesOf = (s) => asArr(s.age_ids).map(byId).filter(Boolean);
 
   function RefThumb({ a, onReplace, onRemove }) {
     return (
@@ -167,12 +168,12 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
         </div>
       </div>
       {shown.map((s) => {
-        const chars = charsOf(s), scenes = scenesOf(s), props = propsOf(s), costumes = costumesOf(s);
+        const chars = charsOf(s), scenes = scenesOf(s), props = propsOf(s), costumes = costumesOf(s), ages = agesOf(s);
         // 语音参考只显示「有台词」角色（与后端 assembleShotReferences 一致）：多人同场时仅说话角色才有音色
         const speakers = dialogueSpeakers(s.dialogue);
         const speakingChars = chars.filter((c) => speakers.some((sp) => sp === c.name || sp.includes(c.name) || c.name.includes(sp)));
         const voices = speakingChars.filter((c) => c.voice_ref).map((c) => ({ name: c.name, voice_ref: c.voice_ref }));
-        const allRefs = [...chars, ...scenes, ...props, ...costumes];
+        const allRefs = [...chars, ...scenes, ...props, ...costumes, ...ages];
         const resoLabel = s.resolution === 'custom' && project
           ? 'custom ' + (project.video_width || '?') + '×' + (project.video_height || '?')
           : (s.resolution || '480P');
@@ -186,13 +187,14 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
 
             <div style={{ marginTop: 8 }}>
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <div className="muted">参考素材（角色 / 场景 / 道具 / 服装 / 语音〔仅台词角色〕）</div>
+                <div className="muted">参考素材（角色 / 场景 / 道具 / 服装 / 年龄 / 语音〔仅台词角色〕）</div>
                 {!running && (
                   <div className="row" style={{ gap: 4 }}>
                     <button onClick={() => openMaterial(s.id, 'character', 'add')}>＋角色</button>
                     <button onClick={() => openMaterial(s.id, 'scene', 'add')}>＋场景</button>
                     <button onClick={() => openMaterial(s.id, 'prop', 'add')}>＋道具</button>
                     <button onClick={() => openMaterial(s.id, 'costume', 'add')}>＋服装</button>
+                    <button onClick={() => openMaterial(s.id, 'age', 'add')}>＋年龄</button>
                   </div>
                 )}
               </div>
@@ -202,6 +204,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
                   {scenes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'scene', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'scene', a.id) : null} />)}
                   {props.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'prop', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'prop', a.id) : null} />)}
                   {costumes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'costume', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'costume', a.id) : null} />)}
+                  {ages.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'age', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'age', a.id) : null} />)}
                   {voices.map((v, i) => (
                     <div key={i} style={{ textAlign: 'center', width: 190 }}>
                       <audio controls src={fileUrl(projectId, v.voice_ref)} style={{ width: '100%', height: 38 }} title="角色参考音色" />

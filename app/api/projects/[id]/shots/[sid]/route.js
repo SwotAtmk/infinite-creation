@@ -4,7 +4,7 @@ import { Shots } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
-const ID_FIELDS = ['character_ids', 'scene_ids', 'prop_ids', 'costume_ids'];
+const ID_FIELDS = ['character_ids', 'scene_ids', 'prop_ids', 'costume_ids', 'age_ids'];
 
 export async function PATCH(req, { params }) {
   const { id, sid } = await params;

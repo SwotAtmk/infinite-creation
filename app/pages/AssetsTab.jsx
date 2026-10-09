@@ -14,11 +14,13 @@ export default function AssetsTab({ projectId, running = false }) {
   const [uploadTarget, setUploadTarget] = useState(null);
   const [preview, setPreview] = useState(null);
   const [outfits, setOutfits] = useState({});
+  const [ages, setAges] = useState({});
   const fileRef = useRef(null);
   const load = useCallback(() => api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch((e) => toast.error(e.message)), [projectId]);
   useEffect(() => { load(); }, [load]);
   const shownAssets = cat ? assets.filter((a) => a.category === cat) : assets;
   const costumesOfChar = (charId) => assets.filter((a) => a.category === 'costume' && a.parent_id === charId);
+  const agesOfChar = (charId) => assets.filter((a) => a.category === 'age' && a.parent_id === charId);
 
   async function designVoice(a) {
     try { await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/design-voice'); toast.success('已提交音色设计，稍后在「运行日志」查看进度'); load(); } catch (e) { toast.error(e.message); }
@@ -62,6 +64,16 @@ export default function AssetsTab({ projectId, running = false }) {
     try {
       await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/change-outfit', { outfit });
       toast.success('已提交换装（图生图），稍后在「运行日志」查看进度');
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+  async function changeAge(a) {
+    const age = await toast.prompt('输入年龄/时期描述（如：年轻时 / 中年时 / 老年时）', { defaultValue: ages[a.id] || '', placeholder: '年龄/时期描述' });
+    if (!age) return;
+    setAges({ ...ages, [a.id]: age });
+    try {
+      await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/change-age', { age });
+      toast.success('已提交年龄变化（图生图），稍后在「运行日志」查看进度');
       load();
     } catch (e) { toast.error(e.message); }
   }
@@ -114,7 +126,7 @@ export default function AssetsTab({ projectId, running = false }) {
               ) : (
                 <div style={{ marginTop: 6 }}>
                   <b>{a.name}</b>
-                  <div className="muted">{a.category}{a.category === 'costume' && a.parent_id ? ' · 来自「' + (assets.find((x) => x.id === a.parent_id)?.name || a.parent_id) + '」' : ''}</div>
+                  <div className="muted">{a.category}{(a.category === 'costume' || a.category === 'age') && a.parent_id ? ' · 来自「' + (assets.find((x) => x.id === a.parent_id)?.name || a.parent_id) + '」' : ''}</div>
                   <div className={'tag ' + (STATUS_TAG[a.status] || '')}>{a.status}</div>
                   {(a.voice_ref || a.audio_path) && (a.image_path || a.video_path) && (
                     <>
@@ -130,6 +142,7 @@ export default function AssetsTab({ projectId, running = false }) {
                       </>
                     )}
                     {a.category === 'character' && a.image_path && <button disabled={running} onClick={() => changeOutfit(a)} title="基于角色图用图生图生成一套新服装">换装</button>}
+                    {a.category === 'character' && a.image_path && <button disabled={running} onClick={() => changeAge(a)} title="基于角色图用图生图生成同一人物的不同年龄/时期样貌">年龄</button>}
                     {(a.category === 'character' || a.category === 'voice') && <button disabled={running} onClick={() => designVoice(a)}>设计音色</button>}
                     <button onClick={() => pickUpload(a)}>上传/替换</button>
                     <button onClick={() => setEdit({ id: a.id, name: a.name, description: a.description || '', prompt: a.prompt || '' })}>编辑</button>
@@ -145,6 +158,21 @@ export default function AssetsTab({ projectId, running = false }) {
                               ? <img src={fileUrl(projectId, c.image_path)} onClick={() => setPreview(c)} style={{ width: 52, height: 52, objectFit: 'cover', cursor: 'zoom-in', borderRadius: 4 }} title={c.name + '（点击预览）'} />
                               : <div className="thumb" style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>服装</div>}
                             <div className="muted" style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{c.name.replace(a.name + '-', '')}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {a.category === 'character' && agesOfChar(a.id).length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div className="muted" style={{ marginBottom: 4 }}>年龄/时期（{agesOfChar(a.id).length} 个）</div>
+                      <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                        {agesOfChar(a.id).map((g) => (
+                          <div key={g.id} style={{ textAlign: 'center', width: 56 }}>
+                            {g.image_path
+                              ? <img src={fileUrl(projectId, g.image_path)} onClick={() => setPreview(g)} style={{ width: 52, height: 52, objectFit: 'cover', cursor: 'zoom-in', borderRadius: 4 }} title={g.name + '（点击预览）'} />
+                              : <div className="thumb" style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>年龄</div>}
+                            <div className="muted" style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{g.name.replace(a.name + '-', '')}</div>
                           </div>
                         ))}
                       </div>

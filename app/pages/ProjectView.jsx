@@ -11,10 +11,12 @@ import ConsoleTab from './ConsoleTab';
 import EditProject from './EditProject';
 
 // ============ 项目工作区 ============
-export default function ProjectView({ id, onBack }) {
+export default function ProjectView({ id, onBack, initialTab = 'chapters', onTabChange }) {
   const toast = useToast();
   const [project, setProject] = useState(null);
-  const [pview, setPview] = useState('chapters');
+  const [pview, setPview] = useState(initialTab);
+  // tab 切换同步到 URL（page.jsx replaceState 更新，刷新后停留原 tab）
+  const setTab = (t) => { setPview(t); if (onTabChange) onTabChange(t); };
   const [events, setEvents] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
@@ -78,16 +80,16 @@ export default function ProjectView({ id, onBack }) {
       </div>
 
       <div className="tabs" style={{ marginTop: 12 }}>
-        <button className={pview === 'chapters' ? 'active' : ''} onClick={() => setPview('chapters')}>📚 章节管理</button>        
-        <button className={pview === 'generate' ? 'active' : ''} onClick={() => setPview('generate')}>🎬 生成内容</button>
-        <button className={pview === 'assets' ? 'active' : ''} onClick={() => setPview('assets')}>🎨 素材库</button>
-        <button className={pview === 'exports' ? 'active' : ''} onClick={() => setPview('exports')}>🎞 成片</button>
-        <button className={pview === 'logs' ? 'active' : ''} onClick={() => setPview('logs')}>📜 运行日志</button>
+        <button className={pview === 'chapters' ? 'active' : ''} onClick={() => setTab('chapters')}>📚 章节管理</button>        
+        <button className={pview === 'generate' ? 'active' : ''} onClick={() => setTab('generate')}>🎬 生成内容</button>
+        <button className={pview === 'assets' ? 'active' : ''} onClick={() => setTab('assets')}>🎨 素材库</button>
+        <button className={pview === 'exports' ? 'active' : ''} onClick={() => setTab('exports')}>🎞 成片</button>
+        <button className={pview === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>📜 运行日志</button>
       </div>
 
       <div style={{ marginTop: 16 }}>
         {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} onRefresh={loadProject} />}
-        {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={running} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setPview('logs')} />}
+        {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={running} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setTab('logs')} />}
         {pview === 'assets' && <AssetsTab projectId={id} running={running} />}
         {pview === 'exports' && <ExportsTab projectId={id} />}
         {pview === 'logs' && <ConsoleTab projectId={id} events={events} jobs={jobs} onRefresh={loadProject} />}

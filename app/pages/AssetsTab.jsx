@@ -11,6 +11,7 @@ export default function AssetsTab({ projectId, running = false }) {
   const [cat, setCat] = useState('');
   const [form, setForm] = useState({ category: 'character', name: '', description: '' });
   const [edit, setEdit] = useState(null);
+  const [voice, setVoice] = useState(null);
   const [uploadTarget, setUploadTarget] = useState(null);
   const [preview, setPreview] = useState(null);
   const [outfits, setOutfits] = useState({});
@@ -30,8 +31,37 @@ export default function AssetsTab({ projectId, running = false }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [edit]);
 
-  async function designVoice(a) {
-    try { await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/design-voice'); toast.success('已提交音色设计，稍后在「运行日志」查看进度'); load(); } catch (e) { toast.error(e.message); }
+  useEffect(() => {
+    if (!voice) return;
+    const onKey = (e) => { if (e.key === 'Escape') setVoice(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [voice]);
+
+  const voiceAsset = voice ? assets.find((x) => x.id === voice.id) : null;
+
+  // 打开音色设计弹窗：显示/编辑声音限制（voice_desc，性别+年龄+质感）
+  function designVoice(a) {
+    setVoice({ id: a.id, name: a.name, voice_desc: a.voice_desc || '' });
+  }
+  // 保存：仅把声音限制写入资产，不触发生成
+  async function saveVoice() {
+    try {
+      await api.patch('/api/projects/' + projectId + '/assets/' + voice.id, { voice_desc: voice.voice_desc });
+      toast.success('已保存声音限制');
+      setVoice(null);
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+  // 重新生成：先同步声音限制，再用新限制提交音色设计（朗读内容沿用现有兜底逻辑）
+  async function regenVoice() {
+    try {
+      await api.patch('/api/projects/' + projectId + '/assets/' + voice.id, { voice_desc: voice.voice_desc });
+      await api.post('/api/projects/' + projectId + '/assets/' + voice.id + '/design-voice', { voice_description: voice.voice_desc || undefined });
+      toast.success('已提交音色设计，稍后在「运行日志」查看进度');
+      setVoice(null);
+      load();
+    } catch (e) { toast.error(e.message); }
   }
   function pickUpload(a) { setUploadTarget(a.id); if (fileRef.current) fileRef.current.click(); }
   async function doUpload(aid, file) {
@@ -219,6 +249,44 @@ export default function AssetsTab({ projectId, running = false }) {
                 <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
                   <button onClick={() => setEdit(null)}>取消</button>
                   <button className="primary" onClick={saveEdit}>保存</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {voice && (
+        <div className="modal-bg" onClick={() => setVoice(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 860, width: '94vw' }}>
+            <h2>设计音色 · {voice.name}</h2>
+            <div className="row" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ flex: '0 0 300px', minWidth: 260 }}>
+                {voiceAsset && (voiceAsset.audio_path || voiceAsset.voice_ref) ? (
+                  <div>
+                    <div className="muted" style={{ marginBottom: 6 }}>当前音色试听（若有）</div>
+                    <audio controls src={fileUrl(projectId, voiceAsset.audio_path || voiceAsset.voice_ref)} style={{ width: '100%', borderRadius: 8 }} />
+                  </div>
+                ) : (
+                  <div className="thumb" style={{ width: '100%', minHeight: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>尚无音色样本</div>
+                )}
+                <div className="muted" style={{ marginTop: 10, fontSize: 12, lineHeight: 1.6 }}>
+                  声音限制会写入资产并作为 TTS 工作流的「声音描述」输入（性别 + 年龄段 + 音色质感）。
+                  朗读内容不做编辑，沿用当前文案。生成后可在素材卡片试听。
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 320 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>声音限制（性别 / 年龄 / 质感）</label>
+                <textarea
+                  value={voice.voice_desc || ''}
+                  onChange={(e) => setVoice({ ...voice, voice_desc: e.target.value })}
+                  placeholder="如：青年男性，嗓音低沉温和，语速偏慢，带一点书卷气的平静口吻"
+                  rows={6}
+                  style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                />
+                <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setVoice(null)}>取消</button>
+                  <button disabled={running} onClick={saveVoice}>保存</button>
+                  <button className="primary" disabled={running} onClick={regenVoice}>重新生成</button>
                 </div>
               </div>
             </div>

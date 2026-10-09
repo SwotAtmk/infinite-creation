@@ -12,7 +12,7 @@ import {
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks,
   freeComfy, checkComfyUI, generate, resolveHardwareConfig, HW_PRESETS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool } from '../lib/agent/tools.js';
@@ -664,4 +664,20 @@ test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时�
   // 释放占位任务，清理槽位
   releaseBlock();
   await holder.catch(() => {});
+});
+
+// —— TTS 音色性别/年龄兜底推断 ——
+
+test('inferVoiceBaseline: 青年男性/少女/老年男性 推断出带性别的音色描述', () => {
+  assert.match(inferVoiceBaseline('林峰', '青年男性剑客，长身玉立'), /青年男性/);
+  assert.match(inferVoiceBaseline('沈舒妍', '16岁的少女，活泼可爱'), /少女/);
+  assert.match(inferVoiceBaseline('张老伯', '六十岁的老翁，白发苍苍'), /老年男性/);
+  assert.match(inferVoiceBaseline('苏婉', '年轻的女子，温婉有礼'), /青年女性|青年女性/);
+});
+
+test('inferVoiceBaseline: 推断不出性别（中性/冲突）返回空串，由调用方决定跳过或中性兜底', () => {
+  assert.equal(inferVoiceBaseline('一盏路灯', '立在巷口的老路灯'), '');
+  assert.equal(inferVoiceBaseline('路人甲', '没有性别标志的剪影'), '');
+  // 性别词冲突（如「男主角的女友」同时含男女）：保守返回空，避免给错性别
+  assert.equal(inferVoiceBaseline('某角色', '男主角的女友，温柔'), '');
 });

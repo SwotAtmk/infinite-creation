@@ -12,10 +12,12 @@ import ConsoleTab from './ConsoleTab';
 import EditProject from './EditProject';
 
 // ============ 项目工作区 ============
-export default function ProjectView({ id, onBack }) {
+export default function ProjectView({ id, onBack, initialTab = 'chapters', onTabChange }) {
   const toast = useToast();
   const [project, setProject] = useState(null);
-  const [pview, setPview] = useState('chapters');
+  const [pview, setPview] = useState(initialTab);
+  // tab 切换同步到 URL（page.jsx replaceState 更新，刷新后停留原 tab）
+  const setTab = (t) => { setPview(t); if (onTabChange) onTabChange(t); };
   const [events, setEvents] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
@@ -63,6 +65,7 @@ export default function ProjectView({ id, onBack }) {
 
   async function run(chapter) { try { await api.post('/api/projects/' + id + '/run', chapter ? { chapter } : {}); setEvents([]); loadProject(); } catch (e) { toast.error(e.message); } }
   async function stop() { try { await api.post('/api/projects/' + id + '/stop'); loadProject(); } catch (e) { toast.error(e.message); } }
+  const running = project?.status === 'running';
 
   if (!project) {
     return (
@@ -86,7 +89,7 @@ export default function ProjectView({ id, onBack }) {
         </div>
       </div>
 
-      <Tabs aria-label="项目工作区" selectedKey={pview} onSelectionChange={setPview} variant="underlined">
+<Tabs aria-label="项目工作区" selectedKey={pview} onSelectionChange={setTab} variant="underlined">
         <Tab key="chapters" title="📚 章节管理" />
         <Tab key="generate" title="🎬 生成内容" />
         <Tab key="assets" title="🎨 素材库" />
@@ -96,8 +99,8 @@ export default function ProjectView({ id, onBack }) {
 
       <div>
         {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} onRefresh={loadProject} />}
-        {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={project.status === 'running'} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setPview('logs')} />}
-        {pview === 'assets' && <AssetsTab projectId={id} running={project.status === 'running'} />}
+        {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={running} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setTab('logs')} />}
+        {pview === 'assets' && <AssetsTab projectId={id} running={running} />}
         {pview === 'exports' && <ExportsTab projectId={id} />}
         {pview === 'logs' && <ConsoleTab projectId={id} events={events} jobs={jobs} onRefresh={loadProject} />}
       </div>

@@ -12,8 +12,10 @@ export default function SettingsPage({ onBack }) {
   const [cfg, setCfg] = useState(null);
   const [test, setTest] = useState('');
   const [comfyInfo, setComfyInfo] = useState(null);
+  const [workflows, setWorkflows] = useState([]);
   useEffect(() => {
     api.get('/api/config').then((c) => { setCfg(c); detectComfy(c.comfyui.baseUrl); }).catch((e) => toast.error(e.message));
+    api.get('/api/workflows').then(setWorkflows).catch(() => {});
   }, []);
   async function detectComfy(baseUrl) {
     try { setComfyInfo(await api.post('/api/comfyui/test', { baseUrl })); } catch { setComfyInfo({ ok: false, error: '连接失败' }); }
@@ -73,12 +75,36 @@ export default function SettingsPage({ onBack }) {
         </label>
       </div>
       <p className="muted" style={{ marginTop: 4 }}>只影响各阶段实际提交给 ComfyUI 的工作流；默认英伟达原版。AMD 模式下额外启用显存释放与分阶段运行的显存/CK 拦截。</p>
-      <ul className="muted" style={{ margin: '4px 0 0', paddingLeft: 20 }}>
-        <li>文生图：{cfg.workflows.t2i}</li>
-        <li>图生图：{cfg.workflows.i2i}</li>
-        <li>分镜视频：{cfg.workflows.r2v}</li>
-        <li>音色设计：{cfg.workflows.tts}</li>
-      </ul>
+      {hwMode === 'nvidia' && (
+        <div className="muted" style={{ margin: '8px 0 0' }}>
+          <div className="row" style={{ gap: 8, alignItems: 'center', margin: '4px 0' }}>
+            <span style={{ flex: 'none' }}>文生图</span>
+            <select style={{ flex: 1 }} value={cfg.workflows.t2i} onChange={(e) => setCfg({ ...cfg, workflows: { ...cfg.workflows, t2i: e.target.value } })}>
+              {workflows.filter((w) => w.kind === 't2i' && w.spec?.hw === 'nvidia').map((w) => (
+                <option key={w.spec.id} value={w.spec.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="row" style={{ gap: 8, alignItems: 'center', margin: '4px 0' }}>
+            <span style={{ flex: 'none' }}>图生图</span>
+            <select style={{ flex: 1 }} value={cfg.workflows.i2i} onChange={(e) => setCfg({ ...cfg, workflows: { ...cfg.workflows, i2i: e.target.value } })}>
+              {workflows.filter((w) => w.kind === 'i2i' && w.spec?.hw === 'nvidia').map((w) => (
+                <option key={w.spec.id} value={w.spec.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ margin: '4px 0' }}>分镜视频：{cfg.workflows.r2v}</div>
+          <div style={{ margin: '4px 0' }}>音色设计：{cfg.workflows.tts}</div>
+        </div>
+      )}
+      {hwMode === 'amd' && (
+        <ul className="muted" style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+          <li>文生图：{cfg.workflows.t2i}</li>
+          <li>图生图：{cfg.workflows.i2i}</li>
+          <li>分镜视频：{cfg.workflows.r2v}</li>
+          <li>音色设计：{cfg.workflows.tts}</li>
+        </ul>
+      )}
 
       {hwMode === 'amd' && (
         <>

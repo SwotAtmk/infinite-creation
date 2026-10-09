@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
-import { CATEGORIES, fileUrl } from './shared';
+import { Card, CardBody, Button, Input, Select, SelectItem, Modal, ModalContent, ModalBody, ModalFooter } from '@heroui/react';
+import { CATEGORIES, fileUrl, selectKeys, pickKey } from './shared';
 
 // ============ 参考图片素材列表（统一：已上传素材 + 待上传本地文件） ============
 // items: 待上传的本地文件 [{ key, file, mode: 'reference'|'library', category, description, previewUrl }]
@@ -37,88 +38,98 @@ export default function ReferencePicker({ projectId, items, onChange, saved = []
 
   return (
     <>
-      <div className="card" style={{ marginTop: 10, padding: 10 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <b style={{ margin: 0 }}>参考图片素材（可选）</b>
-          {allowAdd && <button onClick={() => fileRef.current && fileRef.current.click()}>＋ 选择参考图片</button>}
-        </div>
-        <p className="muted" style={{ marginTop: 4 }}>
-          「参考生成新素材」会提交给视觉模型分析后据此生成新素材；「导入素材库」直接加入素材库。用途描述可随时编辑，点击缩略图可放大预览。
-        </p>
-        {allowAdd && (
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={(e) => { addFiles(e.target.files || []); e.target.value = ''; }}
-          />
-        )}
-        {hasAny && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-            {savedList.map((r) => (
-              <div key={'saved_' + r.id} style={{ border: '1px solid #232936', borderRadius: 6, padding: 8 }}>
-                <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-                  {r.image_path
-                    ? <img src={fileUrl(projectId, r.image_path)} alt="" onClick={() => setPreview({ url: fileUrl(projectId, r.image_path), name: r.name })} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, cursor: 'zoom-in' }} title="点击放大" />
-                    : <div className="thumb" style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4 }}>图</div>}
-                  <span style={{ flex: 1, wordBreak: 'break-all' }}>{r.name || '未命名'}</span>
-                  <select value={r.mode} onChange={(e) => onUpdateSaved && onUpdateSaved(r.id, { mode: e.target.value })}>
-                    <option value="reference">参考生成新素材</option>
-                    <option value="library">导入素材库</option>
-                  </select>
-                  {r.mode === 'library' && (
-                    <select value={r.category} onChange={(e) => onUpdateSaved && onUpdateSaved(r.id, { category: e.target.value })}>
-                      {CATEGORIES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                    </select>
-                  )}
-                  {onDeleteSaved && <button onClick={() => onDeleteSaved(r.id)}>删除</button>}
-                </div>
-                <input
-                  defaultValue={r.description || ''}
-                  onBlur={(e) => { const v = e.target.value || ''; if (v !== (r.description || '')) onUpdateSaved && onUpdateSaved(r.id, { description: v }); }}
-                  placeholder="用途 / 用于剧情哪部分（可选，提交给 Agent 参考）"
-                  style={{ width: '100%', marginTop: 6 }}
-                />
-              </div>
-            ))}
-            {pendingList.map((it) => (
-              <div key={it.key} style={{ border: '1px solid #232936', borderRadius: 6, padding: 8 }}>
-                <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-                  <img src={it.previewUrl} alt="" onClick={() => setPreview({ url: it.previewUrl, name: it.file.name })} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, cursor: 'zoom-in' }} title="点击放大" />
-                  <span style={{ flex: 1, wordBreak: 'break-all' }}>{it.file.name}</span>
-                  <select value={it.mode} onChange={(e) => patch(it.key, { mode: e.target.value })}>
-                    <option value="reference">参考生成新素材</option>
-                    <option value="library">导入素材库</option>
-                  </select>
-                  {it.mode === 'library' && (
-                    <select value={it.category} onChange={(e) => patch(it.key, { category: e.target.value })}>
-                      {CATEGORIES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                    </select>
-                  )}
-                  <button onClick={() => remove(it.key)}>移除</button>
-                </div>
-                <input
-                  value={it.description || ''}
-                  onChange={(e) => patch(it.key, { description: e.target.value })}
-                  placeholder="用途 / 用于剧情哪部分（可选，提交给 Agent 参考）"
-                  style={{ width: '100%', marginTop: 6 }}
-                />
-              </div>
-            ))}
+      <Card shadow="none" className="border border-default-200 mt-2.5">
+        <CardBody className="gap-2 p-2.5">
+          <div className="row justify-between">
+            <b className="m-0">参考图片素材（可选）</b>
+            {allowAdd && <Button size="sm" onPress={() => fileRef.current && fileRef.current.click()}>＋ 选择参考图片</Button>}
           </div>
-        )}
-      </div>
-      {preview && (
-        <div onClick={() => setPreview(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 9999, cursor: 'zoom-out', padding: 20 }}>
-          <img src={preview.url} alt={preview.name || ''} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '92vw', maxHeight: '86vh', objectFit: 'contain', borderRadius: 8, boxShadow: '0 8px 40px rgba(0,0,0,.6)' }} />
-          <div className="row" style={{ gap: 12, alignItems: 'center', marginTop: 12 }}>
-            {preview.name && <span style={{ color: '#fff', fontSize: 13 }}>{preview.name}</span>}
-            <button onClick={() => setPreview(null)} style={{ borderRadius: 20, padding: '4px 14px' }}>关闭</button>
-          </div>
-        </div>
-      )}
+          <p className="muted" style={{ marginTop: 4 }}>
+            「参考生成新素材」会提交给视觉模型分析后据此生成新素材；「导入素材库」直接加入素材库。用途描述可随时编辑，点击缩略图可放大预览。
+          </p>
+          {allowAdd && (
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => { addFiles(e.target.files || []); e.target.value = ''; }}
+            />
+          )}
+          {hasAny && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+              {savedList.map((r) => (
+                <div key={'saved_' + r.id} className="border border-default-200 rounded-md p-2">
+                  <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+                    {r.image_path
+                      ? <img src={fileUrl(projectId, r.image_path)} alt="" onClick={() => setPreview({ url: fileUrl(projectId, r.image_path), name: r.name })} className="w-12 h-12 object-cover rounded cursor-zoom-in" title="点击放大" />
+                      : <div className="thumb w-12 h-12 flex items-center justify-center rounded" style={{ aspectRatio: '1 / 1' }}>图</div>}
+                    <span style={{ flex: 1, wordBreak: 'break-all' }}>{r.name || '未命名'}</span>
+                    <Select size="sm" className="w-40 min-w-0" aria-label="素材用途" selectedKeys={selectKeys(r.mode)} onSelectionChange={(k) => onUpdateSaved && onUpdateSaved(r.id, { mode: pickKey(k) })}>
+                      <SelectItem key="reference">参考生成新素材</SelectItem>
+                      <SelectItem key="library">导入素材库</SelectItem>
+                    </Select>
+                    {r.mode === 'library' && (
+                      <Select size="sm" className="w-28 min-w-0" aria-label="素材分类" selectedKeys={selectKeys(r.category)} onSelectionChange={(k) => onUpdateSaved && onUpdateSaved(r.id, { category: pickKey(k) })}>
+                        {CATEGORIES.map(([k, l]) => <SelectItem key={k}>{l}</SelectItem>)}
+                      </Select>
+                    )}
+                    {onDeleteSaved && <Button size="sm" variant="flat" color="danger" onPress={() => onDeleteSaved(r.id)}>删除</Button>}
+                  </div>
+                  <Input
+                    size="sm"
+                    defaultValue={r.description || ''}
+                    onBlur={(e) => { const v = e.target.value || ''; if (v !== (r.description || '')) onUpdateSaved && onUpdateSaved(r.id, { description: v }); }}
+                    placeholder="用途 / 用于剧情哪部分（可选，提交给 Agent 参考）"
+                    className="mt-1.5"
+                  />
+                </div>
+              ))}
+              {pendingList.map((it) => (
+                <div key={it.key} className="border border-default-200 rounded-md p-2">
+                  <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+                    <img src={it.previewUrl} alt="" onClick={() => setPreview({ url: it.previewUrl, name: it.file.name })} className="w-12 h-12 object-cover rounded cursor-zoom-in" title="点击放大" />
+                    <span style={{ flex: 1, wordBreak: 'break-all' }}>{it.file.name}</span>
+                    <Select size="sm" className="w-40 min-w-0" aria-label="素材用途" selectedKeys={selectKeys(it.mode)} onSelectionChange={(k) => patch(it.key, { mode: pickKey(k) })}>
+                      <SelectItem key="reference">参考生成新素材</SelectItem>
+                      <SelectItem key="library">导入素材库</SelectItem>
+                    </Select>
+                    {it.mode === 'library' && (
+                      <Select size="sm" className="w-28 min-w-0" aria-label="素材分类" selectedKeys={selectKeys(it.category)} onSelectionChange={(k) => patch(it.key, { category: pickKey(k) })}>
+                        {CATEGORIES.map(([k, l]) => <SelectItem key={k}>{l}</SelectItem>)}
+                      </Select>
+                    )}
+                    <Button size="sm" variant="flat" onPress={() => remove(it.key)}>移除</Button>
+                  </div>
+                  <Input
+                    size="sm"
+                    value={it.description || ''}
+                    onChange={(e) => patch(it.key, { description: e.target.value })}
+                    placeholder="用途 / 用于剧情哪部分（可选，提交给 Agent 参考）"
+                    className="mt-1.5"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
+      <Modal isOpen={!!preview} size="5xl" backdrop="opaque" onClose={() => setPreview(null)}>
+        <ModalContent>
+          {() => (
+            <>
+              <ModalBody className="items-center py-6">
+                <img src={preview && preview.url} alt={preview ? preview.name || '' : ''} className="max-w-full max-h-[86vh] object-contain rounded-lg" />
+                {preview && preview.name && <div className="mt-3 text-sm">{preview.name}</div>}
+              </ModalBody>
+              <ModalFooter>
+                <Button size="sm" variant="flat" onPress={() => setPreview(null)}>关闭</Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
     </>
   );
 }

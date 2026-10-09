@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import { Button, Input, Card, CardBody, Textarea, Chip } from '@heroui/react';
 import { api } from '../api-client.js';
 import ReferencePicker from './ReferencePicker';
+import { statusColor } from './shared';
 import { useToast } from '../toast';
 
 // ============ 页1 · 章节管理 ============
@@ -71,57 +73,58 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
   }
 
   const label = { empty: '无分镜', pending: '待生成', running: '生成中', done: '完成', failed: '失败' };
-  const tag = { done: 'tag done', running: 'tag running', failed: 'tag failed', pending: '', empty: '' };
   return (
-    <div>
-      <div className="card">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0 }}>章节管理</h2>
-          <button className="primary" onClick={addChapter}>＋ 新增章节</button>
+    <Card>
+      <CardBody className="gap-3">
+        <div className="row justify-between">
+          <h2 className="text-lg font-semibold m-0">章节管理</h2>
+          <Button color="primary" size="sm" onPress={addChapter}>＋ 新增章节</Button>
         </div>
         <p className="muted">先规划整本书的章节骨架，然后在「生成内容」页逐章生成。素材库为全项目共用。</p>
         {chapters.map((c, i) => (
-          <div key={c.id} className="card" style={{ marginBottom: 10, borderColor: i === cursor ? '#2f6feb' : undefined }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <div className="row">
-                <b>{c.title}</b>
-                <span className={'tag ' + (tag[c.genStatus] || '')}>{label[c.genStatus] || c.status}{c.shotCount > 0 ? ' · ' + c.doneCount + '/' + c.shotCount : ''}</span>
-              </div>
-              <div className="row">
-                <button onClick={() => setCursor(i)} className={i === cursor ? 'primary' : ''}>编辑</button>
-                <button onClick={() => move(i, -1)}>↑</button>
-                <button onClick={() => move(i, 1)}>↓</button>
-                <button onClick={() => removeChapter(c)}>删除</button>
-              </div>
-            </div>
-            {i === cursor && (
-              <div style={{ marginTop: 10 }}>
+          <Card key={c.id} className={i === cursor ? 'border-primary' : ''}>
+            <CardBody className="gap-2">
+              <div className="row justify-between">
                 <div className="row">
-                  <input value={title} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} style={{ width: 160 }} placeholder="章节标题" />
-                  <button className="primary" onClick={save} disabled={!dirty}>保存本章</button>
+                  <b>{c.title}</b>
+                  <Chip size="sm" variant="flat" color={statusColor(c.genStatus)}>{label[c.genStatus] || c.status}{c.shotCount > 0 ? ' · ' + c.doneCount + '/' + c.shotCount : ''}</Chip>
                 </div>
-                <h3 style={{ margin: '8px 0 4px' }}>本章小说原文</h3>
-                <textarea value={novel} onChange={(e) => { setNovel(e.target.value); setDirty(true); }} style={{ minHeight: 130 }} placeholder="粘贴或编辑本章原文…" />
-                <ReferencePicker
-                  projectId={projectId}
-                  items={refs}
-                  onChange={setRefs}
-                  saved={chapterRefs}
-                  onUpdateSaved={updateRef}
-                  onDeleteSaved={delRef}
-                  allowAdd={vision}
-                />
-                {vision && refs.length > 0 && (
-                  <div className="row" style={{ marginTop: 8 }}>
-                    <button className="primary" onClick={uploadRefs}>上传本章参考素材</button>
-                  </div>
-                )}
+                <div className="row">
+                  <Button size="sm" color={i === cursor ? 'primary' : 'default'} variant={i === cursor ? 'solid' : 'flat'} onPress={() => setCursor(i)}>编辑</Button>
+                  <Button size="sm" variant="flat" isIconOnly onPress={() => move(i, -1)}>↑</Button>
+                  <Button size="sm" variant="flat" isIconOnly onPress={() => move(i, 1)}>↓</Button>
+                  <Button size="sm" color="danger" variant="flat" onPress={() => removeChapter(c)}>删除</Button>
+                </div>
               </div>
-            )}
-          </div>
+              {i === cursor && (
+                <div className="flex flex-col gap-2">
+                  <div className="row">
+                    <Input size="sm" value={title} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} placeholder="章节标题" className="w-40" />
+                    <Button color="primary" size="sm" onPress={save} isDisabled={!dirty}>保存本章</Button>
+                  </div>
+                  <h3 className="text-sm m-0">本章小说原文</h3>
+                  <Textarea size="sm" minRows={4} value={novel} onChange={(e) => { setNovel(e.target.value); setDirty(true); }} placeholder="粘贴或编辑本章原文…" />
+                  <ReferencePicker
+                    projectId={projectId}
+                    items={refs}
+                    onChange={setRefs}
+                    saved={chapterRefs}
+                    onUpdateSaved={updateRef}
+                    onDeleteSaved={delRef}
+                    allowAdd={vision}
+                  />
+                  {vision && refs.length > 0 && (
+                    <div className="row">
+                      <Button color="primary" size="sm" onPress={uploadRefs}>上传本章参考素材</Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardBody>
+          </Card>
         ))}
         {!chapters.length && <p className="muted">还没有章节，点「＋ 新增章节」。</p>}
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }

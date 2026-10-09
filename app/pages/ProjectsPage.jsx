@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
-import { STATUS_TAG, STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle } from './shared';
+import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor } from './shared';
 import ReferencePicker from './ReferencePicker';
 import { useToast } from '../toast';
 
@@ -9,11 +10,16 @@ import { useToast } from '../toast';
 export default function ProjectsPage({ onOpen }) {
   const toast = useToast();
   const [projects, setProjects] = useState([]);
+  // 首次加载标记：数据回来之前不要显示「暂无项目」，否则用户会误以为项目丢了
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: '', novel: '', idea: '', style: '' });
   const [customStyle, setCustomStyle] = useState('');
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
-  const load = useCallback(() => api.get('/api/projects').then(setProjects).catch((e) => toast.error(e.message)), []);
+  const load = useCallback(() => api.get('/api/projects')
+    .then(setProjects)
+    .catch((e) => toast.error(e.message))
+    .finally(() => setLoading(false)), []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {}); }, []);
 
@@ -50,42 +56,58 @@ export default function ProjectsPage({ onOpen }) {
   }
 
   return (
-    <div>
-      <div className="card">
-        <h2>新建项目</h2>
-        <div className="row">
-          <input placeholder="项目名" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <select value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} style={{ width: 240 }}>
-            <option value="">选择画面风格（可选）</option>
-            {STYLE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          {form.style === STYLE_CUSTOM && (
-            <input placeholder="请填写自定义风格" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} style={{ width: 240 }} />
-          )}
-        </div>
-        <br />
-        <textarea placeholder="粘贴小说原文（可留空，用下方一句话想法）" value={form.novel} onChange={(e) => setForm({ ...form, novel: e.target.value })} />
-        <br />
-        <input placeholder="或：一句话故事想法" value={form.idea} onChange={(e) => setForm({ ...form, idea: e.target.value })} style={{ width: '100%' }} />
-        {vision && <ReferencePicker items={refs} onChange={setRefs} />}
-        <br />
-        <button className="primary" disabled={!form.name} onClick={create}>创建并打开</button>
-      </div>
-
-      <div className="card">
-        <h2>项目列表</h2>
-        {projects.map((p) => (
-          <div key={p.id} className="row" style={{ justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #232936' }}>
-            <div>
-              <a onClick={() => onOpen(p.id)} style={{ cursor: 'pointer', fontSize: 15 }}>{p.name}</a>
-              <span className="muted"> · 资产 {p.assetCount} · 分镜 {p.shotCount} · </span>
-              <span className={'tag ' + (STATUS_TAG[p.status] || '')}>{p.status || 'idle'}</span>
-            </div>
-            <button className="danger" onClick={() => del(p.id)}>删除</button>
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardBody className="gap-3">
+          <h2 className="text-lg font-semibold m-0">新建项目</h2>
+          <div className="row">
+            <Input size="sm" placeholder="项目名" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-48" />
+            <Select
+              size="sm"
+              className="w-60"
+              aria-label="画面风格"
+              placeholder="选择画面风格（可选）"
+              selectedKeys={selectKeys(form.style)}
+              onSelectionChange={(k) => setForm({ ...form, style: pickKey(k) })}
+            >
+              <SelectItem key="">选择画面风格（可选）</SelectItem>
+              {STYLE_OPTIONS.map((s) => <SelectItem key={s}>{s}</SelectItem>)}
+            </Select>
+            {form.style === STYLE_CUSTOM && (
+              <Input size="sm" placeholder="请填写自定义风格" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} className="w-60" />
+            )}
           </div>
-        ))}
-        {!projects.length && <p className="muted">暂无项目</p>}
-      </div>
+          <Textarea size="sm" placeholder="粘贴小说原文（可留空，用下方一句话想法）" value={form.novel} onChange={(e) => setForm({ ...form, novel: e.target.value })} />
+          <Input size="sm" placeholder="或：一句话故事想法" value={form.idea} onChange={(e) => setForm({ ...form, idea: e.target.value })} />
+          {vision && <ReferencePicker items={refs} onChange={setRefs} />}
+          <div>
+            <Button color="primary" isDisabled={!form.name} onPress={create}>创建并打开</Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody className="gap-2">
+          <h2 className="text-lg font-semibold m-0">项目列表</h2>
+          {loading && (
+            <div className="flex items-center justify-center gap-2.5 py-6">
+              <Spinner size="sm" />
+              <span className="muted">项目加载中…</span>
+            </div>
+          )}
+          {!loading && projects.map((p) => (
+            <div key={p.id} className="row justify-between py-2 border-b border-default-100">
+              <div className="flex items-center gap-2">
+                <button onClick={() => onOpen(p.id)} className="bg-transparent border-0 p-0 text-[15px] cursor-pointer text-primary"> {p.name}</button>
+                <span className="muted">资产 {p.assetCount} · 分镜 {p.shotCount} ·</span>
+                <Chip size="sm" variant="flat" color={statusColor(p.status)}>{p.status || 'idle'}</Chip>
+              </div>
+              <Button size="sm" color="danger" variant="flat" onPress={() => del(p.id)}>删除</Button>
+            </div>
+          ))}
+          {!loading && !projects.length && <p className="muted">暂无项目</p>}
+        </CardBody>
+      </Card>
     </div>
   );
 }

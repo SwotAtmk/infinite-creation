@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
+import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Input, Select, SelectItem } from '@heroui/react';
 import { api } from '../api-client.js';
-import { VIDEO_RESOLUTIONS, VIDEO_RATIOS, STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, splitStyle } from './shared';
+import { VIDEO_RESOLUTIONS, VIDEO_RATIOS, STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, splitStyle, selectKeys, pickKey } from './shared';
 import { useToast } from '../toast';
 
 // ============ 项目设置（名称/风格） ============
@@ -32,44 +33,50 @@ export default function EditProject({ project, onClose, onSaved }) {
     finally { setSaving(false); }
   }
   return (
-    <div className="modal-bg" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2>项目设置</h2>
-        <div className="row">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="项目名" style={{ flex: 1 }} />
-          <select value={styleSel} onChange={(e) => setStyleSel(e.target.value)} style={{ flex: 1 }}>
-            <option value="">选择画面风格（可选）</option>
-            {STYLE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-        {styleSel === STYLE_CUSTOM && (
-          <input placeholder="请填写自定义风格" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} style={{ flex: 1, marginTop: 8 }} />
+    <Modal isOpen size="lg" backdrop="blur" onClose={onClose}>
+      <ModalContent>
+        {() => (
+          <>
+            <ModalHeader>项目设置</ModalHeader>
+            <ModalBody>
+              <div className="row">
+                <Input size="sm" label="项目名" value={name} onChange={(e) => setName(e.target.value)} className="flex-1" />
+                <Select size="sm" label="画面风格" className="flex-1" placeholder="选择画面风格（可选）" selectedKeys={selectKeys(styleSel)} onSelectionChange={(k) => setStyleSel(pickKey(k))}>
+                  <SelectItem key="">选择画面风格（可选）</SelectItem>
+                  {STYLE_OPTIONS.map((s) => <SelectItem key={s}>{s}</SelectItem>)}
+                </Select>
+              </div>
+              {styleSel === STYLE_CUSTOM && (
+                <Input size="sm" placeholder="请填写自定义风格" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} />
+              )}
+              <h3 className="text-base font-semibold" style={{ margin: '14px 0 6px' }}>视频参数</h3>
+              <div className="row" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                <span className="muted">分辨率</span>
+                <Select size="sm" className="w-36" aria-label="分辨率" selectedKeys={selectKeys(res)} onSelectionChange={(k) => setRes(pickKey(k))}>
+                  {VIDEO_RESOLUTIONS.map(([v, l]) => <SelectItem key={v}>{l}</SelectItem>)}
+                </Select>
+                <span className="muted">比例</span>
+                <Select size="sm" className="w-28" aria-label="比例" selectedKeys={selectKeys(ratio)} onSelectionChange={(k) => setRatio(pickKey(k))}>
+                  {VIDEO_RATIOS.map((r) => <SelectItem key={r}>{r}</SelectItem>)}
+                </Select>
+                {res === 'custom' && (
+                  <>
+                    <span className="muted">宽</span>
+                    <Input size="sm" type="number" min="64" step="32" value={cw} onChange={(e) => setCw(e.target.value)} placeholder="1024" className="w-24" />
+                    <span className="muted">高</span>
+                    <Input size="sm" type="number" min="64" step="32" value={ch} onChange={(e) => setCh(e.target.value)} placeholder="576" className="w-24" />
+                  </>
+                )}
+              </div>
+              <p className="muted" style={{ marginTop: 8 }}>章节与小说原文在「章节管理」页编辑；素材在「素材库」页管理（全项目共用）。</p>
+            </ModalBody>
+            <ModalFooter>
+              <Button size="sm" color="primary" isDisabled={saving} onPress={save}>保存</Button>
+              <Button size="sm" variant="flat" onPress={onClose}>取消</Button>
+            </ModalFooter>
+          </>
         )}
-        <h3 style={{ margin: '14px 0 6px' }}>视频参数</h3>
-        <div className="row" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-          <span className="muted">分辨率</span>
-          <select value={res} onChange={(e) => setRes(e.target.value)}>
-            {VIDEO_RESOLUTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          <span className="muted">比例</span>
-          <select value={ratio} onChange={(e) => setRatio(e.target.value)}>
-            {VIDEO_RATIOS.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-          {res === 'custom' && (
-            <>
-              <span className="muted">宽</span>
-              <input type="number" min="64" step="32" value={cw} onChange={(e) => setCw(e.target.value)} placeholder="1024" style={{ width: 90 }} />
-              <span className="muted">高</span>
-              <input type="number" min="64" step="32" value={ch} onChange={(e) => setCh(e.target.value)} placeholder="576" style={{ width: 90 }} />
-            </>
-          )}
-        </div>
-        <p className="muted" style={{ marginTop: 8 }}>章节与小说原文在「章节管理」页编辑；素材在「素材库」页管理（全项目共用）。</p>
-        <div className="row" style={{ marginTop: 10 }}>
-          <button className="primary" disabled={saving} onClick={save}>保存</button>
-          <button onClick={onClose}>取消</button>
-        </div>
-      </div>
-    </div>
+      </ModalContent>
+    </Modal>
   );
 }

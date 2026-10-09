@@ -1,57 +1,46 @@
-* { box-sizing: border-box; }
-body { margin: 0; font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0f1115; color: #e6e8eb; }
-a { color: #6ea8fe; }
-button { cursor: pointer; border: 1px solid #2a2f3a; background: #1b2028; color: #e6e8eb; border-radius: 6px; padding: 6px 12px; }
-button:hover { background: #252b36; }
-button.primary { background: #2f6feb; border-color: #2f6feb; color: #fff; }
-button.success { background: #2f9e44; border-color: #2f9e44; color: #fff; }
-button.danger { background: #b02a2a; border-color: #b02a2a; color: #fff; }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-input, textarea, select { background: #151a22; border: 1px solid #2a2f3a; color: #e6e8eb; border-radius: 6px; padding: 6px 8px; }
-input:focus, textarea:focus { outline: 1px solid #2f6feb; }
-textarea { width: 100%; min-height: 120px; font-family: inherit; }
-.container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.card { background: #171b22; border: 1px solid #232936; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-h1 { font-size: 22px; } h2 { font-size: 17px; } h3 { font-size: 14px; color: #9aa4b2; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-.thumb { width: 100%; aspect-ratio: 1/1; object-fit: cover; background: #000; border-radius: 8px; }
-.video { width: 100%; max-height: 200px; background: #000; border-radius: 8px; }
-.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #232936; color: #9aa4b2; }
-.tag.done { background: #1d3a2a; color: #5fd08a; }
-.tag.failed { background: #3a1d1d; color: #ff8080; }
-.tag.running { background: #2a3320; color: #e0c96a; }
-.muted { color: #77808c; font-size: 12px; }
-.tabs { display: flex; gap: 6px; border-bottom: 1px solid #232936; margin-bottom: 16px; }
-.tabs button { border: none; background: none; color: #9aa4b2; padding: 10px 14px; border-bottom: 2px solid transparent; }
-.tabs button.active { color: #fff; border-bottom-color: #2f6feb; }
-.logbox { background: #0a0c10; border-radius: 8px; padding: 10px; font-family: ui-monospace, monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+/* 全局样式：Tailwind + HeroUI 主题令牌（明/暗双主题，主题配置见 tailwind.config.js） */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-.back-top { position: fixed; right: 24px; bottom: 24px; z-index: 200; width: 44px; height: 44px; border-radius: 50%; background: #2f6feb; border-color: #2f6feb; color: #fff; font-size: 20px; line-height: 1; box-shadow: 0 4px 14px rgba(0,0,0,0.5); }
-.back-top:hover { background: #3f7dff; }
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  a { color: var(--heroui-colors-primary, #4f86ff); }
+}
 
-.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #2f6feb; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+@layer components {
+  /* 纯布局辅助类（无主题色，浅色模式自动适配） */
+  .row { @apply flex gap-3 items-center flex-wrap; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
 
-.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.modal { background: #171b22; border: 1px solid #2a2f3a; border-radius: 12px; padding: 20px; width: min(700px, 92vw); max-height: 90vh; overflow-y: auto; }
-.modal h2 { margin-top: 0; }
-.modal h3 { margin: 14px 0 6px; }
+  /* 媒体类 */
+  .thumb { @apply w-full aspect-square object-cover bg-black rounded-lg; }
+  .video { @apply w-full max-h-[200px] bg-black rounded-lg; }
 
-.footer { max-width: 1100px; margin: 0 auto; padding: 20px; text-align: center; color: #77808c; font-size: 12px; border-top: 1px solid #232936; margin-top: 24px; }
-.footer a { color: #6ea8fe; text-decoration: none; }
+  /* 主题感知类（用 HeroUI token，随明暗切换） */
+  .muted { @apply text-default-500 text-xs; }
+  .logbox {
+    @apply bg-default-50 text-default-foreground border border-default-200 rounded-lg p-2.5 font-mono text-xs;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
 
-/* ===== 非阻塞提示（toast） =====
-   容器整体 pointer-events: none，只有提示条可点 —— 不挡网页操作 */
-.toast-wrap { position: fixed; right: 16px; bottom: 64px; z-index: 300; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; pointer-events: none; max-width: min(480px, 92vw); }
-.toast { pointer-events: auto; background: #171b22; border: 1px solid #2a2f3a; border-left: 3px solid #6ea8fe; border-radius: 8px; padding: 10px 12px; display: flex; gap: 8px; align-items: flex-start; box-shadow: 0 8px 24px rgba(0,0,0,.5); font-size: 13px; color: #d7dde6; animation: toast-in .16s ease-out; }
-@keyframes toast-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
-.toast-success { border-left-color: #5fd08a; }
-.toast-warn { border-left-color: #e0c96a; }
-.toast-error { border-left-color: #ff8080; }
-.toast-msg { flex: 1; white-space: pre-line; word-break: break-word; line-height: 1.5; min-width: 140px; }
-.toast-input { width: 100%; margin-top: 6px; box-sizing: border-box; background: #0f1115; border: 1px solid #2a2f3a; border-radius: 6px; color: #e6e8eb; padding: 6px 8px; font-size: 13px; }
-.toast-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-.toast-actions button { padding: 3px 10px; font-size: 12px; }
-.toast-x { border: none; background: none; color: #77808c; padding: 2px 6px; font-size: 15px; line-height: 1; flex-shrink: 0; }
-.toast-x:hover { color: #e6e8eb; background: none; }
+  .footer {
+    @apply max-w-[1100px] mx-auto px-5 py-5 text-center text-foreground-400 text-xs border-t border-default-200;
+    margin-top: 24px;
+  }
+  .footer a { @apply text-primary; text-decoration: none; }
+}
+
+/* toast 进入动画 */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+.toast-in { animation: toast-in .16s ease-out; }

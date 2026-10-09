@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Button, Input, Select, SelectItem, Textarea, Card, CardBody, Tabs, Tab, Chip, Modal, ModalContent, ModalBody } from '@heroui/react';
 import { api } from '../api-client.js';
-import { CATEGORIES, STATUS_TAG, fileUrl } from './shared';
+import { CATEGORIES, fileUrl, selectKeys, pickKey, statusColor } from './shared';
 import { useToast } from '../toast';
 
 // ============ 资产库 ============
@@ -82,118 +83,127 @@ export default function AssetsTab({ projectId, running = false }) {
   }
 
   return (
-    <div>
-      <div className="card">
-        <h2>新建资产</h2>
-        <div className="row">
-          <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-            {CATEGORIES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </select>
-          <input placeholder="名称" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <input placeholder="描述（可选，Agent 会自动补全）" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} style={{ width: 300 }} />
-          <button className="primary" disabled={!form.name} onClick={create}>添加</button>
-        </div>
-        <p className="muted">素材库为全项目共用、跨章节复用；角色/场景/道具图可由 Agent 生成，也可点「生成图」单独补图。</p>
-      </div>
-      <div className="card">
-        <div className="tabs">
-          <button className={cat === '' ? 'active' : ''} onClick={() => setCat('')}>全部</button>
-          {CATEGORIES.map(([k, l]) => <button key={k} className={cat === k ? 'active' : ''} onClick={() => setCat(k)}>{l}</button>)}
-        </div>
-        <div className="grid">
-          {shownAssets.map((a) => (
-            <div key={a.id}>
-              {a.video_path
-                ? <video className="thumb" controls src={fileUrl(projectId, a.video_path)} />
-                : a.image_path
-                  ? <img className="thumb" src={fileUrl(projectId, a.image_path)} onClick={() => setPreview(a)} style={{ cursor: 'zoom-in' }} title="点击预览大图" />
-                  : (a.audio_path || a.voice_ref)
-                    ? <div className="thumb" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        <div className="muted">{a.category}</div>
-                        <audio controls src={fileUrl(projectId, a.audio_path || a.voice_ref)} style={{ width: '92%' }} />
-                      </div>
-                    : <div className="thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{a.category}</div>}
-              {edit && edit.id === a.id ? (
-                <div style={{ marginTop: 6 }}>
-                  <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="名称" style={{ width: '100%' }} />
-                  <input value={edit.description || ''} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="描述" style={{ width: '100%', marginTop: 4 }} />
-                  <textarea value={edit.prompt || ''} onChange={(e) => setEdit({ ...edit, prompt: e.target.value })} placeholder="提示词（可选，用于生成/重新生成）" style={{ width: '100%', marginTop: 4, minHeight: 48 }} />
-                  <div className="row" style={{ marginTop: 6 }}>
-                    <button className="primary" onClick={saveEdit}>保存</button>
-                    <button onClick={() => setEdit(null)}>取消</button>
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardBody className="gap-3">
+          <h2 className="text-lg font-semibold m-0">新建资产</h2>
+          <div className="row">
+            <Select size="sm" className="w-32" aria-label="资产分类" selectedKeys={selectKeys(form.category)} onSelectionChange={(k) => setForm({ ...form, category: pickKey(k) })}>
+              {CATEGORIES.map(([k, l]) => <SelectItem key={k}>{l}</SelectItem>)}
+            </Select>
+            <Input size="sm" className="w-40" placeholder="名称" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Input size="sm" className="w-72" placeholder="描述（可选，Agent 会自动补全）" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <Button size="sm" color="primary" isDisabled={!form.name} onPress={create}>添加</Button>
+          </div>
+          <p className="muted">素材库为全项目共用、跨章节复用；角色/场景/道具图可由 Agent 生成，也可点「生成图」单独补图。</p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody className="gap-3">
+          <Tabs aria-label="资产分类" size="sm" variant="light" selectedKey={cat || 'all'} onSelectionChange={(k) => setCat(k === 'all' ? '' : String(k))}>
+            <Tab key="all" title="全部" />
+            {CATEGORIES.map(([k, l]) => <Tab key={k} title={l} />)}
+          </Tabs>
+          <div className="grid">
+            {shownAssets.map((a) => (
+              <div key={a.id}>
+                {a.video_path
+                  ? <video className="thumb" controls src={fileUrl(projectId, a.video_path)} />
+                  : a.image_path
+                    ? <img className="thumb" src={fileUrl(projectId, a.image_path)} onClick={() => setPreview(a)} style={{ cursor: 'zoom-in' }} title="点击预览大图" />
+                    : (a.audio_path || a.voice_ref)
+                      ? <div className="thumb" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, aspectRatio: '1 / 1' }}>
+                          <div className="muted">{a.category}</div>
+                          <audio controls src={fileUrl(projectId, a.audio_path || a.voice_ref)} style={{ width: '92%' }} />
+                        </div>
+                      : <div className="thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', aspectRatio: '1 / 1' }}>{a.category}</div>}
+                {edit && edit.id === a.id ? (
+                  <div className="flex flex-col gap-1 mt-1.5">
+                    <Input size="sm" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="名称" />
+                    <Input size="sm" value={edit.description || ''} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="描述" />
+                    <Textarea size="sm" value={edit.prompt || ''} onChange={(e) => setEdit({ ...edit, prompt: e.target.value })} placeholder="提示词（可选，用于生成/重新生成）" minRows={2} />
+                    <div className="row mt-1">
+                      <Button size="sm" color="primary" onPress={saveEdit}>保存</Button>
+                      <Button size="sm" variant="flat" onPress={() => setEdit(null)}>取消</Button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div style={{ marginTop: 6 }}>
-                  <b>{a.name}</b>
-                  <div className="muted">{a.category}{(a.category === 'costume' || a.category === 'age') && a.parent_id ? ' · 来自「' + (assets.find((x) => x.id === a.parent_id)?.name || a.parent_id) + '」' : ''}</div>
-                  <div className={'tag ' + (STATUS_TAG[a.status] || '')}>{a.status}</div>
-                  {(a.voice_ref || a.audio_path) && (a.image_path || a.video_path) && (
-                    <>
-                      <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>音色试听</div>
-                      <audio controls src={fileUrl(projectId, a.voice_ref || a.audio_path)} style={{ width: '100%', height: 32 }} title="人物参考音色试听" />
-                    </>
-                  )}
-                  <div className="row" style={{ marginTop: 6 }}>
-                    {['character', 'scene', 'prop', 'other'].includes(a.category) && (
+                ) : (
+                  <div style={{ marginTop: 6 }}>
+                    <b>{a.name}</b>
+                    <div className="muted">{a.category}{(a.category === 'costume' || a.category === 'age') && a.parent_id ? ' · 来自「' + (assets.find((x) => x.id === a.parent_id)?.name || a.parent_id) + '」' : ''}</div>
+                    <Chip size="sm" variant="flat" color={statusColor(a.status)}>{a.status}</Chip>
+                    {(a.voice_ref || a.audio_path) && (a.image_path || a.video_path) && (
                       <>
-                        <button disabled={running} onClick={() => regenImage(a, 't2i')}>生成图</button>
-                        {a.image_path && <button disabled={running} onClick={() => regenImage(a, 'i2i')} title="基于现有图重新生成（图生图，保持一致性）">重新生成</button>}
+                        <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>音色试听</div>
+                        <audio controls src={fileUrl(projectId, a.voice_ref || a.audio_path)} style={{ width: '100%', height: 32 }} title="人物参考音色试听" />
                       </>
                     )}
-                    {a.category === 'character' && a.image_path && <button disabled={running} onClick={() => changeOutfit(a)} title="基于角色图用图生图生成一套新服装">换装</button>}
-                    {a.category === 'character' && a.image_path && <button disabled={running} onClick={() => changeAge(a)} title="基于角色图用图生图生成同一人物的不同年龄/时期样貌">年龄</button>}
-                    {(a.category === 'character' || a.category === 'voice') && <button disabled={running} onClick={() => designVoice(a)}>设计音色</button>}
-                    <button onClick={() => pickUpload(a)}>上传/替换</button>
-                    <button onClick={() => setEdit({ id: a.id, name: a.name, description: a.description || '', prompt: a.prompt || '' })}>编辑</button>
-                    <button onClick={() => del(a)}>删除</button>
+                    <div className="row" style={{ marginTop: 6, gap: 4 }}>
+                      {['character', 'scene', 'prop', 'other'].includes(a.category) && (
+                        <>
+                          <Button size="sm" variant="flat" isDisabled={running} onPress={() => regenImage(a, 't2i')}>生成图</Button>
+                          {a.image_path && <Button size="sm" variant="flat" isDisabled={running} onPress={() => regenImage(a, 'i2i')} title="基于现有图重新生成（图生图，保持一致性）">重新生成</Button>}
+                        </>
+                      )}
+                      {a.category === 'character' && a.image_path && <Button size="sm" variant="flat" isDisabled={running} onPress={() => changeOutfit(a)} title="基于角色图用图生图生成一套新服装">换装</Button>}
+                      {a.category === 'character' && a.image_path && <Button size="sm" variant="flat" isDisabled={running} onPress={() => changeAge(a)} title="基于角色图用图生图生成同一人物的不同年龄/时期样貌">年龄</Button>}
+                      {(a.category === 'character' || a.category === 'voice') && <Button size="sm" variant="flat" isDisabled={running} onPress={() => designVoice(a)}>设计音色</Button>}
+                      <Button size="sm" variant="flat" onPress={() => pickUpload(a)}>上传/替换</Button>
+                      <Button size="sm" variant="flat" onPress={() => setEdit({ id: a.id, name: a.name, description: a.description || '', prompt: a.prompt || '' })}>编辑</Button>
+                      <Button size="sm" variant="flat" color="danger" onPress={() => del(a)}>删除</Button>
+                    </div>
+                    {a.category === 'character' && costumesOfChar(a.id).length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <div className="muted" style={{ marginBottom: 4 }}>服装（{costumesOfChar(a.id).length} 套）</div>
+                        <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                          {costumesOfChar(a.id).map((c) => (
+                            <div key={c.id} style={{ textAlign: 'center', width: 56 }}>
+                              {c.image_path
+                                ? <img src={fileUrl(projectId, c.image_path)} onClick={() => setPreview(c)} style={{ width: 52, height: 52, objectFit: 'cover', cursor: 'zoom-in', borderRadius: 4 }} title={c.name + '（点击预览）'} />
+                                : <div className="thumb" style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', aspectRatio: '1 / 1' }}>服装</div>}
+                              <div className="muted" style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{c.name.replace(a.name + '-', '')}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {a.category === 'character' && agesOfChar(a.id).length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <div className="muted" style={{ marginBottom: 4 }}>年龄/时期（{agesOfChar(a.id).length} 个）</div>
+                        <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                          {agesOfChar(a.id).map((g) => (
+                            <div key={g.id} style={{ textAlign: 'center', width: 56 }}>
+                              {g.image_path
+                                ? <img src={fileUrl(projectId, g.image_path)} onClick={() => setPreview(g)} style={{ width: 52, height: 52, objectFit: 'cover', cursor: 'zoom-in', borderRadius: 4 }} title={g.name + '（点击预览）'} />
+                                : <div className="thumb" style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', aspectRatio: '1 / 1' }}>年龄</div>}
+                              <div className="muted" style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{g.name.replace(a.name + '-', '')}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {a.category === 'character' && costumesOfChar(a.id).length > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <div className="muted" style={{ marginBottom: 4 }}>服装（{costumesOfChar(a.id).length} 套）</div>
-                      <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                        {costumesOfChar(a.id).map((c) => (
-                          <div key={c.id} style={{ textAlign: 'center', width: 56 }}>
-                            {c.image_path
-                              ? <img src={fileUrl(projectId, c.image_path)} onClick={() => setPreview(c)} style={{ width: 52, height: 52, objectFit: 'cover', cursor: 'zoom-in', borderRadius: 4 }} title={c.name + '（点击预览）'} />
-                              : <div className="thumb" style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>服装</div>}
-                            <div className="muted" style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{c.name.replace(a.name + '-', '')}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {a.category === 'character' && agesOfChar(a.id).length > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <div className="muted" style={{ marginBottom: 4 }}>年龄/时期（{agesOfChar(a.id).length} 个）</div>
-                      <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                        {agesOfChar(a.id).map((g) => (
-                          <div key={g.id} style={{ textAlign: 'center', width: 56 }}>
-                            {g.image_path
-                              ? <img src={fileUrl(projectId, g.image_path)} onClick={() => setPreview(g)} style={{ width: 52, height: 52, objectFit: 'cover', cursor: 'zoom-in', borderRadius: 4 }} title={g.name + '（点击预览）'} />
-                              : <div className="thumb" style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>年龄</div>}
-                            <div className="muted" style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{g.name.replace(a.name + '-', '')}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        {!assets.length && <p className="muted">暂无资产</p>}
-      </div>
-      <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f && uploadTarget) doUpload(uploadTarget, f); e.target.value = ''; setUploadTarget(null); }} />
-      {preview && (
-        <div className="modal-bg" onClick={() => setPreview(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90vw', textAlign: 'center' }}>
-            <img src={fileUrl(projectId, preview.image_path)} style={{ maxWidth: '100%', maxHeight: '78vh', borderRadius: 6 }} />
-            <div style={{ marginTop: 8 }}><b>{preview.name}</b> <span className="muted">{preview.category}</span></div>
+                )}
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+          {!assets.length && <p className="muted">暂无资产</p>}
+        </CardBody>
+      </Card>
+
+      <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f && uploadTarget) doUpload(uploadTarget, f); e.target.value = ''; setUploadTarget(null); }} />
+
+      <Modal isOpen={!!preview} size="3xl" backdrop="blur" onClose={() => setPreview(null)}>
+        <ModalContent>
+          {() => (
+            <ModalBody className="items-center py-6">
+              {preview && <img src={fileUrl(projectId, preview.image_path)} className="max-w-full max-h-[78vh] rounded-md" />}
+              <div className="mt-2"><b>{preview && preview.name}</b> <span className="muted">{preview && preview.category}</span></div>
+            </ModalBody>
+          )}
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

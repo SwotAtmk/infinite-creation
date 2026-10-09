@@ -41,14 +41,16 @@ goto :show
 :install
 echo [检查] 未检测到依赖，正在执行 pnpm install（非交互模式）...
 echo.
-call pnpm install --config.confirmModulesPurge=false <nul
+echo y| call pnpm install --config.confirmModulesPurge=false
 if errorlevel 1 goto :install_fail
 echo.
 
 :launch
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>&1
 echo [启动] 正在后台启动 ...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath 'pnpm.cmd' -ArgumentList 'run','dev' -WorkingDirectory '%~dp0' -RedirectStandardOutput '%LOG_FILE%' -RedirectStandardError '%LOG_DIR%\server.err.log' -WindowStyle Hidden"
+rem 经 cmd 用 echo y| 管道启动：pnpm run 前置校验触发自动 install 时，
+rem 若有「modules directories will be removed」确认弹窗，自动按 Y 继续，不再卡等输入
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/c echo y| pnpm.cmd run dev' -WorkingDirectory '%~dp0' -RedirectStandardOutput '%LOG_FILE%' -RedirectStandardError '%LOG_DIR%\server.err.log' -WindowStyle Hidden"
 echo [等待] 等待服务就绪 ...
 powershell -NoProfile -Command "$d=(Get-Date).AddSeconds(120); while((Get-Date) -lt $d){ if(Get-NetTCPConnection -LocalPort !PORT! -State Listen -ErrorAction SilentlyContinue){ exit 0 }; Start-Sleep -Seconds 2 }; exit 1" >nul 2>&1
 if errorlevel 1 goto :timeout

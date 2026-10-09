@@ -21,6 +21,14 @@ export default function AssetsTab({ projectId, running = false }) {
   const shownAssets = cat ? assets.filter((a) => a.category === cat) : assets;
   const costumesOfChar = (charId) => assets.filter((a) => a.category === 'costume' && a.parent_id === charId);
   const agesOfChar = (charId) => assets.filter((a) => a.category === 'age' && a.parent_id === charId);
+  const editingAsset = edit ? assets.find((x) => x.id === edit.id) : null;
+
+  useEffect(() => {
+    if (!edit) return;
+    const onKey = (e) => { if (e.key === 'Escape') setEdit(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [edit]);
 
   async function designVoice(a) {
     try { await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/design-voice'); toast.success('已提交音色设计，稍后在「运行日志」查看进度'); load(); } catch (e) { toast.error(e.message); }
@@ -113,18 +121,7 @@ export default function AssetsTab({ projectId, running = false }) {
                         <audio controls src={fileUrl(projectId, a.audio_path || a.voice_ref)} style={{ width: '92%' }} />
                       </div>
                     : <div className="thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{a.category}</div>}
-              {edit && edit.id === a.id ? (
-                <div style={{ marginTop: 6 }}>
-                  <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="名称" style={{ width: '100%' }} />
-                  <input value={edit.description || ''} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="描述" style={{ width: '100%', marginTop: 4 }} />
-                  <textarea value={edit.prompt || ''} onChange={(e) => setEdit({ ...edit, prompt: e.target.value })} placeholder="提示词（可选，用于生成/重新生成）" style={{ width: '100%', marginTop: 4, minHeight: 48 }} />
-                  <div className="row" style={{ marginTop: 6 }}>
-                    <button className="primary" onClick={saveEdit}>保存</button>
-                    <button onClick={() => setEdit(null)}>取消</button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ marginTop: 6 }}>
+              <div style={{ marginTop: 6 }}>
                   <b>{a.name}</b>
                   <div className="muted">{a.category}{(a.category === 'costume' || a.category === 'age') && a.parent_id ? ' · 来自「' + (assets.find((x) => x.id === a.parent_id)?.name || a.parent_id) + '」' : ''}</div>
                   <div className={'tag ' + (STATUS_TAG[a.status] || '')}>{a.status}</div>
@@ -179,7 +176,6 @@ export default function AssetsTab({ projectId, running = false }) {
                     </div>
                   )}
                 </div>
-              )}
             </div>
           ))}
         </div>
@@ -191,6 +187,41 @@ export default function AssetsTab({ projectId, running = false }) {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90vw', textAlign: 'center' }}>
             <img src={fileUrl(projectId, preview.image_path)} style={{ maxWidth: '100%', maxHeight: '78vh', borderRadius: 6 }} />
             <div style={{ marginTop: 8 }}><b>{preview.name}</b> <span className="muted">{preview.category}</span></div>
+          </div>
+        </div>
+      )}
+      {edit && (
+        <div className="modal-bg" onClick={() => setEdit(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 860, width: '94vw' }}>
+            <h2>编辑素材</h2>
+            <div className="row" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ flex: '0 0 300px', minWidth: 260 }}>
+                {editingAsset && (editingAsset.video_path || editingAsset.image_path || editingAsset.audio_path || editingAsset.voice_ref) ? (
+                  editingAsset.video_path
+                    ? <video controls src={fileUrl(projectId, editingAsset.video_path)} style={{ width: '100%', borderRadius: 8, maxHeight: 300 }} />
+                    : editingAsset.image_path
+                      ? <img src={fileUrl(projectId, editingAsset.image_path)} alt={editingAsset.name} style={{ width: '100%', borderRadius: 8, maxHeight: 340, objectFit: 'contain' }} />
+                      : <audio controls src={fileUrl(projectId, editingAsset.audio_path || editingAsset.voice_ref)} style={{ width: '100%', marginTop: 6 }} />
+                ) : (
+                  <div className="thumb" style={{ width: '100%', minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{editingAsset ? editingAsset.category : ''}</div>
+                )}
+                {editingAsset && (
+                  <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>{editingAsset.category}{(editingAsset.category === 'costume' || editingAsset.category === 'age') && editingAsset.parent_id ? ' · 来自「' + (assets.find((x) => x.id === editingAsset.parent_id)?.name || editingAsset.parent_id) + '」' : ''}</div>
+                )}
+              </div>
+              <div style={{ flex: 1, minWidth: 320 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>名称</label>
+                <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="名称" style={{ width: '100%', boxSizing: 'border-box' }} />
+                <label style={{ display: 'block', marginTop: 12, marginBottom: 4, fontWeight: 600 }}>描述</label>
+                <textarea value={edit.description || ''} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="描述（可选，Agent 会自动补全）" rows={4} style={{ width: '100%', boxSizing: 'border-box' }} />
+                <label style={{ display: 'block', marginTop: 12, marginBottom: 4, fontWeight: 600 }}>提示词</label>
+                <textarea value={edit.prompt || ''} onChange={(e) => setEdit({ ...edit, prompt: e.target.value })} placeholder="提示词（可选，用于生成/重新生成）" rows={8} style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setEdit(null)}>取消</button>
+                  <button className="primary" onClick={saveEdit}>保存</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

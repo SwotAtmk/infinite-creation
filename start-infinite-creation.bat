@@ -39,9 +39,9 @@ echo [跳过] 端口 !PORT! 已被占用，服务可能已在运行
 goto :show
 
 :install
-echo [检查] 未检测到依赖，正在执行 pnpm install ...
+echo [检查] 未检测到依赖，正在执行 pnpm install（非交互模式）...
 echo.
-call pnpm install
+call pnpm install --config.confirmModulesPurge=false <nul
 if errorlevel 1 goto :install_fail
 echo.
 

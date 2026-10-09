@@ -1,11 +1,13 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import { Button, Input, Card, CardBody, Chip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
-import { STATUS_TAG, fileUrl, dialogueSpeakers } from './shared';
+import { fileUrl, dialogueSpeakers, statusColor } from './shared';
 import { useToast } from '../toast';
 import ShotMaterialPicker from './ShotMaterialPicker';
+import LoadingOverlay from './LoadingOverlay';
 
-const MATERIAL_FIELD = { character: 'character_ids', scene: 'scene_ids', prop: 'prop_ids', costume: 'costume_ids', age: 'age_ids' };
+const MATERIAL_FIELD = { character: 'character_ids', scene: 'scene_ids', prop: 'prop_ids', costume: 'costume_ids', age: 'age_ids', audio: 'audio_ids' };
 
 // ============ 分镜审查 ============
 export default function ShotsTab({ projectId, chapter: chapterProp = '', running = false, onRefresh }) {
@@ -20,6 +22,8 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const [ask, setAsk] = useState(null);
   const [loading, setLoading] = useState(true);
   const [materialPicker, setMaterialPicker] = useState(null);
+  // 导出/打包等耗时操作进行中：显示全屏加载层提示等待并阻断重复点击，操作结束后自动消失
+  const [busy, setBusy] = useState(null);
   const load = useCallback(() => {
     return Promise.all([
       api.get('/api/projects/' + projectId + '/shots').then(setShots).catch((e) => toast.error(e.message)),
@@ -45,18 +49,19 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const propsOf = (s) => asArr(s.prop_ids).map(byId).filter(Boolean);
   const costumesOf = (s) => asArr(s.costume_ids).map(byId).filter(Boolean);
   const agesOf = (s) => asArr(s.age_ids).map(byId).filter(Boolean);
+  const audiosOf = (s) => asArr(s.audio_ids).map(byId).filter(Boolean);
 
   function RefThumb({ a, onReplace, onRemove }) {
     return (
       <div style={{ textAlign: 'center', width: 88 }}>
         {a.image_path
           ? <img className="thumb" src={fileUrl(projectId, a.image_path)} onClick={() => setPreview(a)} style={{ width: 64, height: 64, objectFit: 'cover', cursor: 'zoom-in' }} title="点击预览" />
-          : <div className="thumb" style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>{a.category}</div>}
+          : <div className="thumb" style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', aspectRatio: '1 / 1' }}>{a.category}</div>}
         <div className="muted" style={{ fontSize: 11, wordBreak: 'break-all' }}>{a.name}</div>
         {(onReplace || onRemove) && (
           <div className="row" style={{ justifyContent: 'center', gap: 4, marginTop: 2 }}>
-            {onReplace && <button style={{ padding: '0 6px', fontSize: 10 }} onClick={onReplace}>替换</button>}
-            {onRemove && <button style={{ padding: '0 6px', fontSize: 10 }} onClick={onRemove}>×</button>}
+            {onReplace && <Button size="sm" variant="light" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={onReplace}>替换</Button>}
+            {onRemove && <Button size="sm" variant="light" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={onRemove}>×</Button>}
           </div>
         )}
       </div>
@@ -77,6 +82,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
     else regen(shotId, true);
   }
   async function exportChapter() {
+    setBusy('正在导出本章成片…');
     try {
       const r = await api.post('/api/projects/' + projectId + '/export', { chapter: chapterProp });
       const url = fileUrl(projectId, r.export_path);
@@ -89,9 +95,11 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       toast.success('导出成功，已开始下载。成片可到「🎞 成片」页预览和下载。');
       onRefresh();
     } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
   async function zipShots() {
     setZipping(true);
+    setBusy('正在打包视频片段…');
     try {
       const url = '/api/projects/' + projectId + '/shots/zip' + (chapterProp ? '?chapter=' + encodeURIComponent(chapterProp) : '');
       const res = await fetch(url);
@@ -114,7 +122,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch (e) { toast.error('打包失败：' + e.message); }
-    finally { setZipping(false); }
+    finally { setZipping(false); setBusy(null); }
   }
 
   function openMaterial(shotId, category, mode, replaceAssetId) {
@@ -150,25 +158,25 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
 
   if (loading) {
     return (
-      <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 40 }}>
-        <span className="spinner" />
-        <span className="muted">分镜数据加载中…</span>
-      </div>
+      <Card>
+        <CardBody className="flex-row items-center justify-center gap-2.5 py-10">
+          <Spinner size="sm" />
+          <span className="muted">分镜数据加载中…</span>
+        </CardBody>
+      </Card>
     );
   }
   return (
-    <div>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <div className="row">
-          <h2>分镜审查（{chapterProp ? chapterProp + ' · ' : ''}共 {shown.length} 镜）</h2>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="row justify-between">
+        <h2 className="text-lg font-semibold m-0">分镜审查（{chapterProp ? chapterProp + ' · ' : ''}共 {shown.length} 镜）</h2>
         <div className="row" style={{ gap: 8 }}>
-          <button className="primary" onClick={exportChapter} disabled={!shown.length}>导出本章成片</button>
-          <button onClick={zipShots} disabled={!doneShots.length || zipping}>{zipping ? '打包中…' : '📦 打包下载片段'}</button>
+          <Button size="sm" color="primary" isDisabled={!shown.length} onPress={exportChapter}>导出本章成片</Button>
+          <Button size="sm" variant="flat" isDisabled={!doneShots.length || zipping} onPress={zipShots}>{zipping ? '打包中…' : '📦 打包下载片段'}</Button>
         </div>
       </div>
       {shown.map((s) => {
-        const chars = charsOf(s), scenes = scenesOf(s), props = propsOf(s), costumes = costumesOf(s), ages = agesOf(s);
+        const chars = charsOf(s), scenes = scenesOf(s), props = propsOf(s), costumes = costumesOf(s), ages = agesOf(s), audios = audiosOf(s);
         // 语音参考只显示「有台词」角色（与后端 assembleShotReferences 一致）：多人同场时仅说话角色才有音色
         const speakers = dialogueSpeakers(s.dialogue);
         const speakingChars = chars.filter((c) => speakers.some((sp) => sp === c.name || sp.includes(c.name) || c.name.includes(sp)));
@@ -178,91 +186,117 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
           ? 'custom ' + (project.video_width || '?') + '×' + (project.video_height || '?')
           : (s.resolution || '480P');
         return (
-          <div className="card" key={s.id}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <b>分镜 {s.idx}{s.chapter ? ' · ' + s.chapter : ''} · {s.scene_name || '未命名'}</b>
-              <span className={'tag ' + (STATUS_TAG[s.status] || '')}>{s.status}</span>
-            </div>
-            <div className="muted">时长 {s.duration}s · 分辨率 {resoLabel} · 比例 {s.aspect_ratio || '16:9'} · seed {s.seed || '-'}</div>
-
-            <div style={{ marginTop: 8 }}>
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <div className="muted">参考素材（角色 / 场景 / 道具 / 服装 / 年龄 / 语音〔仅台词角色〕）</div>
-                {!running && (
-                  <div className="row" style={{ gap: 4 }}>
-                    <button onClick={() => openMaterial(s.id, 'character', 'add')}>＋角色</button>
-                    <button onClick={() => openMaterial(s.id, 'scene', 'add')}>＋场景</button>
-                    <button onClick={() => openMaterial(s.id, 'prop', 'add')}>＋道具</button>
-                    <button onClick={() => openMaterial(s.id, 'costume', 'add')}>＋服装</button>
-                    <button onClick={() => openMaterial(s.id, 'age', 'add')}>＋年龄</button>
-                  </div>
-                )}
+          <Card key={s.id}>
+            <CardBody className="gap-2">
+              <div className="row justify-between">
+                <b>分镜 {s.idx}{s.chapter ? ' · ' + s.chapter : ''} · {s.scene_name || '未命名'}</b>
+                <Chip size="sm" variant="flat" color={statusColor(s.status)}>{s.status}</Chip>
               </div>
-              {allRefs.length || voices.length ? (
-                <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                  {chars.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'character', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'character', a.id) : null} />)}
-                  {scenes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'scene', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'scene', a.id) : null} />)}
-                  {props.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'prop', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'prop', a.id) : null} />)}
-                  {costumes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'costume', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'costume', a.id) : null} />)}
-                  {ages.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'age', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'age', a.id) : null} />)}
-                  {voices.map((v, i) => (
-                    <div key={i} style={{ textAlign: 'center', width: 190 }}>
-                      <audio controls src={fileUrl(projectId, v.voice_ref)} style={{ width: '100%', height: 38 }} title="角色参考音色" />
-                      <div className="muted" style={{ fontSize: 11, wordBreak: 'break-all' }}>{v.name}</div>
+              <div className="muted">时长 {s.duration}s · 分辨率 {resoLabel} · 比例 {s.aspect_ratio || '16:9'} · seed {s.seed || '-'}</div>
+
+              <div style={{ marginTop: 8 }}>
+                <div className="row justify-between" style={{ alignItems: 'center', marginBottom: 4 }}>
+                  <div className="muted">参考素材（角色 / 场景 / 道具 / 服装 / 年龄 / 语音〔仅台词角色〕/ 音频）</div>
+                  {!running && (
+                    <div className="row" style={{ gap: 4 }}>
+                      <Button size="sm" variant="flat" onPress={() => openMaterial(s.id, 'character', 'add')}>＋角色</Button>
+                      <Button size="sm" variant="flat" onPress={() => openMaterial(s.id, 'scene', 'add')}>＋场景</Button>
+                      <Button size="sm" variant="flat" onPress={() => openMaterial(s.id, 'prop', 'add')}>＋道具</Button>
+                      <Button size="sm" variant="flat" onPress={() => openMaterial(s.id, 'costume', 'add')}>＋服装</Button>
+                      <Button size="sm" variant="flat" onPress={() => openMaterial(s.id, 'age', 'add')}>＋年龄</Button>
+                      <Button size="sm" variant="flat" onPress={() => openMaterial(s.id, 'audio', 'add')}>＋音频</Button>
                     </div>
-                  ))}
+                  )}
                 </div>
-              ) : <span className="muted">（无）</span>}
-            </div>
-
-            <details open style={{ marginTop: 8 }}>
-              <summary>提示词 & 分镜脚本</summary>
-              <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
-                {s.camera && <div><b>镜头：</b>{s.camera}</div>}
-                {s.visual && <div><b>画面：</b>{s.visual}</div>}
-                {s.dialogue && <div><b>台词：</b>{s.dialogue}</div>}
-                {s.narration && <div><b>旁白：</b>{s.narration}</div>}
-                {s.sub_shots && <div><b>子镜头：</b><pre style={{ whiteSpace: 'pre-wrap' }}>{s.sub_shots}</pre></div>}
+                {allRefs.length || voices.length || audios.length ? (
+                  <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    {chars.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'character', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'character', a.id) : null} />)}
+                    {scenes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'scene', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'scene', a.id) : null} />)}
+                    {props.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'prop', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'prop', a.id) : null} />)}
+                    {costumes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'costume', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'costume', a.id) : null} />)}
+                    {ages.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'age', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'age', a.id) : null} />)}
+                    {voices.map((v, i) => (
+                      <div key={i} style={{ textAlign: 'center', width: 190 }}>
+                        <audio controls src={fileUrl(projectId, v.voice_ref)} style={{ width: '100%', height: 38 }} title="角色参考音色" />
+                        <div className="muted" style={{ fontSize: 11, wordBreak: 'break-all' }}>{v.name}</div>
+                      </div>
+                    ))}
+                    {audios.map((a) => (
+                      <div key={a.id} style={{ textAlign: 'center', width: 190 }}>
+                        {a.audio_path || a.voice_ref
+                          ? <audio controls src={fileUrl(projectId, a.audio_path || a.voice_ref)} style={{ width: '100%', height: 38 }} title="音频素材（旁白音色/音乐/音效）" />
+                          : <div className="muted" style={{ fontSize: 11 }}>（无音频文件）</div>}
+                        <div className="muted" style={{ fontSize: 11, wordBreak: 'break-all' }}>{a.name}</div>
+                        {!running && (
+                          <div className="row" style={{ justifyContent: 'center', gap: 4, marginTop: 2 }}>
+                            <Button size="sm" variant="light" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={() => openMaterial(s.id, 'audio', 'replace', a.id)}>替换</Button>
+                            <Button size="sm" variant="light" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={() => removeMaterial(s.id, 'audio', a.id)}>×</Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : <span className="muted">（无）</span>}
               </div>
-              <div style={{ marginTop: 6 }}>
-                <b>视频提示词：</b>
-                <pre className="logbox" style={{ maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{s.video_prompt || '（未生成）'}</pre>
-              </div>
-              {s.prompt_id && <div className="muted">ComfyUI prompt_id: {s.prompt_id}</div>}
-            </details>
 
-            {s.video_path && <video className="video" controls src={fileUrl(projectId, s.video_path)} />}
-            {s.error && <p style={{ color: '#ff8080' }}>错误：{s.error}</p>}
-            <div className="row" style={{ marginTop: 8 }}>
-              <input placeholder="反馈（如：镜头拉近 / 让人物微笑），留空直接渲染；有内容会先问是否 LLM 改写" value={feedback[s.id] || ''} onChange={(e) => setFeedback({ ...feedback, [s.id]: e.target.value })} style={{ flex: 1 }} />
-              <button disabled={running} onClick={() => onRegen(s.id)}>↻ 重新生成</button>
-            </div>
-          </div>
+              <details open style={{ marginTop: 8 }}>
+                <summary>提示词 & 分镜脚本</summary>
+                <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                  {s.camera && <div><b>镜头：</b>{s.camera}</div>}
+                  {s.visual && <div><b>画面：</b>{s.visual}</div>}
+                  {s.dialogue && <div><b>台词：</b>{s.dialogue}</div>}
+                  {s.narration && <div><b>旁白：</b>{s.narration}</div>}
+                  {s.sub_shots && <div><b>子镜头：</b><pre style={{ whiteSpace: 'pre-wrap' }}>{s.sub_shots}</pre></div>}
+                </div>
+                <div style={{ marginTop: 6 }}>
+                  <b>视频提示词：</b>
+                  <pre className="logbox" style={{ maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{s.video_prompt || '（未生成）'}</pre>
+                </div>
+                {s.prompt_id && <div className="muted">ComfyUI prompt_id: {s.prompt_id}</div>}
+              </details>
+
+              {s.video_path && <video className="video" controls src={fileUrl(projectId, s.video_path)} />}
+              {s.error && <p className="m-0 text-danger">错误：{s.error}</p>}
+              <div className="row" style={{ marginTop: 8 }}>
+                <Input size="sm" className="flex-1" placeholder="反馈（如：镜头拉近 / 让人物微笑），留空直接渲染；有内容会先问是否 LLM 改写" value={feedback[s.id] || ''} onChange={(e) => setFeedback({ ...feedback, [s.id]: e.target.value })} />
+                <Button size="sm" isDisabled={running} onPress={() => onRegen(s.id)}>↻ 重新生成</Button>
+              </div>
+            </CardBody>
+          </Card>
         );
       })}
       {!shots.length && <p className="muted">暂无分镜-请先生成素材</p>}
-      {preview && (
-        <div className="modal-bg" onClick={() => setPreview(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90vw', textAlign: 'center' }}>
-            <img src={fileUrl(projectId, preview.image_path)} style={{ maxWidth: '100%', maxHeight: '78vh', borderRadius: 6 }} />
-            <div style={{ marginTop: 8 }}><b>{preview.name}</b> <span className="muted">{preview.category}</span></div>
-          </div>
-        </div>
-      )}
-      {ask && (
-        <div className="modal-bg" onClick={() => setAsk(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, textAlign: 'left' }}>
-            <h3 style={{ marginTop: 0 }}>检测到反馈，需要 LLM 改写提示词</h3>
-            <p className="muted" style={{ whiteSpace: 'pre-wrap' }}>反馈：{feedback[ask] || ''}</p>
-            <p>LLM 改写完成后，是否继续调用 ComfyUI 渲染视频？</p>
-            <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button className="primary" onClick={() => { const id = ask; setAsk(null); regen(id, true); }}>是 · LLM 后渲染视频</button>
-              <button onClick={() => { const id = ask; setAsk(null); regen(id, false); }}>否 · 只做 LLM，不渲染</button>
-              <button onClick={() => setAsk(null)}>取消</button>
-            </div>
-          </div>
-        </div>
-      )}
+
+      <Modal isOpen={!!preview} size="3xl" backdrop="blur" onClose={() => setPreview(null)}>
+        <ModalContent>
+          {() => (
+            <ModalBody className="items-center py-6">
+              {preview && <img src={fileUrl(projectId, preview.image_path)} className="max-w-full max-h-[78vh] rounded-md" />}
+              <div className="mt-2"><b>{preview && preview.name}</b> <span className="muted">{preview && preview.category}</span></div>
+            </ModalBody>
+          )}
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={!!ask} size="sm" backdrop="blur" onClose={() => setAsk(null)}>
+        <ModalContent>
+          {() => (
+            <>
+              <ModalHeader>检测到反馈，需要 LLM 改写提示词</ModalHeader>
+              <ModalBody>
+                <p className="muted whitespace-pre-line">反馈：{ask ? feedback[ask] || '' : ''}</p>
+                <p>LLM 改写完成后，是否继续调用 ComfyUI 渲染视频？</p>
+              </ModalBody>
+              <ModalFooter>
+                <Button size="sm" color="primary" onPress={() => { const id = ask; setAsk(null); regen(id, true); }}>是 · LLM 后渲染视频</Button>
+                <Button size="sm" variant="flat" onPress={() => { const id = ask; setAsk(null); regen(id, false); }}>否 · 只做 LLM，不渲染</Button>
+                <Button size="sm" variant="light" onPress={() => setAsk(null)}>取消</Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
       {materialPicker && (
         <ShotMaterialPicker
           projectId={projectId}
@@ -275,6 +309,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
           onCancel={() => setMaterialPicker(null)}
         />
       )}
+      <LoadingOverlay show={!!busy} text={busy} />
     </div>
   );
 }

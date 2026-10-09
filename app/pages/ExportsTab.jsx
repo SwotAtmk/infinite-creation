@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import { Card, CardBody, Button } from '@heroui/react';
 import { api } from '../api-client.js';
 import { useToast } from '../toast';
 
@@ -28,27 +29,31 @@ export default function ExportsTab({ projectId }) {
   }
 
   return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h2 style={{ margin: 0 }}>成片（{files.length}）</h2>
-        <button onClick={load}>刷新</button>
-      </div>
-      <p className="muted" style={{ marginTop: 6 }}>
-        在「生成内容」页点「导出本章成片」后，合并好的最终视频会出现在这里，可在线预览或下载。
-      </p>
-      {!files.length && <p className="muted">暂无成片，请先在「生成内容」页完成某章并点击「导出本章成片」。</p>}
-      {files.map((f) => (
-        <div key={f.rel} className="card" style={{ marginTop: 12, background: '#10131a' }}>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <b style={{ wordBreak: 'break-all' }}>{f.name}</b>
-            <div className="row" style={{ gap: 8 }}>
-              <span className="muted">{fmtBytes(f.size)} · {fmtTime(f.mtime)}</span>
-              <button className="primary" onClick={() => download(f)}>⬇ 下载</button>
-            </div>
-          </div>
-          <video className="video" controls preload="metadata" src={f.url} style={{ maxHeight: 420, marginTop: 8 }} />
+    <Card>
+      <CardBody className="gap-2">
+        <div className="row justify-between">
+          <h2 className="m-0">成片（{files.length}）</h2>
+          <Button size="sm" variant="flat" onPress={load}>刷新</Button>
         </div>
-      ))}
-    </div>
+        <p className="muted" style={{ marginTop: 6 }}>
+          在「生成内容」页点「导出本章成片」后，合并好的最终视频会出现在这里，可在线预览或下载。
+        </p>
+        {!files.length && <p className="muted">暂无成片，请先在「生成内容」页完成某章并点击「导出本章成片」。</p>}
+        {files.map((f) => (
+          <Card key={f.rel} shadow="none" className="border border-default-200 mt-3 bg-default-50">
+            <CardBody className="gap-2">
+              <div className="row justify-between">
+                <b style={{ wordBreak: 'break-all' }}>{f.name}</b>
+                <div className="row" style={{ gap: 8 }}>
+                  <span className="muted">{fmtBytes(f.size)} · {fmtTime(f.mtime)}</span>
+                  <Button size="sm" color="primary" onPress={() => download(f)}>⬇ 下载</Button>
+                </div>
+              </div>
+              <video className="video" controls preload="metadata" src={f.url} style={{ maxHeight: 420, marginTop: 8 }} />
+            </CardBody>
+          </Card>
+        ))}
+      </CardBody>
+    </Card>
   );
 }

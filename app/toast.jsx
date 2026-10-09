@@ -7,6 +7,7 @@
 // - 决策（confirm/prompt）：阻塞弹窗（模态遮罩），必须作出选择才能继续操作，
 //   防止弹窗被跳过导致误操作；关闭/取消按「否」处理（失败安全）
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { Button, Input, Modal, ModalContent, ModalBody, ModalFooter } from '@heroui/react';
 
 const ToastCtx = createContext(null);
 
@@ -17,6 +18,13 @@ export function useToast() {
 }
 
 let seq = 0;
+
+const KIND_BORDER = {
+  info: 'border-l-primary',
+  success: 'border-l-success',
+  warn: 'border-l-warning',
+  error: 'border-l-danger',
+};
 
 export function ToastProvider({ children }) {
   const [items, setItems] = useState([]);
@@ -73,54 +81,67 @@ export function ToastProvider({ children }) {
   return (
     <ToastCtx.Provider value={api}>
       {children}
-      <div className="toast-wrap">
+      <div className="fixed right-4 bottom-16 z-[300] flex flex-col gap-2.5 items-end pointer-events-none max-w-[min(480px,92vw)]">
         {items.map((t) => (
-          <div key={t.id} className={'toast toast-' + t.kind} role={t.kind === 'error' ? 'alert' : 'status'}>
-            <span className="toast-msg">{t.message}</span>
+          <div
+            key={t.id}
+            className={`toast toast-in pointer-events-auto bg-content1 text-foreground border border-default-200 border-l-[3px] rounded-lg p-2.5 flex gap-2 items-start shadow-lg text-sm ${KIND_BORDER[t.kind] || KIND_BORDER.info}`}
+            role={t.kind === 'error' ? 'alert' : 'status'}
+          >
+            <span className="flex-1 whitespace-pre-line break-words leading-relaxed min-w-[140px]">{t.message}</span>
             {t.buttons.length > 0 && (
-              <span className="toast-actions">
+              <span className="flex gap-1.5 items-center shrink-0">
                 {t.buttons.map((b, i) => (
-                  <button
+                  <Button
                     key={i}
-                    className={b.tone === 'primary' ? 'primary' : b.tone === 'danger' ? 'danger' : ''}
-                    onClick={() => { if (b.onClick) b.onClick(); remove(t.id); }}
-                  >{b.label}</button>
+                    size="sm"
+                    color={b.tone === 'primary' ? 'primary' : b.tone === 'danger' ? 'danger' : 'default'}
+                    variant={b.tone ? 'solid' : 'flat'}
+                    onPress={() => { if (b.onClick) b.onClick(); remove(t.id); }}
+                  >{b.label}</Button>
                 ))}
               </span>
             )}
-            <button className="toast-x" aria-label="关闭提示" onClick={() => remove(t.id)}>×</button>
+            <Button isIconOnly size="sm" variant="light" aria-label="关闭提示" onPress={() => remove(t.id)}>×</Button>
           </div>
         ))}
       </div>
 
-      {dialog && (
-        <div className="modal-bg" style={{ zIndex: 400 }} onClick={() => answer(dialog.mode === 'prompt' ? null : false)}>
-          <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0, whiteSpace: 'pre-line' }}>{dialog.message}</h3>
-            {dialog.mode === 'prompt' && (
-              <input
-                className="toast-input"
-                style={{ marginTop: 10 }}
-                autoFocus
-                value={promptVal}
-                placeholder={dialog.placeholder}
-                onChange={(e) => setPromptVal(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { const v = promptVal.trim(); answer(v ? v : null); } }}
-              />
-            )}
-            <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
-              <button
-                className={dialog.danger ? 'danger' : 'primary'}
-                onClick={() => {
-                  if (dialog.mode === 'prompt') { const v = promptVal.trim(); answer(v ? v : null); }
-                  else answer(true);
-                }}
-              >{dialog.confirmLabel}</button>
-              <button onClick={() => answer(dialog.mode === 'prompt' ? null : false)}>{dialog.cancelLabel}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={!!dialog}
+        size="sm"
+        backdrop="blur"
+        onClose={() => answer(dialog.mode === 'prompt' ? null : false)}
+      >
+        <ModalContent>
+          {() => (
+            <>
+              <ModalBody>
+                <div className="whitespace-pre-line pt-3">{dialog.message}</div>
+                {dialog.mode === 'prompt' && (
+                  <Input
+                    autoFocus
+                    value={promptVal}
+                    placeholder={dialog.placeholder}
+                    onChange={(e) => setPromptVal(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { const v = promptVal.trim(); answer(v ? v : null); } }}
+                  />
+                )}
+              </ModalBody>
+              <ModalFooter>
+                <Button
+                  color={dialog.danger ? 'danger' : 'primary'}
+                  onPress={() => {
+                    if (dialog.mode === 'prompt') { const v = promptVal.trim(); answer(v ? v : null); }
+                    else answer(true);
+                  }}
+                >{dialog.confirmLabel}</Button>
+                <Button variant="flat" onPress={() => answer(dialog.mode === 'prompt' ? null : false)}>{dialog.cancelLabel}</Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
     </ToastCtx.Provider>
   );
 }

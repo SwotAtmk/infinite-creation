@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Card, CardBody, Button, Chip } from '@heroui/react';
 import { api } from '../api-client.js';
 import { useToast } from '../toast';
 
@@ -31,24 +32,26 @@ export default function SkillsTab() {
     finally { setUploading(false); }
   }
   return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h2 style={{ margin: 0 }}>已安装技能（{skills.length}）</h2>
-        <div className="row">
-          <button onClick={pickZip} disabled={uploading}>{uploading ? '上传中…' : '上传技能包 (zip)'}</button>
-          <button onClick={rescan}>重新扫描 skills/</button>
-        </div>
-      </div>
-      {skills.map((s) => (
-        <div key={s.id} className="row" style={{ justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #232936' }}>
-          <div>
-            <b>{s.name}</b> <span className="tag">{s.source}</span>
-            <div className="muted">{s.description}</div>
+    <Card shadow="none" className="border border-default-200">
+      <CardBody className="gap-2">
+        <div className="row justify-between">
+          <h2 className="m-0">已安装技能（{skills.length}）</h2>
+          <div className="row">
+            <Button size="sm" isDisabled={uploading} onPress={pickZip}>{uploading ? '上传中…' : '上传技能包 (zip)'}</Button>
+            <Button size="sm" variant="flat" onPress={rescan}>重新扫描 skills/</Button>
           </div>
         </div>
-      ))}
-      <input ref={fileRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) doUploadZip(f); e.target.value = ''; }} />
-      <p className="muted" style={{ marginTop: 12 }}>把 SKILL.md 目录丢进 skills/ 再「重新扫描」即可扩展；或点「上传技能包」上传 zip 压缩包批量安装技能。</p>
-    </div>
+        {skills.map((s) => (
+          <div key={s.id} className="row justify-between py-2 border-b border-default-100">
+            <div>
+              <b>{s.name}</b> <Chip size="sm" variant="flat">{s.source}</Chip>
+              <div className="muted">{s.description}</div>
+            </div>
+          </div>
+        ))}
+        <input ref={fileRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) doUploadZip(f); e.target.value = ''; }} />
+        <p className="muted" style={{ marginTop: 12 }}>把 SKILL.md 目录丢进 skills/ 再「重新扫描」即可扩展；或点「上传技能包」上传 zip 压缩包批量安装技能。</p>
+      </CardBody>
+    </Card>
   );
 }

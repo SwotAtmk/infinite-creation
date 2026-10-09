@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { Button } from '@heroui/react';
 
 // 回到顶部：右下角悬浮按钮，滚动超过 400px 时显示
 export default function BackToTop() {
@@ -12,6 +13,14 @@ export default function BackToTop() {
   }, []);
   if (!show) return null;
   return (
-    <button className="back-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} title="回到顶部">↑</button>
+    <Button
+      isIconOnly
+      color="primary"
+      radius="full"
+      className="fixed right-6 bottom-6 z-[200] shadow-lg"
+      aria-label="回到顶部"
+      title="回到顶部"
+      onPress={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+    >↑</Button>
   );
 }

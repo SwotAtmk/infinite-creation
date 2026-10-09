@@ -28,6 +28,27 @@ export function fileUrl(projectId, rel) {
   return '/files/projects/' + projectId + '/' + rel;
 }
 
+// HeroUI Select 受控辅助：selectedKeys 传 Set，onSelectionChange 回传 Set
+export function selectKeys(v) {
+  return (v == null || v === '') ? new Set() : new Set([String(v)]);
+}
+export function pickKey(keys) {
+  if (keys == null) return '';
+  if (keys === 'all') return '';
+  if (keys instanceof Set) return keys.size ? String([...keys][0]) : '';
+  if (Array.isArray(keys)) return keys.length ? String(keys[0]) : '';
+  return String(keys);
+}
+
+// 状态字符串 -> HeroUI Chip 颜色
+export function statusColor(status) {
+  if (!status) return 'default';
+  if (status === 'done') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'running' || status === 'generating') return 'warning';
+  return 'default';
+}
+
 // 解析对白里的说话人名单（与后端 dialogueSpeakerNames 逻辑保持一致）
 export function dialogueSpeakers(dialogue) {
   if (!dialogue) return [];

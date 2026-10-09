@@ -43,6 +43,11 @@ export default function AssetsTab({ projectId, running = false }) {
   // 打开音色设计弹窗：显示/编辑声音限制（voice_desc，性别+年龄+质感）
   function designVoice(a) {
     setVoice({ id: a.id, name: a.name, voice_desc: a.voice_desc || '' });
+    // 异步拉取最新资产数据（LLM 可能在后台已重新生成音色并回写 voice_desc），
+    // 弹窗秒开（旧值），随后更新为最新限制与试听
+    api.get('/api/projects/' + projectId + '/assets/' + a.id).then((x) => {
+      setVoice((v) => (v && v.id === a.id ? { ...v, voice_desc: x.voice_desc || '', voice_ref: x.voice_ref || '', refreshAt: Date.now() } : v));
+    }).catch(() => {});
   }
   // 保存：仅把声音限制写入资产，不触发生成
   async function saveVoice() {
@@ -261,17 +266,18 @@ export default function AssetsTab({ projectId, running = false }) {
             <h2>设计音色 · {voice.name}</h2>
             <div className="row" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
               <div style={{ flex: '0 0 300px', minWidth: 260 }}>
-                {voiceAsset && (voiceAsset.audio_path || voiceAsset.voice_ref) ? (
+                {voiceAsset && (voiceAsset.audio_path || voiceAsset.voice_ref || voice.voice_ref) ? (
                   <div>
                     <div className="muted" style={{ marginBottom: 6 }}>当前音色试听（若有）</div>
-                    <audio controls src={fileUrl(projectId, voiceAsset.audio_path || voiceAsset.voice_ref)} style={{ width: '100%', borderRadius: 8 }} />
+                    <audio controls src={fileUrl(projectId, voiceAsset.audio_path || voice.voice_ref || voiceAsset.voice_ref)} style={{ width: '100%', borderRadius: 8 }} />
                   </div>
                 ) : (
                   <div className="thumb" style={{ width: '100%', minHeight: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>尚无音色样本</div>
                 )}
                 <div className="muted" style={{ marginTop: 10, fontSize: 12, lineHeight: 1.6 }}>
-                  声音限制会写入资产并作为 TTS 工作流的「声音描述」输入（性别 + 年龄段 + 音色质感）。
-                  朗读内容不做编辑，沿用当前文案。生成后可在素材卡片试听。
+                  {!voice.voice_desc?.trim()
+                    ? '尚未设置声音限制，生成时将由系统按角色性别/年龄自动推断。建议填写，避免男主生成女声。'
+                    : '声音限制会写入资产并作为 TTS 工作流的「声音描述」输入（性别 + 年龄段 + 音色质感）。朗读内容不做编辑，沿用当前文案。'}
                 </div>
               </div>
               <div style={{ flex: 1, minWidth: 320 }}>

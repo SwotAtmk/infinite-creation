@@ -6,7 +6,7 @@ import { CATEGORIES, fileUrl, selectKeys, pickKey, statusColor } from './shared'
 import { useToast } from '../toast';
 
 // ============ 资产库 ============
-export default function AssetsTab({ projectId, running = false, jobs = [], onRefresh }) {
+export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
   const toast = useToast();
   const [assets, setAssets] = useState([]);
   const [cat, setCat] = useState('');

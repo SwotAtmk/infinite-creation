@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(_req, { params }) {
   const { id } = await params;
-  const jobs = Jobs.list(id).filter((j) => j.status === 'running');
+  // 同时停「执行中」和「排队中」的任务：排队中的会被立即从队列摘除并中止（stopJob → cancelQueuedJob）
+  const jobs = Jobs.list(id).filter((j) => j.status === 'running' || j.status === 'queued');
   for (const j of jobs) stopJob(j.id);
   Projects.update(id, { status: 'idle' });
   // 主动打断 ComfyUI 当前正在执行的任务：仅靠 abortFlag 要等 generate() 轮询到

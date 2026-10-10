@@ -11,6 +11,9 @@ import ExportsTab from './ExportsTab';
 import ConsoleTab from './ConsoleTab';
 import EditProject from './EditProject';
 
+// 任务类型 → 中文名（任务队列面板显示用）
+const JOB_LABEL = { create: '生成流水线', regenerate: '重生成分镜', 'asset-image': '资产出图', 'voice-design': '音色设计', costume: '换装', age: '年龄变体', stage: '阶段运行', 'chapter-video': '章节视频重生成' };
+
 // ============ 项目工作区 ============
 export default function ProjectView({ id, onBack, initialTab = 'chapters', onTabChange }) {
   const toast = useToast();
@@ -39,7 +42,7 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
       ws.onmessage = (ev) => {
         try {
           const m = JSON.parse(ev.data);
-          if (m.projectId === id) { setEvents((e) => [...e.slice(-200), m]); if (m.status === 'done' || m.status === 'failed') loadProject(); }
+          if (m.projectId === id) { setEvents((e) => [...e.slice(-200), m]); if (m.status) loadProject(); }
         } catch {}
       };
       ws.onclose = () => {
@@ -65,7 +68,12 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
 
   async function run(chapter) { try { await api.post('/api/projects/' + id + '/run', chapter ? { chapter } : {}); setEvents([]); loadProject(); } catch (e) { toast.error(e.message); } }
   async function stop() { try { await api.post('/api/projects/' + id + '/stop'); loadProject(); } catch (e) { toast.error(e.message); } }
+  async function cancelJob(jid) { try { await api.post('/api/projects/' + id + '/jobs/' + jid + '/cancel'); loadProject(); } catch (e) { toast.error(e.message); } }
   const running = project?.status === 'running';
+  // 活动任务 = 正在执行 + 排队中（供任务队列面板与各 Tab 的按条目状态使用）
+  const activeJobs = jobs.filter((j) => j.status === 'running' || j.status === 'queued');
+  const runningCount = activeJobs.filter((j) => j.status === 'running').length;
+  const queuedCount = activeJobs.filter((j) => j.status === 'queued').length;
 
   if (!project) {
     return (
@@ -89,6 +97,28 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
         </div>
       </div>
 
+      {/* 任务队列：所有 Tab 通用，可见正在执行/排队中的任务，可逐个取消或全部停止 */}
+      {activeJobs.length > 0 && (
+        <Card>
+          <CardBody className="gap-2">
+            <div className="row justify-between items-center">
+              <b>任务队列（{runningCount} 执行中{queuedCount ? ' · ' + queuedCount + ' 排队中' : ''}）</b>
+              <Button size="sm" color="danger" variant="flat" onPress={stop}>■ 全部停止</Button>
+            </div>
+            <div className="flex flex-col gap-1">
+              {activeJobs.map((j) => (
+                <div key={j.id} className="row justify-between items-center">
+                  <span className="muted">
+                    {j.status === 'queued' ? '⏳ 排队中' : '▶ 执行中'} · {JOB_LABEL[j.type] || j.type}{j.phase ? ' · ' + j.phase : ''}
+                  </span>
+                  <Button size="sm" variant="light" onPress={() => cancelJob(j.id)}>取消</Button>
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
 <Tabs aria-label="项目工作区" selectedKey={pview} onSelectionChange={setTab} variant="underlined">
         <Tab key="chapters" title="📚 章节管理" />
         <Tab key="generate" title="🎬 生成内容" />
@@ -99,8 +129,8 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
 
       <div>
         {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} onRefresh={loadProject} />}
-        {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={running} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setTab('logs')} />}
-        {pview === 'assets' && <AssetsTab projectId={id} running={running} />}
+        {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={running} jobs={jobs} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setTab('logs')} />}
+        {pview === 'assets' && <AssetsTab projectId={id} running={running} jobs={jobs} />}
         {pview === 'exports' && <ExportsTab projectId={id} />}
         {pview === 'logs' && <ConsoleTab projectId={id} events={events} jobs={jobs} onRefresh={loadProject} />}
       </div>

@@ -10,7 +10,7 @@ import LoadingOverlay from './LoadingOverlay';
 const MATERIAL_FIELD = { character: 'character_ids', scene: 'scene_ids', prop: 'prop_ids', costume: 'costume_ids', age: 'age_ids', audio: 'audio_ids' };
 
 // ============ 分镜审查 ============
-export default function ShotsTab({ projectId, chapter: chapterProp = '', running = false, onRefresh }) {
+export default function ShotsTab({ projectId, chapter: chapterProp = '', running = false, jobs = [], onRefresh }) {
   const toast = useToast();
   const [shots, setShots] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -43,6 +43,8 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const doneShots = shown.filter((s) => s.video_path && s.status === 'done');
 
   const byId = (id) => assets.find((a) => a.id === id);
+  // 该分镜是否有正在执行/排队的任务（按 job.checkpoint.subject 关联），用于按钮显示与禁用
+  const activeJobFor = (subject) => jobs.find((j) => (j.status === 'running' || j.status === 'queued') && j.checkpoint && j.checkpoint.subject === subject);
   const asArr = (v) => Array.isArray(v) ? v : (typeof v === 'string' && v.trim() ? (() => { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } })() : []);
   const charsOf = (s) => asArr(s.character_ids).map(byId).filter(Boolean);
   const scenesOf = (s) => asArr(s.scene_ids).map(byId).filter(Boolean);
@@ -259,7 +261,14 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
               {s.error && <p className="m-0 text-danger">错误：{s.error}</p>}
               <div className="row" style={{ marginTop: 8 }}>
                 <Input size="sm" className="flex-1" placeholder="反馈（如：镜头拉近 / 让人物微笑），留空直接渲染；有内容会先问是否 LLM 改写" value={feedback[s.id] || ''} onChange={(e) => setFeedback({ ...feedback, [s.id]: e.target.value })} />
-                <Button size="sm" isDisabled={running} onPress={() => onRegen(s.id)}>↻ 重新生成</Button>
+                {(() => {
+                  const job = activeJobFor(s.id);
+                  return (
+                    <Button size="sm" isDisabled={!!job} onPress={() => onRegen(s.id)}>
+                      {job ? (job.status === 'queued' ? '⏳ 排队中' : '生成中…') : '↻ 重新生成'}
+                    </Button>
+                  );
+                })()}
               </div>
             </CardBody>
           </Card>

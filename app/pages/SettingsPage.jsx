@@ -76,6 +76,15 @@ export default function SettingsPage({ onBack }) {
           支持图片输入（多模态/视觉模型）
         </Checkbox>
         <p className="muted" style={{ marginTop: 4 }}>开启后，写分镜/图生图提示词时会把参考图提交给大模型；请确认所用模型确实支持视觉输入。</p>
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 'none' }}>提示词改写语言</span>
+          <Select size="sm" className="w-64" aria-label="提示词改写语言" selectedKeys={selectKeys(cfg.llm.rewriteLanguage || 'same')} onSelectionChange={(k) => setCfg({ ...cfg, llm: { ...cfg.llm, rewriteLanguage: pickKey(k) } })}>
+            <SelectItem key="same">与原提示词一致（推荐）</SelectItem>
+            <SelectItem key="zh">中文</SelectItem>
+            <SelectItem key="en">英文</SelectItem>
+          </Select>
+        </div>
+        <p className="muted" style={{ marginTop: 4 }}>在分镜里填反馈后选「仅 LLM 改写提示词」时，改写结果用什么语言。默认与原提示词保持一致，避免中英混杂。</p>
 
         <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>硬件适配</h3>
         <RadioGroup aria-label="硬件适配" orientation="horizontal" value={hwMode} onValueChange={switchMode}>

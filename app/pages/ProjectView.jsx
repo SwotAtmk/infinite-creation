@@ -24,6 +24,22 @@ const JOB_STATUS = {
   cancelled: { label: '已取消', color: 'default' },
   interrupted: { label: '已中断', color: 'default' },
 };
+// 任务时间显示：相对时间 + 用时
+function fmtRelative(ts) {
+  if (!ts) return '';
+  const d = Date.now() - ts;
+  if (d < 60000) return '刚刚';
+  if (d < 3600000) return Math.floor(d / 60000) + ' 分钟前';
+  if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
+  return new Date(ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function fmtDuration(a, b) {
+  if (!a || !b || b < a) return '';
+  const s = Math.round((b - a) / 1000);
+  if (s < 60) return s + ' 秒';
+  const m = Math.floor(s / 60); const r = s % 60;
+  return m + ' 分' + (r ? r + ' 秒' : '');
+}
 
 // ============ 项目工作区 ============
 export default function ProjectView({ id, onBack, initialTab = 'chapters', onTabChange }) {
@@ -175,11 +191,20 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
                   const st = JOB_STATUS[j.status] || { label: j.status, color: 'default' };
                   const isActive = j.status === 'running' || j.status === 'queued';
                   return (
-                    <div key={j.id} className="row justify-between items-center">
-                      <span className="muted" style={{ wordBreak: 'break-all' }}>
-                        <Chip size="sm" variant="flat" color={st.color} className="mr-1.5">{st.label}</Chip>
-                        {JOB_LABEL[j.type] || j.type}{j.phase ? ' · ' + j.phase : ''}{j.error ? ' — ' + j.error : ''}
-                      </span>
+                    <div key={j.id} className="row justify-between" style={{ gap: 8, alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ wordBreak: 'break-all' }}>
+                          <Chip size="sm" variant="flat" color={st.color} className="mr-1.5">{st.label}</Chip>
+                          <b>{JOB_LABEL[j.type] || j.type}</b>
+                          {j.subjectLabel ? <span className="muted"> · {j.subjectLabel}</span> : null}
+                        </div>
+                        <div className="muted" style={{ fontSize: 11, marginTop: 2, wordBreak: 'break-all' }}>
+                          {fmtRelative(j.startedAt)}
+                          {j.finishedAt ? ' · 用时 ' + fmtDuration(j.startedAt, j.finishedAt) : ''}
+                          {j.phase ? ' · ' + j.phase : ''}
+                          {j.error ? ' · ' + j.error : ''}
+                        </div>
+                      </div>
                       <div className="row" style={{ gap: 4, flexShrink: 0 }}>
                         {isActive && CANCELLABLE.has(j.type) && <Button size="sm" variant="light" onPress={() => cancelJob(j.id)}>取消</Button>}
                         <Button size="sm" variant="light" color="danger" onPress={() => removeJob(j.id)}>删除</Button>

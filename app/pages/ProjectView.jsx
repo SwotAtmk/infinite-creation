@@ -99,13 +99,31 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   async function run(chapter) { try { await api.post('/api/projects/' + id + '/run', chapter ? { chapter } : {}); setEvents([]); loadProject(); } catch (e) { toast.error(e.message); } }
   async function stop() { try { await api.post('/api/projects/' + id + '/stop'); loadProject(); } catch (e) { toast.error(e.message); } }
   async function cancelJob(jid) { try { await api.post('/api/projects/' + id + '/jobs/' + jid + '/cancel'); loadProject(); } catch (e) { toast.error(e.message); } }
+  // 删除任务记录（活动任务由后端先取消再删记录；不删素材/成片）
+  async function removeJob(jid) { try { await api.del('/api/projects/' + id + '/jobs/' + jid); loadProject(); } catch (e) { toast.error(e.message); } }
+  // 清除所有已结束任务记录（批量）
+  async function clearFinished() {
+    if (!(await toast.confirm('清除所有已结束的任务记录？（不影响素材/成片）', { danger: true }))) return;
+    try { const r = await api.del('/api/projects/' + id + '/jobs'); toast.success('已清除 ' + ((r && r.removed) || 0) + ' 条任务记录'); loadProject(); } catch (e) { toast.error(e.message); }
+  }
   const running = project?.status === 'running';
-  // 活动任务 = 正在执行 + 排队中（供任务队列面板与各 Tab 的按条目状态使用）
+  // 活动任务 = 执行中 + 排队中（供任务列表面板与各 Tab 的按条目状态使用）
   const activeJobs = jobs.filter((j) => j.status === 'running' || j.status === 'queued');
   const runningCount = activeJobs.filter((j) => j.status === 'running').length;
   const queuedCount = activeJobs.filter((j) => j.status === 'queued').length;
-  // 任务列表：展示全部任务（含已完成/失败，最新在前，最多 30 条）——用户提交的任何任务都应可见
-  const recentJobs = jobs.slice(0, 30);
+  const finishedJobs = jobs.filter((j) => j.status !== 'running' && j.status !== 'queued');
+  // 任务列表：活动任务置顶（执行中 → 排队中；排队按提交先后即队列顺序），其后是最近的已结束任务
+  const shownJobs = [
+    ...activeJobs.sort((a, b) => ((a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1)) || ((a.startedAt || 0) - (b.startedAt || 0))),
+    ...finishedJobs.slice(0, 20),
+  ];
+
+  // 有任务开始运行时自动展开任务列表，让「正在运行的任务 + 取消」立刻可见（用户手动关闭后不再强行打开）
+  const prevActiveRef = useRef(0);
+  useEffect(() => {
+    if (activeJobs.length > 0 && prevActiveRef.current === 0) setQueueOpen(true);
+    prevActiveRef.current = activeJobs.length;
+  }, [activeJobs.length]);
 
   if (!project) {
     return (
@@ -138,19 +156,22 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
         </div>
       </div>
 
-      {/* 任务列表：所有 Tab 通用，列出全部任务（含已完成/失败），活动任务可逐个取消或全部停止 */}
+      {/* 任务列表：所有 Tab 通用。活动任务置顶并可取消/删除，已结束任务可删除 */}
       {queueOpen && (
         <Card>
           <CardBody className="gap-2">
             <div className="row justify-between items-center">
-              <b>任务列表（{runningCount} 执行中{queuedCount ? ' · ' + queuedCount + ' 排队中' : ''} · 共 {jobs.length} 条）</b>
-              {activeJobs.length > 0 && <Button size="sm" color="danger" variant="flat" onPress={stop}>■ 全部停止</Button>}
+              <b>任务列表（{runningCount} 执行中{queuedCount ? ' · ' + queuedCount + ' 排队中' : ''}{finishedJobs.length ? ' · ' + finishedJobs.length + ' 已结束' : ''}）</b>
+              <div className="row" style={{ gap: 6 }}>
+                {activeJobs.length > 0 && <Button size="sm" color="danger" variant="flat" onPress={stop}>■ 全部停止</Button>}
+                {finishedJobs.length > 0 && <Button size="sm" variant="light" onPress={clearFinished}>清除已结束</Button>}
+              </div>
             </div>
-            {recentJobs.length === 0 ? (
+            {shownJobs.length === 0 ? (
               <div className="muted">暂无任务</div>
             ) : (
               <div className="flex flex-col gap-1">
-                {recentJobs.map((j) => {
+                {shownJobs.map((j) => {
                   const st = JOB_STATUS[j.status] || { label: j.status, color: 'default' };
                   const isActive = j.status === 'running' || j.status === 'queued';
                   return (
@@ -159,10 +180,16 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
                         <Chip size="sm" variant="flat" color={st.color} className="mr-1.5">{st.label}</Chip>
                         {JOB_LABEL[j.type] || j.type}{j.phase ? ' · ' + j.phase : ''}{j.error ? ' — ' + j.error : ''}
                       </span>
-                      {isActive && CANCELLABLE.has(j.type) && <Button size="sm" variant="light" onPress={() => cancelJob(j.id)}>取消</Button>}
+                      <div className="row" style={{ gap: 4, flexShrink: 0 }}>
+                        {isActive && CANCELLABLE.has(j.type) && <Button size="sm" variant="light" onPress={() => cancelJob(j.id)}>取消</Button>}
+                        <Button size="sm" variant="light" color="danger" onPress={() => removeJob(j.id)}>删除</Button>
+                      </div>
                     </div>
                   );
                 })}
+                {finishedJobs.length > shownJobs.length - activeJobs.length && (
+                  <div className="muted" style={{ fontSize: 12 }}>仅显示最近 {shownJobs.length - activeJobs.length} 条已结束记录（可「清除已结束」）</div>
+                )}
               </div>
             )}
           </CardBody>

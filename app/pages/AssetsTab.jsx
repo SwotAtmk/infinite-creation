@@ -50,7 +50,7 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
   async function regenVoice() {
     try {
       await api.patch('/api/projects/' + projectId + '/assets/' + voice.id, { voice_desc: voice.voice_desc });
-      await api.post('/api/projects/' + projectId + '/assets/' + voice.id + '/design-voice', { voice_description: voice.voice_desc || undefined });
+      await api.post('/api/projects/' + projectId + '/assets/' + voice.id + '/design-voice', { voice_description: voice.voice_desc });
       toast.success('已提交音色设计，稍后在「运行日志」查看进度');
       setVoice(null);
       load();

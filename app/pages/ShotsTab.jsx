@@ -78,6 +78,19 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       load();
     } catch (e) { toast.error(e.message); }
   }
+  // 「LLM 改写后渲染」：LLM 与 ComfyUI 单卡不能同时跑 → 拆成两个排队任务，
+  // ① 仅 LLM 改写提示词（render=false）→ ② 用改写后的提示词渲染（render=true，不带反馈）。
+  async function regenLlmThenRender(shotId) {
+    const fb = (feedback[shotId] || '').trim();
+    if (!fb) { regen(shotId, true); return; }
+    try {
+      await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb, render: false });
+      await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { render: true });
+      toast.success('已提交：先 LLM 改写提示词，随后自动渲染视频（两个排队任务）');
+      setFeedback({ ...feedback, [shotId]: '' });
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
   // 左侧反馈框有值 → 需要 LLM，弹窗确认；留空 → 直接渲染视频
   function onRegen(shotId) {
     if ((feedback[shotId] || '').trim()) setAsk(shotId);
@@ -294,10 +307,10 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
               <ModalHeader>检测到反馈，需要 LLM 改写提示词</ModalHeader>
               <ModalBody>
                 <p className="muted whitespace-pre-line">反馈：{ask ? feedback[ask] || '' : ''}</p>
-                <p>LLM 改写完成后，是否继续调用 ComfyUI 渲染视频？</p>
+                <p>将拆成两个排队任务（LLM 与 ComfyUI 单卡不能同时跑）：<br />① 先仅用 LLM 改写提示词 → ② 再用改写后的提示词渲染视频。</p>
               </ModalBody>
               <ModalFooter>
-                <Button size="sm" color="primary" onPress={() => { const id = ask; setAsk(null); regen(id, true); }}>是 · LLM 后渲染视频</Button>
+                <Button size="sm" color="primary" onPress={() => { const id = ask; setAsk(null); regenLlmThenRender(id); }}>是 · LLM 后渲染视频</Button>
                 <Button size="sm" variant="flat" onPress={() => { const id = ask; setAsk(null); regen(id, false); }}>否 · 只做 LLM，不渲染</Button>
                 <Button size="sm" variant="light" onPress={() => setAsk(null)}>取消</Button>
               </ModalFooter>

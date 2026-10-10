@@ -85,6 +85,20 @@ export default function SettingsPage({ onBack }) {
           </Select>
         </div>
         <p className="muted" style={{ marginTop: 4 }}>在分镜里填反馈后选「仅 LLM 改写提示词」时，改写结果用什么语言。默认与原提示词保持一致，避免中英混杂。</p>
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 'none' }}>改写最大输出（token）</span>
+          <Input size="sm" className="w-28" type="number" min={256} max={32768} value={String(cfg.llm.rewriteMaxTokens ?? 4000)} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, rewriteMaxTokens: Math.max(256, Math.min(32768, Math.round(Number(e.target.value) || 0))) } })} />
+          <span className="muted">默认 4000</span>
+        </div>
+        <p className="muted" style={{ marginTop: 4, lineHeight: 1.7 }}>
+          <b>作用：</b>分镜里填反馈后选「仅 LLM 改写提示词」时，允许大模型输出的最大长度（token）。
+          <br />
+          <b>为什么要设：</b>若本机模型是「思考型」（响应里带 reasoning_content），它会先思考再写正文，而<b>思考与正文共用这一份预算</b>；预算不足时正文会在开头就被截断——表现为改写只剩一两句、<code>__MINIMAX_H3_REF_N__</code> 参考占位符丢失，随后视频画面对不上。之所以「时好时坏」，是因为每次思考长度都不同。
+          <br />
+          <b>建议：</b>默认 4000 约可容纳「思考 ~2000 字 + 正文 ~500 字」。调大更不容易被截断，但更慢、更吃显存；调小会频繁触发「输出被截断」而重试甚至失败（范围 256–32768）。
+          <br />
+          <b>何时调：</b>任务报「LLM 改写提示词不可用（LLM 输出被截断（达到长度上限））」时，优先调大此值。
+        </p>
 
         <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>硬件适配</h3>
         <RadioGroup aria-label="硬件适配" orientation="horizontal" value={hwMode} onValueChange={switchMode}>

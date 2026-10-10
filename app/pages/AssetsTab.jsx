@@ -6,7 +6,7 @@ import { CATEGORIES, fileUrl, selectKeys, pickKey, statusColor } from './shared'
 import { useToast } from '../toast';
 
 // ============ 资产库 ============
-export default function AssetsTab({ projectId, running = false, jobs = [] }) {
+export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
   const toast = useToast();
   const [assets, setAssets] = useState([]);
   const [cat, setCat] = useState('');
@@ -54,6 +54,7 @@ export default function AssetsTab({ projectId, running = false, jobs = [] }) {
       toast.success('已提交音色设计，稍后在「运行日志」查看进度');
       setVoice(null);
       load();
+      onRefresh && onRefresh();
     } catch (e) { toast.error(e.message); }
   }
   function pickUpload(a) { setUploadTarget(a.id); if (fileRef.current) fileRef.current.click(); }
@@ -86,6 +87,7 @@ export default function AssetsTab({ projectId, running = false, jobs = [] }) {
       await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/generate', { mode: mode || 't2i' });
       toast.success((mode === 'i2i' ? '已提交重新生成（图生图，基于现有图）' : '已提交生成图片') + '，稍后在「运行日志」查看进度');
       load();
+      onRefresh && onRefresh();
     } catch (e) { toast.error(e.message); }
   }
   async function changeOutfit(a) {
@@ -96,6 +98,7 @@ export default function AssetsTab({ projectId, running = false, jobs = [] }) {
       await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/change-outfit', { outfit });
       toast.success('已提交换装（图生图），稍后在「运行日志」查看进度');
       load();
+      onRefresh && onRefresh();
     } catch (e) { toast.error(e.message); }
   }
   async function changeAge(a) {
@@ -106,6 +109,7 @@ export default function AssetsTab({ projectId, running = false, jobs = [] }) {
       await api.post('/api/projects/' + projectId + '/assets/' + a.id + '/change-age', { age });
       toast.success('已提交年龄变化（图生图），稍后在「运行日志」查看进度');
       load();
+      onRefresh && onRefresh();
     } catch (e) { toast.error(e.message); }
   }
   async function saveEdit() {

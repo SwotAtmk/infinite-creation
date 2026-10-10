@@ -54,12 +54,21 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   const [queueOpen, setQueueOpen] = useState(false);
   // 任务终态通知去重（jobId+status），避免同一任务重复广播导致刷屏
   const notifiedRef = useRef(new Set());
+  // 任务列表自动展开：首次加载只登记任务 id；此后一有新任务出现就展开，确保提交后立刻可见
+  const firstJobsLoadRef = useRef(true);
+  const seenJobIdsRef = useRef(new Set());
+  // 已被用户删除的任务 id：其运行器的终态 WS 事件不再弹通知（任务记录已删）
+  const removedJobIdsRef = useRef(new Set());
   const [chapters, setChapters] = useState([]);
   const [cursor, setCursor] = useState(0);
 
   const loadProject = useCallback(async () => {
     const [p, j, c] = await Promise.all([api.get('/api/projects/' + id), api.get('/api/projects/' + id + '/jobs'), api.get('/api/projects/' + id + '/chapters')]);
     setProject(p); setJobs(j); setChapters(c); setCursor((x) => (x < 0 ? 0 : Math.min(x, Math.max(c.length - 1, 0))));
+    // 出现新任务就把任务列表展开，让用户提交后立刻看到（无论它瞬间完成/失败）
+    if (firstJobsLoadRef.current) firstJobsLoadRef.current = false;
+    else if (j.some((x) => !seenJobIdsRef.current.has(x.id))) setQueueOpen(true);
+    seenJobIdsRef.current = new Set(j.map((x) => x.id));
   }, [id]);
 
   // WS 自动重连：断开后指数退避重连（1s→2s→…→15s），重连成功先整页刷新一次，
@@ -72,6 +81,7 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
       if (st !== 'done' && st !== 'failed' && st !== 'cancelled') return;
       if (m.type === 'llm') return; // 素材命名等 LLM 内联子任务不弹通知，避免刷屏（仍出现在任务列表）
       const key = m.jobId + ':' + st;
+      if (removedJobIdsRef.current.has(m.jobId)) return; // 任务已被删除，不再通知
       if (notifiedRef.current.has(key)) return;
       notifiedRef.current.add(key);
       const label = JOB_LABEL[m.type] || m.type || '任务';
@@ -87,7 +97,7 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
           const m = JSON.parse(ev.data);
           if (m.projectId !== id) return;
           setEvents((e) => [...e.slice(-200), m]);
-          if (m.status) loadProject();
+          loadProject(); // 任何进度/状态消息都刷新（任务创建/进度不带 status，也要让列表即时更新）
           notify(m);
         } catch {}
       };
@@ -116,11 +126,14 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   async function stop() { try { await api.post('/api/projects/' + id + '/stop'); loadProject(); } catch (e) { toast.error(e.message); } }
   async function cancelJob(jid) { try { await api.post('/api/projects/' + id + '/jobs/' + jid + '/cancel'); loadProject(); } catch (e) { toast.error(e.message); } }
   // 删除任务记录（活动任务由后端先取消再删记录；不删素材/成片）
-  async function removeJob(jid) { try { await api.del('/api/projects/' + id + '/jobs/' + jid); loadProject(); } catch (e) { toast.error(e.message); } }
+  async function removeJob(jid) { removedJobIdsRef.current.add(jid); try { await api.del('/api/projects/' + id + '/jobs/' + jid); loadProject(); } catch (e) { toast.error(e.message); } }
   // 清除所有已结束任务记录（批量）
   async function clearFinished() {
     if (!(await toast.confirm('清除所有已结束的任务记录？（不影响素材/成片）', { danger: true }))) return;
-    try { const r = await api.del('/api/projects/' + id + '/jobs'); toast.success('已清除 ' + ((r && r.removed) || 0) + ' 条任务记录'); loadProject(); } catch (e) { toast.error(e.message); }
+    try {
+      for (const j of jobs) if (j.status !== 'running' && j.status !== 'queued') removedJobIdsRef.current.add(j.id);
+      const r = await api.del('/api/projects/' + id + '/jobs'); toast.success('已清除 ' + ((r && r.removed) || 0) + ' 条任务记录'); loadProject();
+    } catch (e) { toast.error(e.message); }
   }
   const running = project?.status === 'running';
   // 活动任务 = 执行中 + 排队中（供任务列表面板与各 Tab 的按条目状态使用）
@@ -232,7 +245,7 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
       <div>
         {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} onRefresh={loadProject} />}
         {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={running} jobs={jobs} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setTab('logs')} />}
-        {pview === 'assets' && <AssetsTab projectId={id} running={running} jobs={jobs} />}
+        {pview === 'assets' && <AssetsTab projectId={id} jobs={jobs} onRefresh={loadProject} />}
         {pview === 'exports' && <ExportsTab projectId={id} />}
         {pview === 'logs' && <ConsoleTab projectId={id} events={events} jobs={jobs} onRefresh={loadProject} />}
       </div>

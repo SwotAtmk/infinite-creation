@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Button, Chip, Tabs, Tab, Card, CardBody, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
 import { statusColor } from './shared';
@@ -24,6 +24,9 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   const [events, setEvents] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  // 任务终态通知去重（jobId+status），避免同一任务重复广播导致刷屏
+  const notifiedRef = useRef(new Set());
   const [chapters, setChapters] = useState([]);
   const [cursor, setCursor] = useState(0);
 
@@ -36,13 +39,28 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   // 否则 ComfyUI/服务重启一次，前端就永远停在旧状态，只能靠手刷页面恢复。
   useEffect(() => {
     let closed = false; let ws = null; let timer = null; let delay = 1000;
+    // 任务状态通知：完成 / 失败 / 取消时弹 toast（去重）
+    const notify = (m) => {
+      const st = m.status;
+      if (st !== 'done' && st !== 'failed' && st !== 'cancelled') return;
+      const key = m.jobId + ':' + st;
+      if (notifiedRef.current.has(key)) return;
+      notifiedRef.current.add(key);
+      const label = JOB_LABEL[m.type] || m.type || '任务';
+      if (st === 'done') toast.success('✅ 任务完成：' + label);
+      else if (st === 'failed') toast.error('❌ 任务失败：' + label + (m.detail ? ' — ' + String(m.detail).slice(0, 80) : ''));
+      else toast.info('⏹ 任务已取消：' + label);
+    };
     const connect = () => {
       ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
       ws.onopen = () => { delay = 1000; loadProject(); };
       ws.onmessage = (ev) => {
         try {
           const m = JSON.parse(ev.data);
-          if (m.projectId === id) { setEvents((e) => [...e.slice(-200), m]); if (m.status) loadProject(); }
+          if (m.projectId !== id) return;
+          setEvents((e) => [...e.slice(-200), m]);
+          if (m.status) loadProject();
+          notify(m);
         } catch {}
       };
       ws.onclose = () => {
@@ -93,28 +111,41 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
           <Button size="sm" variant="flat" onPress={onBack}>← 返回</Button>
           <h2 className="text-lg font-semibold m-0">{project.name}</h2>
           <Chip size="sm" variant="flat" color={statusColor(project.status)}>{project.status}</Chip>
+          {/* 任务队列入口：常驻徽标，显示执行中+排队中任务数，点击展开/收起队列 */}
+          <Button
+            size="sm"
+            variant={queueOpen ? 'solid' : 'flat'}
+            color={activeJobs.length > 0 ? 'warning' : 'default'}
+            onPress={() => setQueueOpen((v) => !v)}
+          >
+            📋 任务 {activeJobs.length}
+          </Button>
           <Button size="sm" variant="flat" onPress={() => setEditOpen(true)}>⚙ 项目设置</Button>
         </div>
       </div>
 
       {/* 任务队列：所有 Tab 通用，可见正在执行/排队中的任务，可逐个取消或全部停止 */}
-      {activeJobs.length > 0 && (
+      {queueOpen && (
         <Card>
           <CardBody className="gap-2">
             <div className="row justify-between items-center">
               <b>任务队列（{runningCount} 执行中{queuedCount ? ' · ' + queuedCount + ' 排队中' : ''}）</b>
-              <Button size="sm" color="danger" variant="flat" onPress={stop}>■ 全部停止</Button>
+              {activeJobs.length > 0 && <Button size="sm" color="danger" variant="flat" onPress={stop}>■ 全部停止</Button>}
             </div>
-            <div className="flex flex-col gap-1">
-              {activeJobs.map((j) => (
-                <div key={j.id} className="row justify-between items-center">
-                  <span className="muted">
-                    {j.status === 'queued' ? '⏳ 排队中' : '▶ 执行中'} · {JOB_LABEL[j.type] || j.type}{j.phase ? ' · ' + j.phase : ''}
-                  </span>
-                  <Button size="sm" variant="light" onPress={() => cancelJob(j.id)}>取消</Button>
-                </div>
-              ))}
-            </div>
+            {activeJobs.length === 0 ? (
+              <div className="muted">暂无执行中 / 排队中的任务</div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {activeJobs.map((j) => (
+                  <div key={j.id} className="row justify-between items-center">
+                    <span className="muted">
+                      {j.status === 'queued' ? '⏳ 排队中' : '▶ 执行中'} · {JOB_LABEL[j.type] || j.type}{j.phase ? ' · ' + j.phase : ''}
+                    </span>
+                    <Button size="sm" variant="light" onPress={() => cancelJob(j.id)}>取消</Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardBody>
         </Card>
       )}

@@ -11,8 +11,19 @@ import ExportsTab from './ExportsTab';
 import ConsoleTab from './ConsoleTab';
 import EditProject from './EditProject';
 
-// 任务类型 → 中文名（任务队列面板显示用）
-const JOB_LABEL = { create: '生成流水线', regenerate: '重生成分镜', 'asset-image': '资产出图', 'voice-design': '音色设计', costume: '换装', age: '年龄变体', stage: '阶段运行', 'chapter-video': '章节视频重生成' };
+// 任务类型 → 中文名（任务列表显示用）
+const JOB_LABEL = { create: '生成流水线', regenerate: '重生成分镜', 'asset-image': '资产出图', 'voice-design': '音色设计', costume: '换装', age: '年龄变体', stage: '阶段运行', 'chapter-video': '章节视频重生成', llm: '素材命名（LLM）', export: '导出成片' };
+// 可取消的任务类型（走队列/闸门，能被打断）；llm/export 是请求内同步任务，无取消入口
+const CANCELLABLE = new Set(['create', 'regenerate', 'asset-image', 'voice-design', 'costume', 'age', 'stage', 'chapter-video']);
+// 任务状态 → 标签与颜色
+const JOB_STATUS = {
+  running: { label: '执行中', color: 'primary' },
+  queued: { label: '排队中', color: 'warning' },
+  done: { label: '完成', color: 'success' },
+  failed: { label: '失败', color: 'danger' },
+  cancelled: { label: '已取消', color: 'default' },
+  interrupted: { label: '已中断', color: 'default' },
+};
 
 // ============ 项目工作区 ============
 export default function ProjectView({ id, onBack, initialTab = 'chapters', onTabChange }) {
@@ -43,6 +54,7 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
     const notify = (m) => {
       const st = m.status;
       if (st !== 'done' && st !== 'failed' && st !== 'cancelled') return;
+      if (m.type === 'llm') return; // 素材命名等 LLM 内联子任务不弹通知，避免刷屏（仍出现在任务列表）
       const key = m.jobId + ':' + st;
       if (notifiedRef.current.has(key)) return;
       notifiedRef.current.add(key);
@@ -92,6 +104,8 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   const activeJobs = jobs.filter((j) => j.status === 'running' || j.status === 'queued');
   const runningCount = activeJobs.filter((j) => j.status === 'running').length;
   const queuedCount = activeJobs.filter((j) => j.status === 'queued').length;
+  // 任务列表：展示全部任务（含已完成/失败，最新在前，最多 30 条）——用户提交的任何任务都应可见
+  const recentJobs = jobs.slice(0, 30);
 
   if (!project) {
     return (
@@ -124,26 +138,31 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
         </div>
       </div>
 
-      {/* 任务队列：所有 Tab 通用，可见正在执行/排队中的任务，可逐个取消或全部停止 */}
+      {/* 任务列表：所有 Tab 通用，列出全部任务（含已完成/失败），活动任务可逐个取消或全部停止 */}
       {queueOpen && (
         <Card>
           <CardBody className="gap-2">
             <div className="row justify-between items-center">
-              <b>任务队列（{runningCount} 执行中{queuedCount ? ' · ' + queuedCount + ' 排队中' : ''}）</b>
+              <b>任务列表（{runningCount} 执行中{queuedCount ? ' · ' + queuedCount + ' 排队中' : ''} · 共 {jobs.length} 条）</b>
               {activeJobs.length > 0 && <Button size="sm" color="danger" variant="flat" onPress={stop}>■ 全部停止</Button>}
             </div>
-            {activeJobs.length === 0 ? (
-              <div className="muted">暂无执行中 / 排队中的任务</div>
+            {recentJobs.length === 0 ? (
+              <div className="muted">暂无任务</div>
             ) : (
               <div className="flex flex-col gap-1">
-                {activeJobs.map((j) => (
-                  <div key={j.id} className="row justify-between items-center">
-                    <span className="muted">
-                      {j.status === 'queued' ? '⏳ 排队中' : '▶ 执行中'} · {JOB_LABEL[j.type] || j.type}{j.phase ? ' · ' + j.phase : ''}
-                    </span>
-                    <Button size="sm" variant="light" onPress={() => cancelJob(j.id)}>取消</Button>
-                  </div>
-                ))}
+                {recentJobs.map((j) => {
+                  const st = JOB_STATUS[j.status] || { label: j.status, color: 'default' };
+                  const isActive = j.status === 'running' || j.status === 'queued';
+                  return (
+                    <div key={j.id} className="row justify-between items-center">
+                      <span className="muted" style={{ wordBreak: 'break-all' }}>
+                        <Chip size="sm" variant="flat" color={st.color} className="mr-1.5">{st.label}</Chip>
+                        {JOB_LABEL[j.type] || j.type}{j.phase ? ' · ' + j.phase : ''}{j.error ? ' — ' + j.error : ''}
+                      </span>
+                      {isActive && CANCELLABLE.has(j.type) && <Button size="sm" variant="light" onPress={() => cancelJob(j.id)}>取消</Button>}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardBody>

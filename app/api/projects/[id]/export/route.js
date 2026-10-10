@@ -1,6 +1,8 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import { Shots, Projects, resolveProjectPath, slugify, uid, mergeVideos } from '@/lib/core/index.js';
+import { runInlineJob } from '@/lib/agent/index.js';
+import { broadcast } from '@/lib/ws.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +20,11 @@ export async function POST(req, { params }) {
     const p = Projects.get(id);
     const base = chapter ? slugify(p.name) + '_' + slugify(chapter) : slugify(p.name);
     const outRel = 'exports/' + base + '_' + uid().slice(0, 8) + '.mp4';
-    await mergeVideos(inputs, resolveProjectPath(id, outRel), {});
+    // 记成一条任务，使其出现在任务列表（ffmpeg 拼接可能耗时数十秒）
+    await runInlineJob(
+      { projectId: id, type: 'export', checkpoint: { subject: chapter || '' }, onProgress: (p) => broadcast(p) },
+      () => mergeVideos(inputs, resolveProjectPath(id, outRel), {}),
+    );
     return NextResponse.json({ export_path: outRel, url: '/files/projects/' + id + '/' + outRel, shots: done.length, chapter });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });

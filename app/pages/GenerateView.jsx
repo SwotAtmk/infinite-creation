@@ -8,7 +8,7 @@ import ShotsTab from './ShotsTab';
 import LoadingOverlay from './LoadingOverlay';
 
 // ============ 页2 · 生成内容 ============
-export default function GenerateView({ projectId, chapters, cursor, setCursor, running, onRun, onStop, onRefresh, onGoLogs }) {
+export default function GenerateView({ projectId, chapters, cursor, setCursor, running, jobs = [], onRun, onStop, onRefresh, onGoLogs }) {
   const toast = useToast();
   const cur = chapters[cursor] || chapters[0] || null;
   // 分阶段运行：待办数由后端算（不启 LLM），勾选后单独起一批
@@ -85,7 +85,8 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
     setBusy(mode === 'storyboard' ? '正在提交重新生成分镜…' : '正在提交重新生成视频…');
     try {
       await api.post('/api/projects/' + projectId + '/chapters/' + cur.id + '/regenerate' + (mode === 'storyboard' ? '?mode=full' : ''));
-      submittedToast('已重新生成「' + cur.title + '」' + (mode === 'storyboard' ? '分镜' : '视频'));
+      submittedToast('已重新生成「' + cur.title + '」' + (mode === 'storyboard' ? '分镜' : '视频') + '并立即开始，进度可在「运行日志」查看');
+      onRefresh();
     } catch (e) { toast.error(e.message); }
     finally { setBusy(null); }
   }
@@ -152,7 +153,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
           )}
         </CardBody>
       </Card>
-      {cur && <ShotsTab projectId={projectId} chapter={cur.title} running={running} onRefresh={onRefresh} />}
+      {cur && <ShotsTab projectId={projectId} chapter={cur.title} running={running} jobs={jobs} onRefresh={onRefresh} />}
       <LoadingOverlay show={!!busy} text={busy} />
     </div>
   );

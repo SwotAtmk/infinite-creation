@@ -6,7 +6,7 @@ import { CATEGORIES, fileUrl, selectKeys, pickKey, statusColor } from './shared'
 import { useToast } from '../toast';
 
 // ============ 资产库 ============
-export default function AssetsTab({ projectId, running = false }) {
+export default function AssetsTab({ projectId, running = false, jobs = [] }) {
   const toast = useToast();
   const [assets, setAssets] = useState([]);
   const [cat, setCat] = useState('');
@@ -25,6 +25,8 @@ export default function AssetsTab({ projectId, running = false }) {
   const agesOfChar = (charId) => assets.filter((a) => a.category === 'age' && a.parent_id === charId);
   const editingAsset = edit ? assets.find((x) => x.id === edit.id) : null;
   const voiceAsset = voice ? assets.find((x) => x.id === voice.id) : null;
+  // 该资产是否有正在执行/排队的任务（按 job.checkpoint.subject 关联），用于按钮显示与禁用
+  const activeJobFor = (subject) => jobs.find((j) => (j.status === 'running' || j.status === 'queued') && j.checkpoint && j.checkpoint.subject === subject);
 
   // 打开音色设计弹窗：显示/编辑声音限制（voice_desc，性别+年龄+质感）
   function designVoice(a) {
@@ -150,6 +152,7 @@ export default function AssetsTab({ projectId, running = false }) {
                   <b>{a.name}</b>
                   <div className="muted">{a.category}{(a.category === 'costume' || a.category === 'age') && a.parent_id ? ' · 来自「' + (assets.find((x) => x.id === a.parent_id)?.name || a.parent_id) + '」' : ''}</div>
                   <Chip size="sm" variant="flat" color={statusColor(a.status)}>{a.status}</Chip>
+                  {activeJobFor(a.id) && <Chip size="sm" variant="flat" color="warning">{activeJobFor(a.id).status === 'queued' ? '排队中' : '生成中'}</Chip>}
                   {(a.voice_ref || a.audio_path) && (a.image_path || a.video_path) && (
                     <>
                       <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>音色试听</div>
@@ -159,13 +162,13 @@ export default function AssetsTab({ projectId, running = false }) {
                   <div className="row" style={{ marginTop: 6, gap: 4 }}>
                     {['character', 'scene', 'prop', 'other'].includes(a.category) && (
                       <>
-                        <Button size="sm" variant="flat" isDisabled={running} onPress={() => regenImage(a, 't2i')}>生成图</Button>
-                        {a.image_path && <Button size="sm" variant="flat" isDisabled={running} onPress={() => regenImage(a, 'i2i')} title="基于现有图重新生成（图生图，保持一致性）">重新生成</Button>}
+                        <Button size="sm" variant="flat" isDisabled={!!activeJobFor(a.id)} onPress={() => regenImage(a, 't2i')}>生成图</Button>
+                        {a.image_path && <Button size="sm" variant="flat" isDisabled={!!activeJobFor(a.id)} onPress={() => regenImage(a, 'i2i')} title="基于现有图重新生成（图生图，保持一致性）">重新生成</Button>}
                       </>
                     )}
-                    {a.category === 'character' && a.image_path && <Button size="sm" variant="flat" isDisabled={running} onPress={() => changeOutfit(a)} title="基于角色图用图生图生成一套新服装">换装</Button>}
-                    {a.category === 'character' && a.image_path && <Button size="sm" variant="flat" isDisabled={running} onPress={() => changeAge(a)} title="基于角色图用图生图生成同一人物的不同年龄/时期样貌">年龄</Button>}
-                    {(a.category === 'character' || a.category === 'voice') && <Button size="sm" variant="flat" isDisabled={running} onPress={() => designVoice(a)}>设计音色</Button>}
+                    {a.category === 'character' && a.image_path && <Button size="sm" variant="flat" isDisabled={!!activeJobFor(a.id)} onPress={() => changeOutfit(a)} title="基于角色图用图生图生成一套新服装">换装</Button>}
+                    {a.category === 'character' && a.image_path && <Button size="sm" variant="flat" isDisabled={!!activeJobFor(a.id)} onPress={() => changeAge(a)} title="基于角色图用图生图生成同一人物的不同年龄/时期样貌">年龄</Button>}
+                    {(a.category === 'character' || a.category === 'voice') && <Button size="sm" variant="flat" isDisabled={!!activeJobFor(a.id)} onPress={() => designVoice(a)}>设计音色</Button>}
                     <Button size="sm" variant="flat" onPress={() => pickUpload(a)}>上传/替换</Button>
                     <Button size="sm" variant="flat" onPress={() => setEdit({ id: a.id, name: a.name, description: a.description || '', prompt: a.prompt || '' })}>编辑</Button>
                     <Button size="sm" variant="flat" color="danger" onPress={() => del(a)}>删除</Button>
@@ -296,8 +299,8 @@ export default function AssetsTab({ projectId, running = false }) {
                     />
                     <div className="row mt-4 justify-end">
                       <Button variant="flat" onPress={() => setVoice(null)}>取消</Button>
-                      <Button variant="flat" isDisabled={running} onPress={saveVoice}>保存</Button>
-                      <Button color="primary" isDisabled={running} onPress={regenVoice}>重新生成</Button>
+                      <Button variant="flat" onPress={saveVoice}>保存</Button>
+                      <Button color="primary" isDisabled={!!activeJobFor(voice.id)} onPress={regenVoice}>重新生成</Button>
                     </div>
                   </div>
                 </div>

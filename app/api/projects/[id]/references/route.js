@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ReferenceImages, Assets, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger } from '@/lib/core/index.js';
+import { runInlineJob } from '@/lib/agent/index.js';
+import { broadcast } from '@/lib/ws.js';
 import { PROJECT_ASSET_SUBDIRS } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
@@ -69,8 +71,16 @@ export async function POST(req, { params }) {
   }
 
   ensureProjectDirs(id);
-  // 视觉分析命名：优先用 LLM 生成的素材名，失败/未配置时回退原文件名
-  const analysis = await analyzeUploadedImage(buf, extName);
+  // 视觉分析命名：优先用 LLM 生成的素材名，失败/未配置时回退原文件名。
+  // 仅在确实会调用 LLM（配置了 vision + apiKey）时记一条任务，使其出现在任务列表。
+  const cfgForAnalyze = loadConfig();
+  const willAnalyze = !!(cfgForAnalyze.llm?.vision && cfgForAnalyze.llm?.apiKey);
+  const analysis = willAnalyze
+    ? await runInlineJob(
+        { projectId: id, type: 'llm', checkpoint: { subject: name || orig || 'reference' }, onProgress: (p) => broadcast(p) },
+        () => analyzeUploadedImage(buf, extName),
+      )
+    : null;
   const baseName = (analysis?.name || name || (orig && path.basename(orig, extName)) || 'reference').trim();
   // 分类：用户显式选了非「其他」时尊重用户；否则采纳 LLM 推断（默认 other）
   const analyzedCategory = (analysis && analysis.category) || 'other';

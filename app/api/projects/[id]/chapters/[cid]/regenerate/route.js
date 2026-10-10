@@ -1,7 +1,7 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import { Chapters, Shots } from '@/lib/core/index.js';
-import { startCreateJob, startChapterVideoJob, assertRenderSeparation } from '@/lib/agent/index.js';
+import { startCreateJob, startChapterVideoJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
 
 export const dynamic = 'force-dynamic';
@@ -17,8 +17,6 @@ export async function POST(req, { params }) {
   const mode = url.searchParams.get('mode') === 'full' ? 'full' : 'videos';
   const ch = Chapters.get(cid);
   if (!ch || ch.project_id !== id) return NextResponse.json({ error: '章节不存在' }, { status: 404 });
-  // 渲染任务提交前校验 LLM/ComfyUI 分离
-  try { assertRenderSeparation(); } catch (e) { return NextResponse.json({ error: e.message }, { status: 400 }); }
   const shots = Shots.list(id).filter((s) => s.chapter === ch.title);
   if (mode === 'videos') {
     const job = startChapterVideoJob({ projectId: id, chapter: ch.title, onProgress: (patch) => broadcast(patch) });

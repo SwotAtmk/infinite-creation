@@ -54,12 +54,19 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   const [queueOpen, setQueueOpen] = useState(false);
   // 任务终态通知去重（jobId+status），避免同一任务重复广播导致刷屏
   const notifiedRef = useRef(new Set());
+  // 任务列表自动展开：首次加载只登记任务 id；此后一有新任务出现就展开，确保提交后立刻可见
+  const firstJobsLoadRef = useRef(true);
+  const seenJobIdsRef = useRef(new Set());
   const [chapters, setChapters] = useState([]);
   const [cursor, setCursor] = useState(0);
 
   const loadProject = useCallback(async () => {
     const [p, j, c] = await Promise.all([api.get('/api/projects/' + id), api.get('/api/projects/' + id + '/jobs'), api.get('/api/projects/' + id + '/chapters')]);
     setProject(p); setJobs(j); setChapters(c); setCursor((x) => (x < 0 ? 0 : Math.min(x, Math.max(c.length - 1, 0))));
+    // 出现新任务就把任务列表展开，让用户提交后立刻看到（无论它瞬间完成/失败）
+    if (firstJobsLoadRef.current) firstJobsLoadRef.current = false;
+    else if (j.some((x) => !seenJobIdsRef.current.has(x.id))) setQueueOpen(true);
+    seenJobIdsRef.current = new Set(j.map((x) => x.id));
   }, [id]);
 
   // WS 自动重连：断开后指数退避重连（1s→2s→…→15s），重连成功先整页刷新一次，
@@ -87,7 +94,7 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
           const m = JSON.parse(ev.data);
           if (m.projectId !== id) return;
           setEvents((e) => [...e.slice(-200), m]);
-          if (m.status) loadProject();
+          loadProject(); // 任何进度/状态消息都刷新（任务创建/进度不带 status，也要让列表即时更新）
           notify(m);
         } catch {}
       };
@@ -232,7 +239,7 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
       <div>
         {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} onRefresh={loadProject} />}
         {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={running} jobs={jobs} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setTab('logs')} />}
-        {pview === 'assets' && <AssetsTab projectId={id} running={running} jobs={jobs} />}
+        {pview === 'assets' && <AssetsTab projectId={id} running={running} jobs={jobs} onRefresh={loadProject} />}
         {pview === 'exports' && <ExportsTab projectId={id} />}
         {pview === 'logs' && <ConsoleTab projectId={id} events={events} jobs={jobs} onRefresh={loadProject} />}
       </div>

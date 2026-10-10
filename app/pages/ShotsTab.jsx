@@ -76,6 +76,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb || undefined, render });
       toast.success(render ? '已提交重生成' : '已提交：仅 LLM 改写提示词，不渲染视频');
       load();
+      onRefresh && onRefresh();
     } catch (e) { toast.error(e.message); }
   }
   // 左侧反馈框有值 → 需要 LLM，弹窗确认；留空 → 直接渲染视频

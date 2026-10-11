@@ -10,3 +10,5 @@ vendor/openclaude/dist/
 .pnpm-store/
 .idea/
 .trae/
+__pycache__/
+*.pyc

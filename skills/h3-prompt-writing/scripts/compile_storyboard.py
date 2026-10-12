@@ -813,7 +813,7 @@ def main(argv=None):
             for i in all_issues:
                 _safe_print("[%s] %s: %s" % (i["level"].upper(), i["rule"], i["msg"]))
         else:
-            _safe_print("\n门禁通过：零指代 / 时长预算 / 字段完整性 / 逐段不重复 全部合规。")
+            _safe_print("\n门禁通过：零指代 / 时长预算 / 字段完整性 / 运镜可执行 / 逐段不重复 / 剧情保真锁 全部合规。")
 
     # ---- 落盘 ----
     if args.out:

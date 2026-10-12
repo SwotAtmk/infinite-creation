@@ -27,8 +27,9 @@
 #   #    该文件已按「测试素材不入库」策略移出版本库，本地跑时用 --example-file 指过去：
 #   python gen_storyboard_llm.py --novel-file novel.md --out sb.json \
 #       --example-file ../../docs/test/storyboard.example.json
-#     （样例决定模型的输出深度：缺样例时输出会变长，撞上本地 27B 的 ~7.05k token
-#      生成上限而 JSON 不闭合；带样例可稳定收尾。）
+#     （样例影响的是输出深度/风格——实测带样例每镜 2 条 beats、无样例 1 条——
+#      不是长度；单次停机点由模型自身随机早停决定（实测 1k~7k token），与样例无关。
+#      无样例同样可用：初次截断后靠「干净重试」在 2 次尝试内闭合。）
 # ========================================
 
 import argparse
@@ -331,7 +332,7 @@ def build_parser():
     p.add_argument("--seg-max", type=float, default=5.0, help="单镜时长上限（秒，避免编译器自动拆分）")
     p.add_argument("--art-style", default=None, help="强制 art_style_prefix（不给则让模型按原文定）")
     p.add_argument("--example-file", default=None,
-                   help="few-shot 样式样例（默认 references/storyboard.example.json；不存在则不用样例）")
+                   help="few-shot 样式样例（默认 references/storyboard.example.json；不存在则不用样例）。影响输出深度/风格（beats 粒度），不影响总长度")
     p.add_argument("--temperature", type=float, default=0.6)
     p.add_argument("--top-p", type=float, default=0.95)
     p.add_argument("--max-tokens", type=int, default=16384)

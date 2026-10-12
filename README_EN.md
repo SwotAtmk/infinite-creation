@@ -255,6 +255,7 @@ This project was independently completed by an individual developer. Feedback, b
 ## Acknowledgements
 
 - Thanks to developer [happymy](https://github.com/happymy) for providing the AMD + GGUF adaptation solution and fixing some bugs in the project.
+- Thank you to the developer [binonxia]（ https://github.com/binonxia ）Discovered and fixed bugs in the project
 
 ## License
 

@@ -3,6 +3,9 @@
 
 ![](images/banner.jpg)
 
+
+中文 | [English](README_EN.md)
+
 ## 项目简介
  **小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频**
 

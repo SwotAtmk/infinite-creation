@@ -120,7 +120,7 @@ python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json
 | 项 | 值 |
 |---|---|
 | 输入 | `docs/test/test-novel.md`（约 2.6k 字，主角/姐姐/门卫/男生，校门 → 走廊 → 教学楼二层）**本地测试素材，不入库（`.gitignore` 忽略 `docs/test/`）** |
-| 生成 | `python scripts/gen_storyboard_llm.py --novel-file ../docs/test/test-novel.md --out storyboard.json --shots-hint 8 --target-total 34 --attempts 3 --keep-raw raw/` |
+| 生成 | `python scripts/gen_storyboard_llm.py --novel-file ../../docs/test/test-novel.md --out storyboard.json --shots-hint 8 --target-total 34 --attempts 3 --keep-raw raw/` |
 | 模型 | 本地 `llama.cpp` router（`http://127.0.0.1:1234/v1`）× `Huihui-Qwen3.8-27B-abliterated-GGUF`，`enable_thinking=false` |
 | 结果 | **第 1 次尝试即门禁通过**：8 镜 / 3 场景 / 3 角色（`@主角` `@门卫` `@男生`），原对白以 `<d>[中文] …</d>` 逐字保留，运镜 static/tilt/pan/tracking/push 有变化 |
 | 编译 | `python scripts/compile_storyboard.py --storyboard-file storyboard.json --out segments/` → 8 段（1× T2VA + 7× FL2VA），`error=0` |

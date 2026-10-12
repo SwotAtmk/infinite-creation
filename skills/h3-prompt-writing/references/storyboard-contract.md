@@ -23,8 +23,8 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 | 文件 | 作用 |
 |---|---|
 | `references/storyboard.schema.json` | 契约 JSON Schema（字段定义、必填、约束） |
-| `docs/test/storyboard.example.json` | 由现有 `prompt.txt` 迁移的 3 段样例（有参考图 → 首段 Ref2VA） |
-| `docs/test/storyboard.example-novel.json` | 小说直出样例（本地测试小说，未入库；8 镜无资产 → 首段 T2VA），`--check` 零 error/零 warn |
+| `docs/test/storyboard.example.json`（本地，不入库） | 由现有 `prompt.txt` 迁移的 3 段样例（有参考图 → 首段 Ref2VA） |
+| `docs/test/storyboard.example-novel.json`（本地，不入库） | 小说直出样例（8 镜无资产 → 首段 T2VA），`--check` 零 error/零 warn |
 | `references/storyboard-from-novel.md` | 上游说明：小说/剧本 → 契约（LLM 起草 + 门禁闭环） |
 | `references/manifest.example.json` | 资产库索引样例（§6.3）：`@角色`/`#场景` → 视图路径 + 元数据 |
 | `references/fallback-policy.md` | 执行层接口契约（2.3）：阶段确认门 + H3 失败降级梯子 + Seedance 接口（仅留接口） |

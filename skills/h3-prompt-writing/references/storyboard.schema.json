@@ -222,7 +222,12 @@
               "action": { "type": "string", "description": "该拍可见动作（英文）。" },
               "camera": { "type": "string", "description": "该拍运镜（英文）。" },
               "sound": { "type": "string", "description": "该拍同步音（英文）。" },
-              "handoff": { "type": "string", "description": "交给下一段的运动延续点（仅作运动，不作站位来源）。" }
+              "handoff": { "type": "string", "description": "交给下一段的运动延续点（仅作运动，不作站位来源）。" },
+              "source": {
+                "type": "string",
+                "enum": ["original", "added", "tbd"],
+                "description": "剧情保真锁标注（§8 第 2 条）：original=剧本原文就有的事实；added=创作补充（仅限呼吸/视线/走位等演出细节，不得新增剧情事件或因果）；tbd=待确认项（需人工确认后才可正式生成）。缺省视为 original（未标注）。"
+              }
             }
           }
         },

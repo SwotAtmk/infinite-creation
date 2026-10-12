@@ -194,11 +194,12 @@ shots  (array, in story order; high-quality, faithful adaptation)
   axis_en: English sentence stating the 180-degree axis (whose line it is) and which side the camera is on
   positions: {character label: {screen_pos, facing, pose, view_target, axis_side}} — screen_pos like "left of the frame"; facing like "toward the camera, turned to his right"; pose = the exact starting pose; view_target = where the eyes are aimed; axis_side like "camera side"
   lighting_en: English sentence of the explicit lighting baseline (direction, quality, colour, shadows)
-  beats: >=2 items, each {time, action, camera, sound, handoff}
+  beats: >=2 items, each {time, action, camera, sound, handoff, source}
       time format is exactly "start-end s" with no space before s, e.g. "0-2s", "2-4s"
       the intervals MUST start at 0, be contiguous (no gaps, no overlaps), and the last MUST end exactly at duration
       action = the visible action performed in that beat (English, one or more full sentences)
       sound = the synchronous diegetic sound (English); handoff = the movement state carried to the next segment
+      source = "original" (the beat is a fact the chapter actually states), "added" (only a performance/staging detail such as a breath, a gaze or a step) or "tbd" (you are unsure and a human must confirm). Never mark a new plot event as "added".
   first_frame_hard: English sentence of the opening state of this shot
   last_frame_hard: English sentence of the closing state handed to the next segment
   overall_soundscape: 1-4 English sentences summarising ambient/action/non-verbal sound (no dialogue)
@@ -219,6 +220,7 @@ HARD RULES
 10. SPOKEN LINES: reproduce the chapter's spoken lines VERBATIM, in their original language, inside the beat action, using the H3 dialogue syntax with stable speaker IDs, e.g. "The elderly gatekeeper (S1) says: <d>[Chinese] 你好，请稍等一下。</d>". Characters who never speak get no speaker ID. Do not paraphrase dialogue.
 11. EYELINE AND STAGING: keep the 180-degree axis stable and state which side the camera is on; the same character keeps the same left/right screen side across shots in one scene unless the camera legitimately moves.
 12. COMPACT OUTPUT: keep every phrase tight — one clause per action sentence, 2 beats per shot, no filler adjectives. A long storyboard risks being cut off before it is closed, so earn every word.
+13. PROVENANCE (fidelity lock): every beat carries source = "original" | "added" | "tbd". Use "original" for anything the chapter states (actions, dialogue, facts); use "added" ONLY for performance or staging detail that introduces no new plot event, cause or outcome (a breath, a glance, a step, a hand steadying); use "tbd" when a human should confirm. An "added" beat must never bring in a new character, place, object, cause or result, and the whole storyboard must never contradict the chapter's five prohibitions: do not add, delete, replace, reassign or reorder plot events.
 
 CONTRACT JSON SCHEMA (authoritative field list):
 %(schema)s
@@ -286,6 +288,21 @@ def shape_check(sb):
             if k not in s:
                 errs.append("shots[%d] 缺少 %s" % (i, k))
     return errs
+
+
+def fidelity_warns(sb, novel):
+    """剧情保真锁（轻量交叉核对）：契约里的**角色**标签应是正文出现的实体名。
+
+    只核对 characters（专有名词，正文通常逐字出现）；scenes 的标签是描述性短语
+    （如「校园走廊」），误报率高故不核对。仅作 warn 提示人工确认，不判错、不回灌 LLM。
+    """
+    out = []
+    text = novel or ""
+    for label in (sb.get("characters") or {}).keys():
+        name = str(label).lstrip("@#").strip()
+        if name and name not in text:
+            out.append("角色标签 %s 的名字「%s」未在正文出现（AI 自补角色？请人工确认）" % (label, name))
+    return out
 
 
 # ─────────────────────────────────────────────
@@ -387,9 +404,10 @@ def main(argv=None):
                 errs = gate_errors
 
         if not errs:
-            if best is None or True:
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_text(json.dumps(sb, ensure_ascii=False, indent=2), encoding="utf-8")
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(sb, ensure_ascii=False, indent=2), encoding="utf-8")
+            for w in fidelity_warns(sb, novel):
+                safe_print("[保真][warn] %s" % w)
             safe_print("[OK] 门禁通过（第 %d 次尝试）。已写出：%s" % (attempt, out_path))
             return 0
 
@@ -411,6 +429,8 @@ def main(argv=None):
     if best is not None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(best[1], ensure_ascii=False, indent=2), encoding="utf-8")
+        for w in fidelity_warns(best[1], novel):
+            safe_print("[保真][warn] %s" % w)
         safe_print("\n[FAIL] %d 次尝试后仍有 %d 个 error；已写出最优草稿：%s（请人工修订后重编）"
                    % (args.attempts, len(best[0]), out_path))
     else:

@@ -80,10 +80,11 @@ python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json
    - `shot_size_en` / `angle_en` / `camera_move` + `camera_move_en`（非 static 必须写清起点/终点/跟随目标/停止原因）；
    - `world_pos`（相对地标的世界位置）+ `axis_en`（180° 轴线）+ `positions`（`screen_pos`/`facing`/`pose`/`view_target`/`axis_side`）+ `lighting_en`；
    - `beats[].time` 形如 `"0-2s"`，**连续覆盖 `[0, duration]`**（无空洞/重叠）；
+   - `beats[].source` 标注来源：`original`（正文事实）/ `added`（创作补充，仅限呼吸·视线·走位等演出细节）/ `tbd`（待确认项）；`added` 不得引入新剧情事件或因果（§8 第 2 条）；
    - `first_frame_hard` / `last_frame_hard`、`overall_soundscape`、`non_diegetic_music`、`shot_purpose`。
 6. **零指代**：禁用「上一镜头/继续/同上/照旧/仍然/保持原样/和之前一样」及其英文对应词；跨镜状态一律展开成完整物理描述。
 7. **逐段不重复**：任意两镜 `beats[].action` 归一化后不得相同；每镜必须有**不同的可见动作**推进剧情。（身份/站位/光照的跨段重申是设计要求，不算重复。）
-8. **剧情保真锁**：只写正文有的事件，不新增/删除/替换/改归属/改顺序。
+8. **剧情保真锁**：只写正文有的事件，不新增/删除/替换/改归属/改顺序；逐拍 `source` 标注（`original`/`added`/`tbd`），`added` 仅限演出细节。生成器另做**角色名是否见于正文**的轻量交叉核对，非正文的名字以 `[保真][warn]` 提示人工确认。
 9. **克制、非性化**：不出现裸露、脱衣或性化内容；敏感收尾只作「静默悬念」处理，摄影机留在门外。
 
 ---

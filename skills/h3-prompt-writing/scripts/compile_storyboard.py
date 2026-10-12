@@ -86,6 +86,10 @@ def warn(rule, msg):
     return {"level": "warn", "rule": rule, "msg": msg}
 
 
+def info(rule, msg):
+    return {"level": "info", "rule": rule, "msg": msg}
+
+
 def present_labels(sb, shot):
     """本镜出场角色的标签顺序（决定 <Subject N> 序号）。优先取 positions 键序，否则取 refs 中的角色。"""
     pos = shot.get("positions") or {}
@@ -163,15 +167,6 @@ class RefMapBuilder:
                 duty = (sb.get("characters") or {}).get(label, {}).get("ref_role", "身份")
             duties[path] = {"duty": duty, "version": "v1"}
         return {"ref_images": images, "duties": duties, "label_to_picture": label_to_picture}
-
-    def check_refs_exist(self, ref_map, ref_root):
-        issues = []
-        if not ref_root:
-            return issues
-        for p in ref_map["ref_images"]:
-            if not (Path(ref_root) / p).exists():
-                issues.append(warn("ref_missing", "参考图不存在（--strict-refs 时判错）：%s" % p))
-        return issues
 
 
 # ─────────────────────────────────────────────
@@ -387,6 +382,10 @@ class H3PromptRenderer:
 class PromptLinter:
     """编译后校验：任 error → 编译失败（§8）。"""
 
+    def __init__(self, strict_fidelity=False, strict_refs=False):
+        self.strict_fidelity = strict_fidelity
+        self.strict_refs = strict_refs
+
     def check_shot(self, sb, shot, prompt, kind, ref_map, action_sigs, shot_number, ref_root):
         issues = []
         # ① 零指代禁用词
@@ -404,8 +403,20 @@ class PromptLinter:
         sig = action_signature(shot)
         if sig and sig in action_sigs and not shot.get("allow_repeat"):
             issues.append(err("duplicate_action", "%s 与另一镜动作完全重复（若为重复动作镜请设 allow_repeat=true）" % shot.get("id")))
-        # ⑥ 参考图存在性
-        issues += RefMapBuilder().check_refs_exist(ref_map, ref_root)
+        # ⑥ 参考图存在性（--strict-refs 时缺失判 error）
+        issues += self._check_refs(ref_map, ref_root)
+        # ⑦ 剧情保真锁（§8 第 2 条）
+        issues += self._check_fidelity(shot)
+        return issues
+
+    def _check_refs(self, ref_map, ref_root):
+        """参考图存在性：默认不检查（契约常跨机流转）；--strict-refs 时缺失判 error。"""
+        issues = []
+        if not (self.strict_refs and ref_root):
+            return issues
+        for p in ref_map["ref_images"]:
+            if not (Path(ref_root) / p).exists():
+                issues.append(err("ref_missing", "参考图不存在：%s" % p))
         return issues
 
     def _check_duration(self, shot):
@@ -485,6 +496,38 @@ class PromptLinter:
                 issues.append(warn("camera_not_executable", "%s 运镜 %s 未写清起点/终点/跟随目标/停止原因，判定不可执行" % (sid, cm)))
         return issues
 
+    def _check_fidelity(self, shot):
+        """剧情保真锁（§8 第 2 条）：产出必须标注「原始/补充/待确认」；不希望被 AI 自补的动作悄悄进片。
+
+        - 每拍 `source` ∈ {original, added, tbd}；缺省视为 original（未标注）。
+        - `added`（创作补充）→ info：仅限呼吸/视线/走位等演出细节，列给人确认。
+        - `tbd`（待确认项）→ warn；`--strict-fidelity` 时判 error（正式生成前必须确认）。
+        - 整镜未标注且 `fidelity_lock` 为真 → info：提示未启用的保真标注。
+        - `fidelity_lock: false` → warn：该镜显式放弃保真锁，AI 可自补剧情。
+        """
+        issues = []
+        sid = shot.get("id")
+        beats = shot.get("beats") or []
+        if shot.get("fidelity_lock") is False:
+            issues.append(warn("fidelity_lock_off", "%s fidelity_lock=false：该镜显式关闭剧情保真锁，AI 可自补剧情" % sid))
+        added, tbd, unmarked = [], [], []
+        for i, b in enumerate(beats):
+            src = (b.get("source") or "").strip().lower()
+            if src not in ("original", "added", "tbd"):
+                unmarked.append(i)
+            elif src == "added":
+                added.append(i)
+            elif src == "tbd":
+                tbd.append(i)
+        if tbd:
+            ids = ", ".join("beats[%d]" % i for i in tbd)
+            msg = "%s 含待确认项 %s（source=tbd）：人工确认后才可正式生成" % (sid, ids)
+            issues.append(err("fidelity_tbd", msg) if self.strict_fidelity else warn("fidelity_tbd", msg))
+        if added:
+            ids = ", ".join("beats[%d]" % i for i in added)
+            issues.append(info("fidelity_added", "%s 含创作补充 %s（source=added）：应仅限演出细节，不得新增剧情事件/因果" % (sid, ids)))
+        return issues
+
     def check_film(self, sb):
         """跨镜软校验：连续 ≥3 镜同景别+同角度+固定机位 → 镜头语言重复风险。"""
         issues = []
@@ -502,6 +545,15 @@ class PromptLinter:
         for key, ids in run:
             if len(ids) >= 3 and key[2] == "static":
                 issues.append(warn("shot_language_repeat", "连续 %d 镜同景别+同角度+固定机位：%s（镜头语言重复风险）" % (len(ids), ", ".join(ids))))
+        # 剧情保真标注覆盖度：全片无一处 source → 一条 info（合同 §8 第 2 条建议逐拍标注）
+        unmarked = 0
+        for shot in shots:
+            beats = shot.get("beats") or []
+            if beats and all((b.get("source") or "").strip().lower() not in ("original", "added", "tbd") for b in beats):
+                unmarked += 1
+        if unmarked:
+            issues.append(info("fidelity_unmarked",
+                              "全片 %d/%d 镜未标注 beats[].source（视为 original）：建议逐拍标注 原始/补充/待确认" % (unmarked, len(shots))))
         return issues
 
 
@@ -603,7 +655,8 @@ def build_parser():
     p.add_argument("--check", action="store_true", help="只做门禁校验，不打印完整提示词")
     p.add_argument("--max-duration", type=float, default=None, help="单段物理时长上限（秒），默认取契约 video.default_max_duration 或 5.0")
     p.add_argument("--ref-root", default=None, help="参考图相对路径的解析根目录（默认取契约文件所在目录）")
-    p.add_argument("--strict-refs", action="store_true", help="参考图缺失判 error（默认仅 warn）")
+    p.add_argument("--strict-refs", action="store_true", help="开启参考图存在性检查，缺失判 error（默认不检查，便于契约跨机流转）")
+    p.add_argument("--strict-fidelity", action="store_true", help="剧情保真锁：待确认项（source=tbd）判 error（默认仅 warn）")
     p.add_argument("--json", action="store_true", help="以 JSON 输出编译结果（供 runner 消费）")
     return p
 
@@ -643,7 +696,7 @@ def main(argv=None):
         units = UnitPlanner().plan(sb, max_duration)
         renderer = H3PromptRenderer(sb)
         resolver = AnchorResolver()
-        linter = PromptLinter()
+        linter = PromptLinter(strict_fidelity=args.strict_fidelity, strict_refs=args.strict_refs)
         ref_builder = RefMapBuilder()
         shots = sb.get("shots") or []
         action_sigs = set()
@@ -659,10 +712,7 @@ def main(argv=None):
             else:
                 prompt = renderer.render_fl2va(shot, u["shot_index"] + 1, resolver)
             sig = action_signature(shot)
-            issues = linter.check_shot(sb, shot, prompt, kind, ref_map, action_sigs, u["shot_index"] + 1, "")
-            if args.strict_refs:
-                for extra in ref_builder.check_refs_exist(ref_map, ref_root):
-                    issues.append(err("ref_missing", extra["msg"]) if extra["level"] == "warn" else extra)
+            issues = linter.check_shot(sb, shot, prompt, kind, ref_map, action_sigs, u["shot_index"] + 1, ref_root)
             if u["sub_units"] > 1:
                 issues.append(warn("auto_split_repeats_action",
                                    "%s 超长被拆成 %d 段，子段将重复同一动作/提示词（硬件限制所致，如非本意请缩短 duration）"
@@ -681,14 +731,15 @@ def main(argv=None):
 
     errors = [i for i in all_issues if i["level"] == "error"]
     warns = [i for i in all_issues if i["level"] == "warn"]
+    infos = [i for i in all_issues if i["level"] == "info"]
 
     # ---- 输出 ----
     if args.json:
         payload["issues"] = all_issues
         _safe_print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        _safe_print("== compile_storyboard: 模式=%s，段数=%d，error=%d，warn=%d ==" % (
-            payload["mode"], len(payload["units"]), len(errors), len(warns)))
+        _safe_print("== compile_storyboard: 模式=%s，段数=%d，error=%d，warn=%d，info=%d ==" % (
+            payload["mode"], len(payload["units"]), len(errors), len(warns), len(infos)))
         for u in payload["units"]:
             if not args.check:
                 head = "# 段 %d | %s | %s | %ss" % (u["index"], u.get("shot_id", "-"), u["kind"], u.get("duration", "-"))

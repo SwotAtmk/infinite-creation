@@ -75,8 +75,9 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 5. **字段完整性**：`positions` / `world_pos` / `axis_en` / `lighting_en` / `first_frame_hard` / 视线 缺一即报错；且 `lighting_en` 必须**真的出现在提示词里**（`lighting_not_in_prompt`）。
 6. **运镜可执行性**：`camera_move_en` 必须写清起点/终点/跟随目标/停止原因；非 `static` 运镜若缺起点或终点 → 报 `camera_not_executable`。
 7. **镜头语言重复风险（软）**：连续 ≥3 镜「同景别 + 同角度 + 固定机位」→ 报 `shot_language_repeat`（提示，不判错）。
+8. **剧情保真锁**（§8 第 2 条）：每拍 `beats[].source` ∈ `original`（正文事实）/ `added`（创作补充，仅限呼吸·视线·走位等演出细节）/ `tbd`（待确认项）。`added` → `fidelity_added`（info，列给人确认）；`tbd` → `fidelity_tbd`（warn，加 `--strict-fidelity` 判 error）；`fidelity_lock: false` → `fidelity_lock_off`（warn）；全片未标注 → `fidelity_unmarked`（info）。机械门只能查**标注**——「不新增/删除/替换/改归属/改顺序」仍靠人审；上游生成器另做**角色名是否见于正文**的轻量交叉核对（`[保真][warn]`，泛称会误报故不判错）。
 
-> 任一 `error` → 编译失败（退出码 1），须回契约补全后重编。
+> 任一 `error` → 编译失败（退出码 1），须回契约补全后重编。`info` 不计入失败、不影响退出码。
 
 ---
 
@@ -98,11 +99,14 @@ python scripts/compile_storyboard.py --storyboard-file storyboard.json --out seg
 # 机器可读输出（供脚本化 runner）
 python scripts/compile_storyboard.py --storyboard-file storyboard.json --json
 
+# 剧情保真锁：待确认项（beats[].source=tbd）判 error（正式生成前的确认门）
+python scripts/compile_storyboard.py --storyboard-file storyboard.json --check --strict-fidelity
+
 # 旧流程兜底：直接读 prompt.txt（按 '###' 分块，只做门禁 + 转发）
 python scripts/compile_storyboard.py --prompt-file prompt.txt --check
 ```
 
-常用开关：`--max-duration`（覆盖单段上限）、`--ref-root`（参考图相对路径根目录，默认取契约文件所在目录）、`--strict-refs`（参考图缺失判错）。
+常用开关：`--max-duration`（覆盖单段上限）、`--ref-root`（参考图相对路径根目录，默认取契约文件所在目录）、`--strict-refs`（开启参考图存在性检查，缺失判错；默认不查以支持契约跨机流转）、`--strict-fidelity`（`source=tbd` 待确认项判错）。
 
 ---
 

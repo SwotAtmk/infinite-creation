@@ -142,6 +142,8 @@ python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json
 
 **背景**：按「测试素材不入库」，`references/storyboard.example.json` 与 `docs/test/` 一并移出版本库 → 生成器失去默认 few-shot（`load_reference` 找不到文件时静默返回空串）。复验分两次：**A 带本地样例**（`--example-file` 指 `docs/test/`）与 **B 真·出厂状态**（完全不给样例），确认两条路都可用。
 
+### 7.1 复验 A：带本地样例
+
 **命令**（`skills/h3-prompt-writing/` 下执行）：
 
 ```bash

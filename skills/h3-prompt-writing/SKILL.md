@@ -43,7 +43,7 @@ When H3 cannot generate the whole film in one pass, generation is split into sho
 1. Author `storyboard.json` (see `references/storyboard.schema.json`). Keep every prompt-bearing value in English.
    - **From a novel/script**: `python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json` drafts the contract with a local/remote OpenAI-compatible LLM and feeds compiler errors back to it until the gates pass — see `references/storyboard-from-novel.md`.
    - **By hand / migration**: follow `references/storyboard.schema.json` and the `prompt.txt` migration mapping in `references/storyboard-contract.md`.
-   - **Examples**: `docs/test/storyboard.example.json` (3 shots, with reference images → Ref2VA opener) and `docs/test/storyboard.example-novel.json` (a verified 8-shot run over `docs/test/test-novel.md` → T2VA opener, zero errors/warnings).
+   - **Examples**: `docs/test/storyboard.example.json` (3 shots, with reference images → Ref2VA opener) and `docs/test/storyboard.example-novel.json` (a verified 8-shot run over a local, uncommitted test novel → T2VA opener, zero errors/warnings).
 2. Read `references/storyboard-contract.md` for the field roles, the segment rules, and the contract→H3 section mapping.
 3. Compile prompts: `python scripts/compile_storyboard.py --storyboard-file storyboard.json --dry-run` (inspect) or `--out segments/` (write one `.prompt.txt` per segment + `segments.json` + `continuity-ledger.json`).
 4. The compiler enforces the gates; fix every `error` before generating: zero-pronoun (no "previous shot / 同上 / 保持原样"), duration coverage, field completeness, executable camera moves, and **no duplicated segment action**.

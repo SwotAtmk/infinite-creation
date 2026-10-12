@@ -24,7 +24,7 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 |---|---|
 | `references/storyboard.schema.json` | 契约 JSON Schema（字段定义、必填、约束） |
 | `docs/test/storyboard.example.json` | 由现有 `prompt.txt` 迁移的 3 段样例（有参考图 → 首段 Ref2VA） |
-| `docs/test/storyboard.example-novel.json` | 小说直出样例（`docs/test/test-novel.md`，8 镜无资产 → 首段 T2VA），`--check` 零 error/零 warn |
+| `docs/test/storyboard.example-novel.json` | 小说直出样例（本地测试小说，未入库；8 镜无资产 → 首段 T2VA），`--check` 零 error/零 warn |
 | `references/storyboard-from-novel.md` | 上游说明：小说/剧本 → 契约（LLM 起草 + 门禁闭环） |
 | `storyboard.json`（用户产物） | 一部片子的分镜契约：角色 / 场景 / 逐镜编排 |
 | `continuity-ledger.json`（编译器产出） | 跨镜状态账本：每镜开始/结束状态（§6.5） |

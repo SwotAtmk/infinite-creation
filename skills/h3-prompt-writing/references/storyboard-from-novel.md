@@ -25,6 +25,10 @@
 # 小说 → 契约（本地 LLM），生成后自动跑编译器门禁，error 回灌重写
 python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json
 
+# 带上本地 few-shot 样例（样例已移出仓库，存在 docs/test/ 下）
+python scripts/gen_storyboard_llm.py --novel-file ../../docs/test/test-novel.md --out storyboard.json \
+    --example-file ../../docs/test/storyboard.example.json --shots-hint 8 --target-total 34
+
 # 契约 → 提示词
 python scripts/compile_storyboard.py --storyboard-file storyboard.json --out segments/
 
@@ -44,9 +48,10 @@ python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json
 | `--target-total S` | 目标总时长（秒，提示，默认 32） |
 | `--seg-max S` | 单镜时长上限（秒，默认 5.0，防编译器自动拆分） |
 | `--art-style "..."` | 强制 `art_style_prefix`（不给则模型按原文定） |
+| `--example-file PATH` | few-shot 样式样例（STYLE REFERENCE）。默认取 `references/storyboard.example.json`；该样例已按「测试素材不入库」策略移出版本库，本地跑请显式指过去：`--example-file ../../docs/test/storyboard.example.json`。**样例决定模型的输出深度**：缺样例时输出更啰嗦、更易撞上本地 27B 的 ~7k token 生成硬墙 |
 | `--attempts N` | 含门禁回灌的最大重试次数（默认 3） |
 | `--think` | 打开模型思考（默认关，直出 JSON；Qwen3 系经 `enable_thinking=false`） |
-| `--json-mode` | 请求 `response_format=json_object`（语法约束输出） |
+| `--json-mode` | 请求 `response_format=json_object`。**实测对本地 27B 无效**（llama.cpp 该语法允许围栏/散文，不屏蔽提前 EOS），见 §7 |
 | `--no-gate` | 不跑编译器门禁闭环（只出草稿） |
 | `--keep-raw DIR` | 保存每次尝试的模型原始输出 |
 
@@ -120,7 +125,7 @@ python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json
 | 项 | 值 |
 |---|---|
 | 输入 | `docs/test/test-novel.md`（约 2.6k 字，主角/姐姐/门卫/男生，校门 → 走廊 → 教学楼二层）**本地测试素材，不入库（`.gitignore` 忽略 `docs/test/`）** |
-| 生成 | `python scripts/gen_storyboard_llm.py --novel-file ../../docs/test/test-novel.md --out storyboard.json --shots-hint 8 --target-total 34 --attempts 3 --keep-raw raw/` |
+| 生成 | `python scripts/gen_storyboard_llm.py --novel-file ../../docs/test/test-novel.md --out storyboard.json --shots-hint 8 --target-total 34 --attempts 3 --keep-raw raw/`（当时 few-shot 样例还在仓库内 `references/storyboard.example.json`，生成器默认读取；该样例现已按「测试素材不入库」移出，复跑须加 `--example-file ../../docs/test/storyboard.example.json`，见 §7） |
 | 模型 | 本地 `llama.cpp` router（`http://127.0.0.1:1234/v1`）× `Huihui-Qwen3.8-27B-abliterated-GGUF`，`enable_thinking=false` |
 | 结果 | **第 1 次尝试即门禁通过**：8 镜 / 3 场景 / 3 角色（`@主角` `@门卫` `@男生`），原对白以 `<d>[中文] …</d>` 逐字保留，运镜 static/tilt/pan/tracking/push 有变化 |
 | 编译 | `python scripts/compile_storyboard.py --storyboard-file storyboard.json --out segments/` → 8 段（1× T2VA + 7× FL2VA），`error=0` |
@@ -128,6 +133,42 @@ python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json
 
 两点实测经验（已回写进生成器系统提示）：
 
-1. **长输出会被截断**：镜数给到 10 并要求逐镜对白时，本地 27B 会在 JSON 未闭合处停笔（`n_gen≈6.2k`）；规则 12「紧凑输出」+ `--shots-hint 8` 后可稳定收尾。生成器对「截断」与「语法错」分别回灌不同提示。
+1. **长输出会被截断**：镜数给到 10 并要求逐镜对白时，本地 27B 会在 JSON 未闭合处停笔（实测硬墙 ≈ 7.05k token，见 §7）；规则 12「紧凑输出」+ `--shots-hint 8` 后可稳定收尾。生成器对「截断」与「语法错」分别回灌不同提示。
 2. **运镜可执行性**：`tracking` 常被写成「tracks behind him, following his movement」，缺起点/终点 → 门禁 `camera_not_executable`。规则 9 已要求显式写 `starts … and stops when …`；本条样例中的 2 句在产出后经**分镜审查**按此收紧（其余内容为模型直出）。
+
+---
+
+## 7. 复验记录（few-shot 样例移出仓库后 · 2026-10-12）
+
+**背景**：按「测试素材不入库」，`references/storyboard.example.json` 与 `docs/test/` 一并移出版本库 → 生成器失去默认 few-shot（`load_reference` 找不到文件时静默返回空串）。本次复验即在**出厂状态（无内置样例）**下重跑，验证生成链是否仍可用。
+
+**命令**（`skills/h3-prompt-writing/` 下执行）：
+
+```bash
+python -u scripts/gen_storyboard_llm.py \
+    --novel-file ../../docs/test/test-novel.md --out storyboard.json \
+    --example-file ../../docs/test/storyboard.example.json \
+    --shots-hint 8 --target-total 34 --attempts 3 --keep-raw raw/
+```
+
+**结果**：**第 3 次尝试门禁通过**（第 1 次撞生成墙被截断 → 第 2 次产出完整 JSON 但 2 处 `banned_phrase`（`continues from`）→ 第 3 次门禁回灌后修好）。
+
+| 项 | 值 |
+|---|---|
+| 契约 | 8 镜 / 32s、2 场景（`#校门` `#走廊`）、2 角色（`@主角` `@门卫`）；16/16 beats 带 `source` 标注 |
+| 编译 | `compile_storyboard.py --check` → **error=0 / warn=0 / info=5**（5 条 `fidelity_added`，即模型自标的创作补充 beats，符合设计） |
+| 出段 | **8 段 = 1× T2VA + 7× FL2VA**（首镜 `refs={}` → T2VA ✓） |
+| 对白 | `<d>[Chinese] 你好，请稍等一下。</d>` 等逐字保留 |
+
+**四点实测结论（均为本次实测，非推测）**：
+
+1. **本地 27B 的生成硬墙 ≈ 7.05k token**，与 `--max-tokens`（16384）无关、与服务端长度上限无关——同一模型同一次会话里连续输出 **9000 token 的纯文本毫无问题**（`finish_reason=length`）。即：长 JSON 到 ~5–7k token 时模型会**中途自行吐 EOS**，JSON 停在任意字段中间（无服务端报错，`truncated=0`）。
+2. **截断重试必须换干净上下文**。原实现把整段半截 JSON 作为 `assistant` 消息塞回上下文，实测第 2/3 次**总是更短且仍不闭合**（4984 → 2509 → 1819 token，等于白跑两次）。已改为：截断时**不塞回半截输出**，只回灌「重写一份更紧凑的完整契约」提示 → 第 2 次即产出完整 JSON。
+3. **`--json-mode` 对本地 27B 无效**。llama.cpp 的 `response_format=json_object` 允许围栏与散文（实测输出带 ` ```json ` 围栏），不会屏蔽提前 EOS。
+4. **`response_format=json_schema`（契约 schema 直接当语法）在本构建不可用**：服务端报 `Failed to initialize samplers: failed to parse grammar`（0.6s 内返回）。原因是 `references/storyboard.schema.json` 含 llama.cpp 转换器不支持的结构（`type: ["string","null"]` / `pattern` / `$ref` 组合）。若日后要强制收尾，需另写严格 GBNF（本机 `llama.cpp-b10448` **不带**任何 `.gbnf`）。
+
+**给使用者的两点提示**：
+
+- 长契约（≥8 镜）在本地 27B 上属**边缘可用**：完整契约约 26–30KB，正好压在这条不稳定边界上。要稳定，要么**给 `--example-file`**（样例是模型的「深度参照」，缺样例时同样内容会多写 ~50%，28.5KB vs 18.8KB，更早撞墙），要么**降目标规模**（`--shots-hint 5` 一档更稳）。
+- 本地 27B 只负责「起草 + 门禁闭环」，**最终质量由 `compile_storyboard.py` 的门禁与人审负责**（这正是 §4.11 的分工）。
 

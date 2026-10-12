@@ -22,6 +22,13 @@
 #   python gen_storyboard_llm.py --novel-file novel.md --out sb.json --dry-run
 #   python gen_storyboard_llm.py --novel-file novel.md --out sb.json \
 #       --base-url https://api.example.com/v1 --model some-model --api-key sk-xxx
+#
+#   # 3) few-shot 样式样例（STYLE REFERENCE）默认取 references/storyboard.example.json；
+#   #    该文件已按「测试素材不入库」策略移出版本库，本地跑时用 --example-file 指过去：
+#   python gen_storyboard_llm.py --novel-file novel.md --out sb.json \
+#       --example-file ../../docs/test/storyboard.example.json
+#     （样例决定模型的输出深度：缺样例时输出会变长，撞上本地 27B 的 ~7.05k token
+#      生成上限而 JSON 不闭合；带样例可稳定收尾。）
 # ========================================
 
 import argparse
@@ -323,6 +330,8 @@ def build_parser():
     p.add_argument("--target-total", type=float, default=32.0, help="目标总时长（秒，提示）")
     p.add_argument("--seg-max", type=float, default=5.0, help="单镜时长上限（秒，避免编译器自动拆分）")
     p.add_argument("--art-style", default=None, help="强制 art_style_prefix（不给则让模型按原文定）")
+    p.add_argument("--example-file", default=None,
+                   help="few-shot 样式样例（默认 references/storyboard.example.json；不存在则不用样例）")
     p.add_argument("--temperature", type=float, default=0.6)
     p.add_argument("--top-p", type=float, default=0.95)
     p.add_argument("--max-tokens", type=int, default=16384)
@@ -346,7 +355,12 @@ def main(argv=None):
         novel = read_text(args.novel_file)
 
     schema_text = load_reference("storyboard.schema.json")
-    example_text = load_reference("storyboard.example.json")
+    example_text = ""
+    ex_path = Path(args.example_file) if args.example_file else (REFERENCES / "storyboard.example.json")
+    if ex_path.exists():
+        example_text = read_text(ex_path)
+    elif args.example_file:
+        safe_print("[warn] --example-file 指向的文件不存在：%s（本次不使用样式样例）" % ex_path)
     system = build_system_prompt(schema_text, example_text, args.shots_hint, args.target_total, args.seg_max)
     if args.art_style:
         system += "\nUse exactly this art_style_prefix: %s\n" % args.art_style
@@ -383,12 +397,19 @@ def main(argv=None):
             hint = ("Your previous output was CUT OFF before the JSON object was closed. "
                     "Output a SHORTER storyboard this time: keep the same shots but use tighter action "
                     "sentences (one clause each), at most 2 beats per shot, and no extra prose. "
+                    "Start the JSON from the very beginning and make it compact enough to close. "
                     "Output ONLY the complete storyboard.json."
                     if truncated else
                     "Your output was not a single valid JSON object (%s). Output ONLY the storyboard.json again, "
                     "with no fences and no prose." % e)
-            messages += [{"role": "assistant", "content": raw},
-                         {"role": "user", "content": hint}]
+            if truncated:
+                # 截断重试：**不要把整段未闭合输出塞回上下文**。实测本地 27B 见到自己半截的
+                # JSON 会再次提前停笔（第 2/3 次总是更短且仍不闭合，等于白跑），
+                # 干净上下文 + 「重写一份更紧凑的完整契约」才有第二次真实机会。
+                messages += [{"role": "user", "content": hint}]
+            else:
+                messages += [{"role": "assistant", "content": raw},
+                             {"role": "user", "content": hint}]
             continue
 
         errs = shape_check(sb)

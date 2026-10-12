@@ -339,7 +339,7 @@ def build_parser():
     p.add_argument("--timeout", type=float, default=900.0, help="单次请求超时（秒）")
     p.add_argument("--attempts", type=int, default=3, help="含门禁回灌的最大重试次数")
     p.add_argument("--think", action="store_true", help="打开模型思考（默认关，直出 JSON）")
-    p.add_argument("--json-mode", action="store_true", help="请求 response_format=json_object（语法约束输出）")
+    p.add_argument("--json-mode", action="store_true", help="请求 response_format=json_object。实测对本地 27B 无效（llama.cpp 该语法允许围栏/散文，不屏蔽提前 EOS）；仅当端点确实强约束 JSON 时才有用")
     p.add_argument("--no-gate", action="store_true", help="不在生成后跑编译器门禁闭环")
     p.add_argument("--dump-prompt", action="store_true", help="打印最终提示词后退出（不发请求）")
     p.add_argument("--dry-run", action="store_true", help="同 --dump-prompt（语义别名）")

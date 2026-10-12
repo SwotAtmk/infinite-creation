@@ -16,7 +16,7 @@ import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceIm
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool } from '../lib/agent/tools.js';
-import { runExclusiveVideo } from '../lib/agent/job-runner.js';
+import { runExclusiveVideo, serviceConflict, waitServiceConflict } from '../lib/agent/job-runner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -664,6 +664,35 @@ test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时�
   // 释放占位任务，清理槽位
   releaseBlock();
   await holder.catch(() => {});
+});
+
+test('AMD 单卡互斥：另一侧服务未关 → 任务等待并自动续跑（可停止、有上限）；非 AMD 不判定', async () => {
+  const orig = global.fetch;
+  const cfg = { hardware: { mode: 'amd' }, llm: { baseUrl: 'http://127.0.0.1:1234' }, generation: { serviceWaitMinutes: 1 } };
+  let up = true;
+  global.fetch = async () => ({ ok: up });
+  try {
+    // 非 AMD：远端/本机都不做互斥判定
+    assert.equal(await serviceConflict('comfyui', { ...cfg, hardware: { mode: 'nvidia' } }), '');
+    // AMD + 对端在跑：返回可读的冲突描述
+    assert.match(await serviceConflict('comfyui', cfg), /LLM 服务/);
+
+    // 对端在跑 → 不直接失败，先等它关闭再自动续跑（期间上报等待状态）
+    const seen = [];
+    setTimeout(() => { up = false; }, 60);
+    await waitServiceConflict('comfyui', { cfg, intervalMs: 20, onQueue: (st, d) => { if (st === 'waiting') seen.push(d); } });
+    assert.ok(seen.length > 0 && /等待关闭 LLM/.test(seen[0]), '应上报「等待关闭…」提示');
+
+    // 等待期间被停止 → 立刻以「已停止」拒绝，不干等
+    up = true;
+    await assert.rejects(waitServiceConflict('comfyui', { cfg, intervalMs: 20, isAborted: () => true }), /已停止/);
+
+    // 对端一直不关 → 到 serviceWaitMinutes 上限主动放弃，而不是无限等
+    await assert.rejects(
+      waitServiceConflict('comfyui', { cfg: { ...cfg, generation: { serviceWaitMinutes: 0.001 } }, intervalMs: 20 }),
+      /仍未关闭/,
+    );
+  } finally { global.fetch = orig; }
 });
 
 // —— TTS 音色性别/年龄兜底推断 ——

@@ -156,7 +156,7 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
                   <b>{a.name}</b>
                   <div className="muted">{a.category}{(a.category === 'costume' || a.category === 'age') && a.parent_id ? ' · 来自「' + (assets.find((x) => x.id === a.parent_id)?.name || a.parent_id) + '」' : ''}</div>
                   <Chip size="sm" variant="flat" color={statusColor(a.status)}>{a.status}</Chip>
-                  {activeJobFor(a.id) && <Chip size="sm" variant="flat" color="warning">{activeJobFor(a.id).status === 'queued' ? '排队中' : '生成中'}</Chip>}
+                  {activeJobFor(a.id) && <Chip size="sm" variant="flat" color="warning">{activeJobFor(a.id).phase === '等待服务' ? '等待服务' : (activeJobFor(a.id).status === 'queued' ? '排队中' : '生成中')}</Chip>}
                   {(a.voice_ref || a.audio_path) && (a.image_path || a.video_path) && (
                     <>
                       <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>音色试听</div>

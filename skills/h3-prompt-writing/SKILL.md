@@ -40,6 +40,8 @@ Read `references/ref-en.txt` for label rules, retention analysis, and complete e
 
 When H3 cannot generate the whole film in one pass, generation is split into short segments chained by the previous segment's last frame. Drive this from a **data contract** rather than hand-copied prompts, so segments stay consistent and none of them silently repeats another.
 
+> **Runner note (this repo):** the in-app Agent has **no shell tool** — it cannot execute `python scripts/...`. Write `storyboard.json` with the domain tools (`set_storyboard` / `update_shot`); the `scripts/*.py` compiler helpers are for a **human/offline terminal**, not a runtime step. Do not attempt to run them.
+
 1. Author `storyboard.json` (see `references/storyboard.schema.json`). Keep every prompt-bearing value in English.
    - **From a novel/script**: `python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json` drafts the contract with a local/remote OpenAI-compatible LLM and feeds compiler errors back to it until the gates pass — see `references/storyboard-from-novel.md`. The generator's few-shot style example is passed with `--example-file <path>` (the repo-shipped sample was moved out of the tree, so point it at a local copy, e.g. `--example-file ../../docs/test/storyboard.example.json`); it strongly affects output depth and reliability.
    - **By hand / migration**: follow `references/storyboard.schema.json` and the `prompt.txt` migration mapping in `references/storyboard-contract.md`.

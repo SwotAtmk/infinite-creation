@@ -4,6 +4,8 @@
 
 > 分工（`doc/consistency-plan.md` §4.11）：**LLM 负责写，脚本负责闸门**。生成器不做校验，只把编译器的 `error` 回灌给 LLM 重写，直到零 error。
 
+> **运行环境说明（本仓库）**：应用内 Agent **没有 shell 工具**，不能执行下面的 `python scripts/...` 命令。这些脚本由**人工/离线**在终端运行；Agent 请直接用领域工具写分镜（`set_storyboard` / `update_shot`），不要尝试执行脚本。
+
 ---
 
 ## 1. 两条产契约的路径

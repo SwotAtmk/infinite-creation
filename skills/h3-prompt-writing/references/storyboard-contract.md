@@ -4,6 +4,8 @@
 
 > 背景与设计依据：`doc/consistency-plan.md`（§5.1 模块、§6.0–§6.6 字段与装配映射、§8 门禁）。
 
+> **运行环境说明（本仓库）**：应用内 Agent **没有 shell 工具**，无法执行 `python scripts/...`。`compile_storyboard.py` / `build_manifest.py` 是**人工/离线**在终端运行的辅助工具（可选），不是运行时步骤；Agent 不要尝试执行。分镜契约请用领域工具（`set_storyboard` / `update_shot`）写入。
+
 ---
 
 ## 1. 为什么需要契约（要解决的真问题）

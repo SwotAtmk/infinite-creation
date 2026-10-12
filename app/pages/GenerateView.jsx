@@ -79,7 +79,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
   async function regenChapter(mode) {
     if (!cur) return;
     const msg = mode === 'storyboard'
-      ? '将清空「' + cur.title + '」当前的分镜，重新拆分并生成全部视频（素材保留）。确定继续？'
+      ? '将清空「' + cur.title + '」当前的分镜，按小说重新拆分分镜（只跑 LLM 文本，不生成图片/视频；素材保留）。确定继续？'
       : '将清空「' + cur.title + '」已生成的视频，按现有分镜重新生成全部视频（分镜与素材保留）。确定继续？';
     if (!(await toast.confirm(msg, { danger: true }))) return;
     setBusy(mode === 'storyboard' ? '正在提交重新生成分镜…' : '正在提交重新生成视频…');
@@ -116,7 +116,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
           </div>
           <p className="muted">
             点「生成/继续」就接着上次进度跑（已完成的素材/分镜/视频自动跳过），中断或失败后点它即可继续。
-            「重新生成分镜」清空本章分镜、重新拆分并出视频（素材保留）。
+            「重新生成分镜」清空本章分镜、按小说重新拆分（只跑 LLM 文本，不出图/视频；素材保留）。
             「重新生成视频」保留分镜，只重做本章全部视频。
           </p>
 

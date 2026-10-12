@@ -70,7 +70,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
   }
   async function runAll() {
     setBusy('正在提交全部章节生成…');
-    try { await onRun(null); } finally { setBusy(null); }
+    try { await onRun(null); } catch (e) { toast.error(e.message); } finally { setBusy(null); }
   }
   async function stopRun() {
     setBusy('正在停止生成…');
@@ -147,6 +147,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
               <p className="muted" style={{ fontSize: 12 }}>
                 受全部模型本地部署的硬件限制（显存有限），LLM 与 ComfyUI 不能同时运行，故按阶段拆分执行：勾「LLM 创作」只写文本（渲染工具已禁用），
                 勾「资产图」「分镜视频」为渲染阶段，同一批不能混勾 LLM 与渲染项；待办数由后端统计，不消耗 LLM。
+                AMD 单卡下「生成/继续」「生成全部章节」（整条流水线会同时占用 LLM 与 ComfyUI）已停用，请用「分阶段运行」分批执行。
                 由于视频生成耗时较长，强烈建议在生成视频前先检查分镜与素材是否符合预期，再启动视频生成，避免素材不合格导致返工。
               </p>
             </div>

@@ -146,6 +146,54 @@ class StoryboardLoader:
 # 2. RefMapBuilder
 # ─────────────────────────────────────────────
 
+class AssetManifest:
+    """资产库索引（§6.3）：`@角色`/`#场景` → 视图路径，用于解析契约里留空的 refs。"""
+
+    def __init__(self, data):
+        self.characters = data.get("characters") or {}
+        self.scenes = data.get("scenes") or {}
+
+    @classmethod
+    def load(cls, path):
+        return cls(json.loads(read_file(path)))
+
+    def resolve(self, label, view=None):
+        """@角色 默认取 front，#场景 默认取 wide；找不到返回 None。"""
+        entry = (self.characters if str(label).startswith("@") else self.scenes).get(label) or {}
+        views = entry.get("views") or {}
+        if view:
+            return views.get(view) or None
+        for k in (("front",) if str(label).startswith("@") else ("wide",)):
+            if views.get(k):
+                return views[k]
+        for v in views.values():
+            if v:
+                return v
+        return None
+
+
+def apply_manifest(sb, manifest):
+    """用资产库索引填充契约里**值留空**的 refs（§6.1：Phase 2 由 manifest 解析 @标签）。
+
+    只填「键已声明、值留空」的条目：绑定哪些标签仍由契约显式决定，不隐式新增绑定；
+    填充发生在 UnitPlanner 之前，故首镜 refs 是否非空决定 Ref2VA/T2VA 的判定，fl2va 段
+    refs 必须留空的约束也都基于填充后的真实绑定。
+    """
+    filled = 0
+    for shot in sb.get("shots") or []:
+        refs = shot.get("refs")
+        if not isinstance(refs, dict):
+            continue
+        for label, path in list(refs.items()):
+            if path:
+                continue
+            resolved = manifest.resolve(label)
+            if resolved:
+                refs[label] = resolved
+                filled += 1
+    return filled
+
+
 class RefMapBuilder:
     """每 shot 重建参考绑定，禁止跨段继承（§5.1）。refs 的键序即上传序 → <Picture N>。"""
 
@@ -396,7 +444,7 @@ class PromptLinter:
         # ② 时长预算
         issues += self._check_duration(shot)
         # ③ 字段完整性 + §6.6 硬约束①②
-        issues += self._check_fields(sb, shot, kind, prompt)
+        issues += self._check_fields(sb, shot, kind, prompt, ref_map)
         # ④ 运镜可执行性
         issues += self._check_camera(shot)
         # ⑤ 逐段不重复（用户强调：每段提示词不得重复，除非本就做重复动作）
@@ -446,16 +494,22 @@ class PromptLinter:
                 issues.append(err("duration_overlap", "%s beats 重叠 %s-%ss" % (shot.get("id"), a2, b1)))
         return issues
 
-    def _check_fields(self, sb, shot, kind, prompt):
+    def _check_fields(self, sb, shot, kind, prompt, ref_map):
         issues = []
         sid = shot.get("id")
         refs = shot.get("refs") or {}
-        has_ref = any(v for v in refs.values())
-        if kind == "ref2va" and not has_ref:
-            issues.append(err("ref2va_requires_refs", "%s 为 Ref2VA 段但 refs 为空（D11：每段必有参考图）" % sid))
-        if kind == "fl2va" and has_ref:
+        dangling = [label for label, v in refs.items() if not v]
+        if dangling:
+            issues.append(err("ref_unresolved",
+                              "%s refs 中 %s 声明了标签却没给路径（未提供 --manifest，或 manifest 里查不到该标签）"
+                              % (sid, ", ".join(dangling))))
+        declared = any(v for v in refs.values())
+        resolved = bool(ref_map["ref_images"])
+        if kind == "ref2va" and not resolved:
+            issues.append(err("ref2va_requires_refs", "%s 为 Ref2VA 段但 refs 为空或无法解析（D11：每段必有参考图）" % sid))
+        if kind == "fl2va" and declared:
             issues.append(warn("fl2va_refs_ignored", "%s 为 FL2VA 段，无 ref 端口，refs 已忽略（应留空）" % sid))
-        if kind == "t2va" and has_ref:
+        if kind == "t2va" and declared:
             issues.append(warn("t2va_refs_ignored", "%s 为 T2VA 段（首个生成镜无参考图），refs 已忽略（应留空）" % sid))
 
         positions = shot.get("positions") or {}
@@ -655,6 +709,7 @@ def build_parser():
     p.add_argument("--check", action="store_true", help="只做门禁校验，不打印完整提示词")
     p.add_argument("--max-duration", type=float, default=None, help="单段物理时长上限（秒），默认取契约 video.default_max_duration 或 5.0")
     p.add_argument("--ref-root", default=None, help="参考图相对路径的解析根目录（默认取契约文件所在目录）")
+    p.add_argument("--manifest", default=None, help="资产库索引 manifest.json（§6.3）：解析契约里值留空的 refs")
     p.add_argument("--strict-refs", action="store_true", help="开启参考图存在性检查，缺失判 error（默认不检查，便于契约跨机流转）")
     p.add_argument("--strict-fidelity", action="store_true", help="剧情保真锁：待确认项（source=tbd）判 error（默认仅 warn）")
     p.add_argument("--json", action="store_true", help="以 JSON 输出编译结果（供 runner 消费）")
@@ -692,6 +747,10 @@ def main(argv=None):
         if max_duration is None:
             max_duration = float((sb.get("video") or {}).get("default_max_duration") or 5.0)
         ref_root = args.ref_root or str(Path(args.storyboard_file).resolve().parent)
+
+        if args.manifest:
+            filled = apply_manifest(sb, AssetManifest.load(args.manifest))
+            _safe_print("[manifest] 解析留空 refs：填入 %d 条（%s）" % (filled, args.manifest))
 
         units = UnitPlanner().plan(sb, max_duration)
         renderer = H3PromptRenderer(sb)

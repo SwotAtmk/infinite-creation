@@ -26,11 +26,14 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 | `docs/test/storyboard.example.json` | 由现有 `prompt.txt` 迁移的 3 段样例（有参考图 → 首段 Ref2VA） |
 | `docs/test/storyboard.example-novel.json` | 小说直出样例（本地测试小说，未入库；8 镜无资产 → 首段 T2VA），`--check` 零 error/零 warn |
 | `references/storyboard-from-novel.md` | 上游说明：小说/剧本 → 契约（LLM 起草 + 门禁闭环） |
+| `references/manifest.example.json` | 资产库索引样例（§6.3）：`@角色`/`#场景` → 视图路径 + 元数据 |
 | `storyboard.json`（用户产物） | 一部片子的分镜契约：角色 / 场景 / 逐镜编排 |
+| `manifest.json`（`build_manifest.py` 产出） | 资产库索引（§6.3）：把散落的资产收成索引，供 `--manifest` 解析留空的 `refs` |
 | `continuity-ledger.json`（编译器产出） | 跨镜状态账本：每镜开始/结束状态（§6.5） |
 | `segments.json`（编译器产出） | 段清单：段序 / 类型（ref2va·t2va·fl2va）/ 时长 / 参考图 / 提示词文件 |
 | `scripts/compile_storyboard.py` | 编译内核（六个模块 + 门禁） |
 | `scripts/gen_storyboard_llm.py` | 上游生成器：小说正文 → storyboard.json（本地/云端 LLM + 门禁回灌） |
+| `scripts/build_manifest.py` | 资产库索引工具（§6.3）+ 资产验收检查（视图齐不齐、契约标签登没登记） |
 
 **语言约定**：喂给 H3 的字段值一律用**英文**（H3 只认英文正文），如 `art_style_prefix` / `static_features` / `beats[].action` / `lighting_en` / `camera_move_en`。仅供人读的管理字段（`title` / `cut_reason` / `continuity_risk`）可用中文。
 
@@ -102,15 +105,24 @@ python scripts/compile_storyboard.py --storyboard-file storyboard.json --json
 # 剧情保真锁：待确认项（beats[].source=tbd）判 error（正式生成前的确认门）
 python scripts/compile_storyboard.py --storyboard-file storyboard.json --check --strict-fidelity
 
+# 资产库索引（§6.3）：由契约生成 / 纯扫描目录 / 资产验收
+python scripts/build_manifest.py --storyboard storyboard.json --out manifest.json
+python scripts/build_manifest.py --assets-dir assets --out manifest.json
+python scripts/build_manifest.py --storyboard storyboard.json --check   # 缺视图/缺目录 → 退出码 1
+
+# 用 manifest 解析契约里值留空的 refs（此时 refs 只需写标签：{"@女孩": null, "#白棚": null}）
+python scripts/compile_storyboard.py --storyboard-file storyboard.json --manifest manifest.json --out segments/
+
 # 旧流程兜底：直接读 prompt.txt（按 '###' 分块，只做门禁 + 转发）
 python scripts/compile_storyboard.py --prompt-file prompt.txt --check
 ```
 
-常用开关：`--max-duration`（覆盖单段上限）、`--ref-root`（参考图相对路径根目录，默认取契约文件所在目录）、`--strict-refs`（开启参考图存在性检查，缺失判错；默认不查以支持契约跨机流转）、`--strict-fidelity`（`source=tbd` 待确认项判错）。
+常用开关：`--max-duration`（覆盖单段上限）、`--ref-root`（参考图相对路径根目录，默认取契约文件所在目录）、`--manifest`（用资产库索引填充留空的 `refs`）、`--strict-refs`（开启参考图存在性检查，缺失判错；默认不查以支持契约跨机流转）、`--strict-fidelity`（`source=tbd` 待确认项判错）。
 
 ---
 
 ## 7. 分阶段
 
-- **Phase 1（当前）**：`refs` 直接内联真实图路径（如 `img/1_女孩.png`），无 manifest；无场景主视图时 `ref_wide: null`，背景走纯文字。上游产契约：`scripts/gen_storyboard_llm.py`（小说 → 契约，LLM 起草 + 门禁回灌）或手写。
-- **Phase 2**：引入 `assets/manifest.json`，`refs` 的 `@标签` 由 manifest 解析为真实路径；补四视图参考板与场景主视图（补齐后首段由 T2VA 升级为 Ref2VA）；`--confirm` 阶段门 + 视觉审计（可选项，复用本地视觉 LLM）。
+- **Phase 1（已落地）**：`refs` 直接内联真实图路径（如 `img/1_女孩.png`），无 manifest；无场景主视图时 `ref_wide: null`，背景走纯文字。上游产契约：`scripts/gen_storyboard_llm.py`（小说 → 契约，LLM 起草 + 门禁回灌）或手写。
+- **Phase 2（部分落地：2.3 策略文档 + 2.4 剧情保真锁已入库）**：`assets/manifest.json` 索引工具已落地（`scripts/build_manifest.py` + `--manifest` 解析留空 `refs`）；四视图参考板/场景主视图（2.1/2.2）与视觉审计（2.5）依赖生图与视觉模型、未实施。
+- **Phase 3（部分落地）**：manifest 索引工具（命名标签库 → manifest，H3-Cast 风格）已落地；ClipChain（执行层断点续传）与 Per-Second Directives 渲染未实施（留待执行层）。

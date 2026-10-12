@@ -1,6 +1,6 @@
 ---
 name: h3-prompt-writing
-description: Write MiniMax H3 video generation prompts for T2VA, I2VA, FL2VA, L2VA, and Ref2VA. Use when rewriting multimodal requests into H3 prompt structures, composing integrated_multimodal_description, overall_soundscape, and non_diegetic_music, aligning keyframes, or defining reference labels for images, videos, and audio. Also covers storyboard-contract driven multi-segment generation: compiling a storyboard.json into consistent per-segment H3 prompts (Ref2VA first segment + FL2VA continuations) with no repeated segments and no positional or identity drift.
+description: Write MiniMax H3 video generation prompts for T2VA, I2VA, FL2VA, L2VA, and Ref2VA. Use when rewriting multimodal requests into H3 prompt structures, composing integrated_multimodal_description, overall_soundscape, and non_diegetic_music, aligning keyframes, or defining reference labels for images, videos, and audio. Also covers storyboard-contract driven multi-segment generation: drafting a storyboard.json from a novel/script with a local or remote LLM, then compiling it into consistent per-segment H3 prompts (Ref2VA/T2VA first segment + FL2VA continuations) with no repeated segments and no positional or identity drift.
 compatibility: Portable to any agent that can read local files — no external API calls, MiniMax Hub tools, or proprietary runtime required. The agents/openai.yaml file only adds optional ChatGPT/Codex UI metadata; it does not restrict the skill to OpenAI agents.
 ---
 
@@ -41,10 +41,13 @@ Read `references/ref-en.txt` for label rules, retention analysis, and complete e
 When H3 cannot generate the whole film in one pass, generation is split into short segments chained by the previous segment's last frame. Drive this from a **data contract** rather than hand-copied prompts, so segments stay consistent and none of them silently repeats another.
 
 1. Author `storyboard.json` (see `references/storyboard.schema.json`). Keep every prompt-bearing value in English.
+   - **From a novel/script**: `python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json` drafts the contract with a local/remote OpenAI-compatible LLM and feeds compiler errors back to it until the gates pass — see `references/storyboard-from-novel.md`.
+   - **By hand / migration**: follow `references/storyboard.schema.json` and the `prompt.txt` migration mapping in `references/storyboard-contract.md`.
+   - **Examples**: `docs/test/storyboard.example.json` (3 shots, with reference images → Ref2VA opener) and `docs/test/storyboard.example-novel.json` (a verified 8-shot run over `docs/test/test-novel.md` → T2VA opener, zero errors/warnings).
 2. Read `references/storyboard-contract.md` for the field roles, the segment rules, and the contract→H3 section mapping.
 3. Compile prompts: `python scripts/compile_storyboard.py --storyboard-file storyboard.json --dry-run` (inspect) or `--out segments/` (write one `.prompt.txt` per segment + `segments.json` + `continuity-ledger.json`).
 4. The compiler enforces the gates; fix every `error` before generating: zero-pronoun (no "previous shot / 同上 / 保持原样"), duration coverage, field completeness, executable camera moves, and **no duplicated segment action**.
-5. Segment typing: the film's first segment is Ref2VA (with reference images); every later segment is FL2VA with `refs` empty — its prompt must restate identity, on-screen position, and lighting in words, because the node has no reference-image input.
+5. Segment typing: the film's first segment is **Ref2VA** when the opening shot has reference images, or **T2VA** (text-only, three-section) when it has none; every later segment is FL2VA with `refs` empty — its prompt must restate identity, on-screen position, and lighting in words, because the node has no reference-image input.
 
 Notes:
 - A segment that restates the characters' identity/position/lighting is **not** a "repeated segment"; the no-repeat rule compares the **action** only. Mark a genuinely repeating-action shot with `"allow_repeat": true`.

@@ -23,11 +23,14 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 | 文件 | 作用 |
 |---|---|
 | `references/storyboard.schema.json` | 契约 JSON Schema（字段定义、必填、约束） |
-| `docs/test/storyboard.example.json` | 由现有 `prompt.txt` 迁移的 3 段样例（Phase 1 内联参考图路径） |
+| `docs/test/storyboard.example.json` | 由现有 `prompt.txt` 迁移的 3 段样例（有参考图 → 首段 Ref2VA） |
+| `docs/test/storyboard.example-novel.json` | 小说直出样例（`docs/test/test-novel.md`，8 镜无资产 → 首段 T2VA），`--check` 零 error/零 warn |
+| `references/storyboard-from-novel.md` | 上游说明：小说/剧本 → 契约（LLM 起草 + 门禁闭环） |
 | `storyboard.json`（用户产物） | 一部片子的分镜契约：角色 / 场景 / 逐镜编排 |
 | `continuity-ledger.json`（编译器产出） | 跨镜状态账本：每镜开始/结束状态（§6.5） |
-| `segments.json`（编译器产出） | 段清单：段序 / 类型（ref2va·fl2va）/ 时长 / 参考图 / 提示词文件 |
+| `segments.json`（编译器产出） | 段清单：段序 / 类型（ref2va·t2va·fl2va）/ 时长 / 参考图 / 提示词文件 |
 | `scripts/compile_storyboard.py` | 编译内核（六个模块 + 门禁） |
+| `scripts/gen_storyboard_llm.py` | 上游生成器：小说正文 → storyboard.json（本地/云端 LLM + 门禁回灌） |
 
 **语言约定**：喂给 H3 的字段值一律用**英文**（H3 只认英文正文），如 `art_style_prefix` / `static_features` / `beats[].action` / `lighting_en` / `camera_move_en`。仅供人读的管理字段（`title` / `cut_reason` / `continuity_risk`）可用中文。
 
@@ -35,7 +38,9 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 
 ## 3. 段类型与拆分规则（硬约束）
 
-- 整片**第一个生成段 = Ref2VA**（带参考图，`refs` 非空）→ 用参考图把身份与站位锁正，其尾帧即后续的标准站位。
+- 整片**第一个生成段**由首镜 `refs` 决定：
+  - `refs` 非空 → **Ref2VA**（带参考图）→ 用参考图把身份与站位锁正，其尾帧即后续的标准站位。
+  - `refs` 为空（无资产，小说直出）→ **T2VA**（三段式，无图对齐指令）→ 纯文字起片，属 `--dry-run` 级测试稿（D11：正式流水线仍应补参考图）。
 - **其余生成段 = FL2VA**（`refs` 留空）。该节点**无参考图端口，只有首帧**，所以身份/站位/光照**必须由文字重申**（`static_features` + `positions` + `lighting_en`）。
 - **超长自动拆分**：某 `shot.duration` 超过单段上限（`video.default_max_duration`，默认 5.0s）→ 拆成 N 个子段；**子段沿用同一提示词**（即重复同一动作）。这是硬件限制的产物，编译器会报 `auto_split_repeats_action` 提醒；如非本意，应缩短 `duration` 或把动作拆成多镜。
 - **D11 双保险**：正式段**必须有参考图或首帧 + 完整文字**，纯文字只允许作为测试稿。
@@ -46,18 +51,18 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 
 ## 4. 契约 → H3 段落装配映射（§6.6）
 
-| H3 段落 | Ref2VA（段 0） | FL2VA（段 i>0） | 来源 / 生成规则 |
-|---|:---:|:---:|---|
-| `subject_definitions` | ✅ | — | `characters`（`<Subject N> is … = name_en + static_features + dynamic_features`）+ `scenes`（背景） |
-| `summary` | ✅ | — | `shot.shot_purpose`（写成一句可独立理解的完整句，前置 `[reference generation]`） |
-| `retention_analysis` | ✅ | — | 逐 `<Subject N>`：`retention_en`（缺省用 `do_not_change`） |
-| `detailed_description` | ✅ | — | `art_style_prefix` + `shot_size_en/angle_en` + 站位段（`positions` + `world_pos` + `axis_en`）+ `lighting_en` + `camera_move_en` + `beats[].action` + 结尾固定句 |
-| `integrated_multimodal_description` | — | ✅ | 同 `detailed_description` 内容，但**不带 `<Subject>`/`<Picture>` 标签**（FL2VA 无标签），仍写全物理描述 |
-| `overall_soundscape` | ✅ | ✅ | `shot.overall_soundscape`（缺省由 `beats[].sound` 汇总） |
-| `non_diegetic_music` | ✅ | ✅ | `shot.non_diegetic_music`（缺省 `N/A`） |
-| 保留/规避句 | ✅ | ✅ | 结尾固定：资产不进成片（不复现参考板网格/并排视图）+ 无字幕/logo（可被 `shot.preserve_avoid` 覆盖） |
+| H3 段落 | Ref2VA（段 0，有图） | T2VA（段 0，无图） | FL2VA（段 i>0） | 来源 / 生成规则 |
+|---|:---:|:---:|:---:|---|
+| `subject_definitions` | ✅ | — | — | `characters`（`<Subject N> is … = name_en + static_features + dynamic_features`）+ `scenes`（背景） |
+| `summary` | ✅ | — | — | `shot.shot_purpose`（写成一句可独立理解的完整句，前置 `[reference generation]`） |
+| `retention_analysis` | ✅ | — | — | 逐 `<Subject N>`：`retention_en`（缺省用 `do_not_change`） |
+| `detailed_description` | ✅ | — | — | `art_style_prefix` + `shot_size_en/angle_en` + 站位段（`positions` + `world_pos` + `axis_en`）+ `lighting_en` + `camera_move_en` + `beats[].action` + 结尾固定句 |
+| `integrated_multimodal_description` | — | ✅ | ✅ | 同 `detailed_description` 内容，但**不带 `<Subject>`/`<Picture>` 标签**（T2VA/FL2VA 无标签），仍写全物理描述 |
+| `overall_soundscape` | ✅ | ✅ | ✅ | `shot.overall_soundscape`（缺省由 `beats[].sound` 汇总） |
+| `non_diegetic_music` | ✅ | ✅ | ✅ | `shot.non_diegetic_music`（缺省 `N/A`） |
+| 保留/规避句 | ✅ | ✅ | ✅ | 结尾固定：资产不进成片（不复现参考板网格/并排视图）+ 无字幕/logo（可被 `shot.preserve_avoid` 覆盖） |
 
-**装配硬约束**：① Ref2VA 段必须有 `refs` + 完整文字；② FL2VA 段 `refs` 留空但文字必须重申身份/站位/光照；③ 全部展开后过 `PromptLinter` 才可提交。
+**装配硬约束**：① Ref2VA 段必须有 `refs` + 完整文字；② T2VA 段（首镜无图）`refs` 留空但文字必须写全；③ FL2VA 段 `refs` 留空但文字必须重申身份/站位/光照；④ 全部展开后过 `PromptLinter` 才可提交。
 
 ---
 
@@ -78,6 +83,9 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 ## 6. 用法
 
 ```bash
+# 上游：小说正文 → 契约（LLM 起草 + 门禁回灌），详见 references/storyboard-from-novel.md
+python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json
+
 # 只做门禁校验（CI / 改镜后自检）
 python scripts/compile_storyboard.py --storyboard-file storyboard.json --check
 
@@ -100,5 +108,5 @@ python scripts/compile_storyboard.py --prompt-file prompt.txt --check
 
 ## 7. 分阶段
 
-- **Phase 1（当前）**：`refs` 直接内联真实图路径（如 `img/1_女孩.png`），无 manifest；无场景主视图时 `ref_wide: null`，背景走纯文字。
-- **Phase 2**：引入 `assets/manifest.json`，`refs` 的 `@标签` 由 manifest 解析为真实路径；补四视图参考板与场景主视图；`--confirm` 阶段门 + 视觉审计（可选项，复用本地视觉 LLM）。
+- **Phase 1（当前）**：`refs` 直接内联真实图路径（如 `img/1_女孩.png`），无 manifest；无场景主视图时 `ref_wide: null`，背景走纯文字。上游产契约：`scripts/gen_storyboard_llm.py`（小说 → 契约，LLM 起草 + 门禁回灌）或手写。
+- **Phase 2**：引入 `assets/manifest.json`，`refs` 的 `@标签` 由 manifest 解析为真实路径；补四视图参考板与场景主视图（补齐后首段由 T2VA 升级为 Ref2VA）；`--confirm` 阶段门 + 视觉审计（可选项，复用本地视觉 LLM）。

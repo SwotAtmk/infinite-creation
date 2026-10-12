@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # compile_storyboard.py
 # ========================================
-# storyboard.json（H3 分镜数据契约）→ MiniMax H3 提示词（Ref2VA 六段式 / FL2VA 三段式）
+# storyboard.json（H3 分镜数据契约）→ MiniMax H3 提示词（Ref2VA 六段式 / T2VA·FL2VA 三段式）
 #
 # 本脚本是 h3-prompt-writing 技能的「契约 → 提示词」确定性编译内核，对应
 # doc/consistency-plan.md §5.1 桥接脚本的六个模块：
@@ -13,7 +13,9 @@
 #     由外部 runner 负责——本地 `gen_h3_scenes_ref-8b-heretic.py` 只是某一台机器的
 #     参考实现，非通用；本脚本产出与机器无关的提示词与段清单，任意 runner 均可消费。
 #   · 提示词严格对齐官方指南：references/ref-en.txt（Ref2VA 六段）、
-#     references/base-en.txt（FL2VA 三段）。
+#     references/base-en.txt（T2VA/FL2VA 三段）。
+#   · 段类型：首镜有 refs → 首段 Ref2VA；首镜无 refs → 首段 T2VA；其余段 FL2VA。
+#   · 上游产契约可用 scripts/gen_storyboard_llm.py（小说 → storyboard.json）。
 #   · 最终提示词零指代，且逐段不重复（除显式 allow_repeat 的重复动作镜）
 #     → PromptLinter 强制（§8 第 4/5 条、§4.11 原则 2/4）。
 #
@@ -145,8 +147,8 @@ class RefMapBuilder:
 
     def build(self, sb, shot, kind):
         refs = shot.get("refs") or {}
-        if kind == "fl2va":
-            # fl2va 节点无 ref 端口：即使契约误填也不注册，交 PromptLinter 报警
+        if kind in ("fl2va", "t2va"):
+            # fl2va / t2va 节点无 ref 端口：即使契约误填也不注册，交 PromptLinter 报警
             return {"ref_images": [], "duties": {}, "label_to_picture": {}}
         images, duties, label_to_picture = [], {}, {}
         for label, path in refs.items():
@@ -442,6 +444,8 @@ class PromptLinter:
             issues.append(err("ref2va_requires_refs", "%s 为 Ref2VA 段但 refs 为空（D11：每段必有参考图）" % sid))
         if kind == "fl2va" and has_ref:
             issues.append(warn("fl2va_refs_ignored", "%s 为 FL2VA 段，无 ref 端口，refs 已忽略（应留空）" % sid))
+        if kind == "t2va" and has_ref:
+            issues.append(warn("t2va_refs_ignored", "%s 为 T2VA 段（首个生成镜无参考图），refs 已忽略（应留空）" % sid))
 
         positions = shot.get("positions") or {}
         if not positions:
@@ -550,6 +554,12 @@ class UnitPlanner:
             n = int(math.ceil(dur / max_duration - 1e-9)) if max_duration and max_duration > 0 else 1
             n = max(1, n)
             for k in range(n):
+                if film_first:
+                    # 首段：有参考图 → Ref2VA（锁身份/站位）；无资产 → T2VA（纯文字起片）
+                    has_ref = any((shot.get("refs") or {}).values())
+                    kind = "ref2va" if has_ref else "t2va"
+                else:
+                    kind = "fl2va"
                 units.append({
                     "index": len(units),
                     "shot_id": shot.get("id"),
@@ -557,7 +567,7 @@ class UnitPlanner:
                     "unit_index": k,
                     "sub_units": n,
                     "duration": round(dur / n, 3),
-                    "kind": "ref2va" if film_first else "fl2va",
+                    "kind": kind,
                 })
                 film_first = False
         return units

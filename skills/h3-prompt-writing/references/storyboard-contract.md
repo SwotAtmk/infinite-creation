@@ -27,6 +27,7 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 | `docs/test/storyboard.example-novel.json` | 小说直出样例（本地测试小说，未入库；8 镜无资产 → 首段 T2VA），`--check` 零 error/零 warn |
 | `references/storyboard-from-novel.md` | 上游说明：小说/剧本 → 契约（LLM 起草 + 门禁闭环） |
 | `references/manifest.example.json` | 资产库索引样例（§6.3）：`@角色`/`#场景` → 视图路径 + 元数据 |
+| `references/fallback-policy.md` | 执行层接口契约（2.3）：阶段确认门 + H3 失败降级梯子 + Seedance 接口（仅留接口） |
 | `storyboard.json`（用户产物） | 一部片子的分镜契约：角色 / 场景 / 逐镜编排 |
 | `manifest.json`（`build_manifest.py` 产出） | 资产库索引（§6.3）：把散落的资产收成索引，供 `--manifest` 解析留空的 `refs` |
 | `continuity-ledger.json`（编译器产出） | 跨镜状态账本：每镜开始/结束状态（§6.5） |

@@ -52,7 +52,7 @@ When H3 cannot generate the whole film in one pass, generation is split into sho
 Notes:
 - A segment that restates the characters' identity/position/lighting is **not** a "repeated segment"; the no-repeat rule compares the **action** only. Mark a genuinely repeating-action shot with `"allow_repeat": true`.
 - A shot longer than the per-segment limit is auto-split into sub-segments that reuse the same prompt (the action replays). The compiler warns; shorten `duration` or split the action into separate shots instead.
-- Compilation is the portable, machine-independent half. Submitting to a runner (local ComfyUI via `references/comfyui-node-adapter.md`, or a Hub tool) stays outside this skill.
+- Compilation is the portable, machine-independent half. Submitting to a runner (local ComfyUI via `references/comfyui-node-adapter.md`, or a Hub tool) stays outside this skill. The stage-confirmation gate (`--confirm`) and the fallback ladder (H3 failure → shrink the segment → ask the user) are an **interface contract** every runner must follow — see `references/fallback-policy.md`.
 
 ## Tips for Better Results
 - Always match the total duration of the description to the requested video length (2–15 seconds), driven by content rhythm: a single short line of dialogue needs only 2–4 seconds — do not pad short shots to 10+ seconds.

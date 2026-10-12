@@ -128,12 +128,13 @@ python scripts/gen_storyboard_llm.py --novel-file novel.md --out storyboard.json
 | 生成 | `python scripts/gen_storyboard_llm.py --novel-file ../../docs/test/test-novel.md --out storyboard.json --shots-hint 8 --target-total 34 --attempts 3 --keep-raw raw/`（当时 few-shot 样例还在仓库内 `references/storyboard.example.json`，生成器默认读取；该样例现已按「测试素材不入库」移出，复跑须加 `--example-file ../../docs/test/storyboard.example.json`，见 §7） |
 | 模型 | 本地 `llama.cpp` router（`http://127.0.0.1:1234/v1`）× `Huihui-Qwen3.8-27B-abliterated-GGUF`，`enable_thinking=false` |
 | 结果 | **第 1 次尝试即门禁通过**：8 镜 / 3 场景 / 3 角色（`@主角` `@门卫` `@男生`），原对白以 `<d>[中文] …</d>` 逐字保留，运镜 static/tilt/pan/tracking/push 有变化 |
+| 结果备注 | 上表是**当时**（prompt 尚未加 rule 13 `source`、约 9.3k token）的实测。加入 `source` 标注后 prompt 增至约 10k token，实测需 **2–3 次尝试**才闭合（模型在中途随机早停）——**这是「Linter 门禁 + 干净重试」的正常工作形态**，详见 §7.3 |
 | 编译 | `python scripts/compile_storyboard.py --storyboard-file storyboard.json --out segments/` → 8 段（1× T2VA + 7× FL2VA），`error=0` |
 | 产物 | 已收为 `docs/test/storyboard.example-novel.json`（`--check` → `error=0, warn=0`） |
 
 两点实测经验（已回写进生成器系统提示）：
 
-1. **长输出会被截断**：镜数给到 10 并要求逐镜对白时，本地 27B 会在 JSON 未闭合处停笔（实测硬墙 ≈ 7.05k token，见 §7）；规则 12「紧凑输出」+ `--shots-hint 8` 后可稳定收尾。生成器对「截断」与「语法错」分别回灌不同提示。
+1. **长输出会被截断**：镜数给到 10 并要求逐镜对白时，本地 27B 会在 JSON 未闭合处停笔（随机，实测 2.7k–7.1k token，见 §7.3）；规则 12「紧凑输出」+ `--shots-hint 8` 后能收得住，但**仍会随机提前停笔**，靠「干净重试」自愈。生成器对「截断」与「语法错」分别回灌不同提示。
 2. **运镜可执行性**：`tracking` 常被写成「tracks behind him, following his movement」，缺起点/终点 → 门禁 `camera_not_executable`。规则 9 已要求显式写 `starts … and stops when …`；本条样例中的 2 句在产出后经**分镜审查**按此收紧（其余内容为模型直出）。
 
 ---
@@ -177,7 +178,7 @@ python -u scripts/gen_storyboard_llm.py \
 
 ### 7.3 实测结论（A/B 两次对照，均为实测非推测）
 
-1. **本地 27B 的生成硬墙 ≈ 7.05k token**，与 `--max-tokens`（16384）无关、与服务端长度上限无关——同一模型同一次会话里连续输出 **9000 token 的纯文本毫无问题**（`finish_reason=length`）。即：长 JSON 到 ~5–7k token 时模型会**中途自行吐 EOS**，JSON 停在任意字段中间（无服务端报错，`truncated=0`）。
+1. **本地 27B 会「中途随机提前停笔」**（实测停机点 2.7k–7.1k token，观测上限 ≈7.05k，不是固定墙）：长 JSON 写到一半就吐 EOS，JSON 停在任意字段中间。这与 `--max-tokens`（16384）无关、与服务端长度上限无关——同一模型同一次会话里连续输出 **9000 token 的纯文本毫无问题**（`finish_reason=length`，`truncated=0`、无任何报错）。
 2. **截断重试必须换干净上下文**。原实现把整段半截 JSON 作为 `assistant` 消息塞回上下文，实测第 2/3 次**总是更短且仍不闭合**（4984 → 2509 → 1819 token，等于白跑两次）。已改为：截断时**不塞回半截输出**，只回灌「重写一份更紧凑的完整契约」提示 → 第 2 次即产出完整 JSON。
 3. **`--json-mode` 对本地 27B 无效**。llama.cpp 的 `response_format=json_object` 允许围栏与散文（实测输出带 ` ```json ` 围栏），不会屏蔽提前 EOS。
 4. **`response_format=json_schema`（契约 schema 直接当语法）在本构建不可用**：服务端报 `Failed to initialize samplers: failed to parse grammar`（0.6s 内返回）。原因是 `references/storyboard.schema.json` 含 llama.cpp 转换器不支持的结构（`type: ["string","null"]` / `pattern` / `$ref` 组合）。若日后要强制收尾，需另写严格 GBNF（本机 `llama.cpp-b10448` **不带**任何 `.gbnf`）。

@@ -109,7 +109,7 @@ def extract_json(text):
             depth -= 1
             if depth == 0:
                 return json.loads(s[start:i + 1])
-    raise ValueError("JSON 括号不闭合（可能被 max_tokens 截断）")
+    raise ValueError("JSON 括号不闭合（模型提前停笔，或触及 max_tokens）")
 
 
 # ─────────────────────────────────────────────

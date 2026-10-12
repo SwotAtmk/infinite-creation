@@ -161,7 +161,7 @@ python -u scripts/gen_storyboard_llm.py \
 | 契约 | 8 镜 / 32s、2 场景（`#校门` `#走廊`）、2 角色（`@主角` `@门卫`）；16/16 beats 带 `source` 标注 |
 | 编译 | `compile_storyboard.py --check` → **error=0 / warn=0 / info=5**（5 条 `fidelity_added`，即模型自标的创作补充 beats，符合设计） |
 | 出段 | **8 段 = 1× T2VA + 7× FL2VA**（首镜 `refs={}` → T2VA ✓） |
-| 对白 | `<d>[Chinese] 你好，请稍等一下。</d>` 等逐字保留 |
+| 对白 | `<d>[Chinese] 你好，请稍等一下。</d>`（通用占位示例）等逐字保留 |
 
 ### 7.2 复验 B：真·出厂状态（完全无样例）
 

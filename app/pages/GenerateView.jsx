@@ -14,6 +14,9 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
   // 分阶段运行：待办数由后端算（不启 LLM），勾选后单独起一批
   const [stageList, setStageList] = useState(null);
   const [pending, setPending] = useState({});
+  const [hardware, setHardware] = useState('');
+  // AMD 单卡：整条流水线同时占 LLM 与 ComfyUI，后端 /run 直接 400 —— 入口在这里就停用
+  const amd = hardware === 'amd';
   const [picked, setPicked] = useState(() => new Set());
   const [stageErr, setStageErr] = useState('');
   // 提交类操作进行中：显示全屏加载层提示等待并阻断重复点击，操作结束（成功或失败）后自动消失
@@ -23,7 +26,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
   useEffect(() => {
     let alive = true;
     const load = () => api.get('/api/projects/' + projectId + '/stages')
-      .then((d) => { if (alive) { setStageList(d.stages); setPending(d.pending || {}); } })
+      .then((d) => { if (alive) { setStageList(d.stages); setPending(d.pending || {}); setHardware(d.hardware || ''); } })
       .catch(() => {});
     load();
     if (!running) return () => { alive = false; };
@@ -109,8 +112,8 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
           <div className="row">
             {running
               ? <Button size="sm" color="danger" onPress={stopRun}>■ 停止</Button>
-              : <Button size="sm" color="success" isDisabled={!cur} onPress={() => cur && startRun(cur.title)}>▶ 生成/继续 {cur ? cur.title : ''}</Button>}
-            {!running && <Button size="sm" variant="flat" onPress={runAll}>生成全部章节</Button>}
+              : <Button size="sm" color="success" isDisabled={!cur || amd} onPress={() => cur && startRun(cur.title)}>▶ 生成/继续 {cur ? cur.title : ''}</Button>}
+            {!running && <Button size="sm" variant="flat" isDisabled={amd} onPress={runAll}>生成全部章节</Button>}
             {!running && <Button size="sm" variant="flat" isDisabled={!cur} onPress={() => regenChapter('storyboard')}>↻ 重新生成本章分镜</Button>}
             {!running && <Button size="sm" variant="flat" isDisabled={!cur} onPress={() => regenChapter('videos')}>↻ 重新生成本章视频</Button>}
           </div>
@@ -145,9 +148,11 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
               </div>
               {stageErr && <p className="m-0 text-danger">{stageErr}</p>}
               <p className="muted" style={{ fontSize: 12 }}>
-                受全部模型本地部署的硬件限制（显存有限），LLM 与 ComfyUI 不能同时运行，故按阶段拆分执行：勾「LLM 创作」只写文本（渲染工具已禁用），
-                勾「资产图」「分镜视频」为渲染阶段，同一批不能混勾 LLM 与渲染项；待办数由后端统计，不消耗 LLM。
-                AMD 单卡下「生成/继续」「生成全部章节」（整条流水线会同时占用 LLM 与 ComfyUI）已停用，请用「分阶段运行」分批执行。
+                受全部模型本地部署的硬件限制（显存有限），建议按阶段拆分执行：勾「LLM 创作」只写文本（渲染工具已禁用），
+                勾「资产图」「分镜视频」为渲染阶段；待办数由后端统计，不消耗 LLM。
+                {amd
+                  ? ' AMD 单卡下 LLM 与 ComfyUI 不能同时运行：同一批不能混勾 LLM 与渲染项；「生成/继续」「生成全部章节」（整条流水线会同时占用两者）已停用，请用「分阶段运行」分批执行。'
+                  : ''}
                 由于视频生成耗时较长，强烈建议在生成视频前先检查分镜与素材是否符合预期，再启动视频生成，避免素材不合格导致返工。
               </p>
             </div>

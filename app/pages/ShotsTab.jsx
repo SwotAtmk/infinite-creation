@@ -267,7 +267,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
                   const job = activeJobFor(s.id);
                   return (
                     <Button size="sm" isDisabled={!!job} onPress={() => onRegen(s.id)}>
-                      {job ? (job.status === 'queued' ? '⏳ 排队中' : (job.phase === '等待服务' ? '⏳ 等待服务…' : '生成中…')) : '↻ 重新生成'}
+                      {job ? (job.status === 'queued' ? '⏳ 排队中' : '生成中…') : '↻ 重新生成'}
                     </Button>
                   );
                 })()}

@@ -1,17 +1,17 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Projects, loadConfig } from '@/lib/core/index.js';
-import { STAGES, pendingByStage, preflight, startStageJob, activeJobOf, pipelineBlockReason } from '@/lib/agent/index.js';
+import { Projects } from '@/lib/core/index.js';
+import { STAGES, pendingByStage, preflight, startStageJob, activeJobOf } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
 
 export const dynamic = 'force-dynamic';
 
-// 勾选前的状态：各阶段待办数 + 「整条流水线」入口的停用原因（两侧服务都在本机时才非空）
+// 勾选前的状态：各阶段待办数。不再返回「整条流水线停用原因」——应用不替用户判断服务能不能同时跑。
 export async function GET(_req, { params }) {
   const { id } = await params;
   const p = Projects.get(id);
   if (!p) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
-  return NextResponse.json({ stages: STAGES, pending: pendingByStage(id), pipelineBlocked: pipelineBlockReason(loadConfig()) });
+  return NextResponse.json({ stages: STAGES, pending: pendingByStage(id) });
 }
 
 // 起一批阶段任务。拦截逻辑放在 preflight，失败要回 400 并带上原因——

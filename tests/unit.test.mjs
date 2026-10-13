@@ -16,7 +16,7 @@ import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceIm
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool } from '../lib/agent/tools.js';
-import { runExclusiveVideo, serviceConflict, waitServiceConflict } from '../lib/agent/job-runner.js';
+import { runExclusiveVideo, serviceConflict, waitServiceConflict, bothLocal, pipelineBlockReason } from '../lib/agent/job-runner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -220,13 +220,17 @@ test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前�
   assert.equal(isPresetWorkflows(null), false);
 });
 
-test('preflight: 英伟达模式不拦 LLM/ComfyUI 同批与 vision，AMD 模式拦下', async () => {
-  const base = { llm: { baseUrl: 'http://127.0.0.1:1', vision: false }, comfyui: { baseUrl: 'http://127.0.0.1:1' } };
-  await assert.rejects(() => preflight(['llm', 'image'], { ...base, hardware: { mode: 'amd' } }), /不能同一批跑/);
-  await assert.rejects(() => preflight(['image'], { ...base, hardware: { mode: 'amd' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /llm\.vision/);
-  // 英伟达模式：同批不再被拦，走到「LLM 未就绪」这一步（说明互斥与 vision 拦截已放行）
-  await assert.rejects(() => preflight(['llm', 'image'], { ...base, hardware: { mode: 'nvidia' } }), /LLM 未就绪/);
-  await assert.rejects(() => preflight(['image'], { ...base, hardware: { mode: 'nvidia' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /ComfyUI 未就绪/);
+test('preflight: 两侧服务都在本机时拦下同批与 vision（与硬件模式无关）；LLM 在远端则放行', async () => {
+  const local = { llm: { baseUrl: 'http://127.0.0.1:1', vision: false }, comfyui: { baseUrl: 'http://127.0.0.1:1' } };
+  await assert.rejects(() => preflight(['llm', 'image'], { ...local, hardware: { mode: 'amd' } }), /不能同一批跑/);
+  await assert.rejects(() => preflight(['image'], { ...local, hardware: { mode: 'amd' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /llm\.vision/);
+  // 判据是「两侧是否都在本机」，不是硬件模式：英伟达模式下同样拦
+  await assert.rejects(() => preflight(['llm', 'image'], { ...local, hardware: { mode: 'nvidia' } }), /不能同一批跑/);
+  await assert.rejects(() => preflight(['image'], { ...local, hardware: { mode: 'nvidia' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /llm\.vision/);
+  // LLM 在远端：两侧不争本机资源 → 同批/vision 都放行，直接走到就绪检查
+  const remote = { llm: { baseUrl: 'http://remote.invalid', vision: true }, comfyui: { baseUrl: 'http://127.0.0.1:1' } };
+  await assert.rejects(() => preflight(['llm', 'image'], { ...remote, hardware: { mode: 'amd' } }), /LLM 未就绪/);
+  await assert.rejects(() => preflight(['image'], { ...remote, hardware: { mode: 'amd' } }), /ComfyUI 未就绪/);
 });
 
 test('fallbackVideoPrompt: 占位符与一致性描述', () => {
@@ -646,6 +650,8 @@ test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时�
   let releaseBlock;
   const blocked = new Promise((r) => { releaseBlock = r; });
   const holder = runExclusiveVideo(() => blocked);
+  // 闸门状态必须挂 globalThis：模块级变量在 Next dev 下每个 route 各一份 → 会真并发
+  assert.ok(globalThis.__infiniteCreationVideoGate, '槽位与队列应挂在 globalThis 上共享');
 
   // 排队前已带停止标记 → 直接拒绝，不进队列
   await assert.rejects(
@@ -666,15 +672,15 @@ test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时�
   await holder.catch(() => {});
 });
 
-test('AMD 单卡互斥：另一侧服务未关 → 任务等待并自动续跑（可停止、有上限）；非 AMD 不判定', async () => {
+test('服务互斥：本机对端在跑 → 排队等待并自动续跑（不设上限、可停止）；对端在远端不判定', async () => {
   const orig = global.fetch;
-  const cfg = { hardware: { mode: 'amd' }, llm: { baseUrl: 'http://127.0.0.1:1234' }, generation: { serviceWaitMinutes: 1 } };
+  const cfg = { llm: { baseUrl: 'http://127.0.0.1:1234' }, comfyui: { baseUrl: 'http://127.0.0.1:8188' } };
   let up = true;
   global.fetch = async () => ({ ok: up });
   try {
-    // 非 AMD：远端/本机都不做互斥判定
-    assert.equal(await serviceConflict('comfyui', { ...cfg, hardware: { mode: 'nvidia' } }), '');
-    // AMD + 对端在跑：返回可读的冲突描述
+    // 对端在本机 → 判定；对端是远端（非本机）→ 不判定（不占本机资源，与硬件模式无关）
+    assert.equal(await serviceConflict('comfyui', { ...cfg, llm: { baseUrl: 'https://api.deepseek.com' } }), '');
+    assert.equal(await serviceConflict('llm', { llm: { baseUrl: 'https://api.deepseek.com' }, comfyui: { baseUrl: 'http://127.0.0.1:8188' } }), '', '远端 LLM 不必等本机 ComfyUI 关闭');
     assert.match(await serviceConflict('comfyui', cfg), /LLM 服务/);
 
     // 对端在跑 → 不直接失败，先等它关闭再自动续跑（期间上报等待状态）
@@ -687,12 +693,25 @@ test('AMD 单卡互斥：另一侧服务未关 → 任务等待并自动续跑�
     up = true;
     await assert.rejects(waitServiceConflict('comfyui', { cfg, intervalMs: 20, isAborted: () => true }), /已停止/);
 
-    // 对端一直不关 → 到 serviceWaitMinutes 上限主动放弃，而不是无限等
-    await assert.rejects(
-      waitServiceConflict('comfyui', { cfg: { ...cfg, generation: { serviceWaitMinutes: 0.001 } }, intervalMs: 20 }),
-      /仍未关闭/,
-    );
+    // 对端一直不关 → 一直排队等（不再按分钟数判失败），仍可被停止退出
+    let stop = false;
+    const waiting = waitServiceConflict('comfyui', { cfg, intervalMs: 20, isAborted: () => stop });
+    const t0 = Date.now();
+    await new Promise((r) => setTimeout(r, 120));
+    assert.ok(Date.now() - t0 >= 100, '应一直在等，而不是到某个上限就失败');
+    stop = true;
+    await assert.rejects(waiting, /已停止/);
   } finally { global.fetch = orig; }
+});
+
+test('bothLocal / pipelineBlockReason: 判据是「两侧服务是否都在本机」，与硬件模式无关', () => {
+  const local = { llm: { baseUrl: 'http://127.0.0.1:1234/v1' }, comfyui: { baseUrl: 'http://127.0.0.1:8188' } };
+  assert.equal(bothLocal(local), true);
+  assert.equal(bothLocal({ ...local, llm: { baseUrl: 'https://api.deepseek.com' } }), false, '远端 LLM → 两侧不争本机资源');
+  assert.equal(bothLocal({ ...local, comfyui: { baseUrl: 'http://192.168.1.9:8188' } }), false, '远端 ComfyUI');
+  assert.equal(bothLocal({ hardware: { mode: 'amd' }, llm: {}, comfyui: {} }), false, '地址缺失按非本机处理，不炸');
+  assert.match(pipelineBlockReason(local), /分阶段运行/);
+  assert.equal(pipelineBlockReason({ ...local, llm: { baseUrl: 'https://api.deepseek.com' } }), '', 'LLM 在远端 → 整条流水线可用');
 });
 
 // —— TTS 音色性别/年龄兜底推断 ——

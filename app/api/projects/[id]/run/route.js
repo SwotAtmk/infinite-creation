@@ -17,7 +17,7 @@ export async function POST(req, { params }) {
     const job = startCreateJob({ projectId: id, chapter: body?.chapter, onProgress: (patch) => broadcast(patch) });
     return NextResponse.json(job);
   } catch (e) {
-    // 前置约束不通过（如 AMD 单卡禁用整条流水线）：任务没起来，复位项目运行态再回 400，
+    // 前置约束不通过（如本机两侧服务时禁用整条流水线）：任务没起来，复位项目运行态再回 400，
     // 让前端把原因弹出来，而不是留下一个永远「运行中」的项目。
     Projects.update(id, { status: 'idle' });
     return NextResponse.json({ error: e.message }, { status: 400 });

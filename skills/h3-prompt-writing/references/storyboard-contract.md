@@ -76,7 +76,7 @@ H3 一次生成不了长视频（硬件限制），只能**用短视频逐段生
 
 1. **零指代**：最终提示词不得出现「上一镜头 / 继续 / 同上 / 照旧 / 仍然 / 保持原样 / 和之前一样」等上下文依赖词（中英双查）→ `PromptLinter` 报 `banned_phrase`。
 2. **世界位置 × 画面位置双写**：每镜同时写「相对地标的世界位置」（`world_pos`）+「轴线」（`axis_en`）+「本次机位下的画面位置与视线」（`positions[].screen_pos/facing/view_target`）；禁止只写「还在原来的位置」。
-3. **逐段不重复**（本方案重点）：`beats[].action` 归一化后若与其它镜**完全相同** → 报 `duplicate_action`；确属重复动作镜须显式 `allow_repeat: true`。身份/站位/光照的**跨段重申是设计要求**（D11），不算违规——重复判定只看**动作指纹**。
+3. **逐段不重复**（本方案重点）：`beats[].action` 归一化后若与其它镜**完全相同** → 报 `duplicate_action`；确属重复动作镜须显式 `allow_repeat: true`。身份/站位/光照的**跨段重申是设计要求**（D11），不算违规——重复判定只看**动作指纹**。同一个超长镜被自动拆出的兄弟子段共用同一提示词/动作，属硬件切段（见上条），**不判错**，只报 `auto_split_repeats_action` 提醒。
 4. **时长预算**：`beats[].time`（格式 `"起-止s"`）必须**连续覆盖** `[0, duration]`，无空洞、无重叠、不从 0 开始或未到 duration → 报 `duration_*`。
 5. **字段完整性**：`positions` / `world_pos` / `axis_en` / `lighting_en` / `first_frame_hard` / 视线 缺一即报错；且 `lighting_en` 必须**真的出现在提示词里**（`lighting_not_in_prompt`）。
 6. **运镜可执行性**：`camera_move_en` 必须写清起点/终点/跟随目标/停止原因；非 `static` 运镜若缺起点或终点 → 报 `camera_not_executable`。

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "storyboard.schema.json",
   "title": "H3 storyboard contract",
-  "description": "分镜数据契约：一个 storyboard.json 描述一部短片的角色/场景资产引用与逐镜（shot）编排，由 scripts/compile_storyboard.py 确定性编译为 MiniMax H3 提示词（Ref2VA 六段式 / FL2VA 三段式）。字段来源见 references/storyboard-contract.md。凡喂给 H3 提示词的字段值一律用英文（H3 只认英文正文）；仅供人读的管理字段（cut_reason / continuity_risk / title）可用中文。",
+  "description": "分镜数据契约：一个 storyboard.json 描述一部短片的角色/场景资产引用与逐镜（shot）编排，由 scripts/compile_storyboard.py 确定性编译为 MiniMax H3 提示词（Ref2VA 六段式 / FL2VA 三段式）。字段来源见 references/storyboard-contract.md。凡喂给 H3 提示词的字段值一律用英文（H3 只认英文正文）；仅供人读的管理字段（cut_reason / continuity_risk / title）可用中文。注意：本 schema 只约束**结构**（required/enum/类型）；语义必填字段（world_pos / axis_en / positions.*.facing|view_target / lighting_en / camera_move(_en) / first_frame_hard 等）由编译门禁强制，清单见 references/storyboard-contract.md §5——只照本 schema 手写契约会被门禁连续报错。",
   "type": "object",
   "required": ["schema_version", "art_style_prefix", "characters", "scenes", "shots"],
   "additionalProperties": true,
@@ -28,7 +28,7 @@
         "fps": { "type": "integer", "default": 24 },
         "default_max_duration": {
           "type": "number",
-          "description": "单段物理时长上限（秒）。超过则自动拆分，拆分出的子段会重复同一提示词（即重复动作），见 contract 文档「逐段不重复」规则。",
+          "description": "单段物理时长上限（秒）。超过则自动拆分，拆分出的子段会重复同一提示词（即重复动作），见 contract 文档「逐段不重复」规则。**同一镜被拆出的兄弟子段之间不判错**（只报 auto_split_repeats_action warn）；只有跨镜动作重复才报 duplicate_action error。",
           "default": 5.0
         }
       }
@@ -260,7 +260,7 @@
         "continuity_risk": { "type": "string", "description": "连续性风险（人读，可中文）。" },
         "allow_repeat": {
           "type": "boolean",
-          "description": "显式允许与其它镜重复同一动作（例如本就设计为重复循环的动作镜）。默认 false，重复即判错。",
+          "description": "显式允许与其它镜重复同一动作（例如本就设计为重复循环的动作镜）。默认 false，跨镜重复即判错；同一镜被自动拆分的兄弟子段不受此限（自动放行，仅报 warn）。",
           "default": false
         },
         "fidelity_lock": {

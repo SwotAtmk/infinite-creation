@@ -42,6 +42,15 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# 机器可读输出统一 utf-8（Windows 下 stdout 为管道时默认走本地代码页，外部按 utf-8 读会崩栈）。
+# 只重设非终端流：真实控制台保留本地编码，人看中文不乱码。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        if not _stream.isatty():
+            _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 HERE = Path(__file__).resolve().parent
 REFERENCES = HERE.parent / "references"
 
@@ -129,6 +138,21 @@ class LLMClient:
         self.think = think
         self.response_format = response_format
 
+    def _send(self, body):
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(self.url, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        if self.api_key:
+            req.add_header("Authorization", "Bearer %s" % self.api_key)
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")[:500]
+            raise RuntimeError("HTTP %s: %s" % (e.code, detail))
+        except urllib.error.URLError as e:
+            raise RuntimeError("连接失败（LLM 未启动？%s）：%s" % (self.url, e.reason))
+
     def chat(self, messages):
         body = {
             "model": self.model,
@@ -141,19 +165,15 @@ class LLMClient:
         }
         if self.response_format:
             body["response_format"] = self.response_format
-        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
-        req = urllib.request.Request(self.url, data=data, method="POST")
-        req.add_header("Content-Type", "application/json")
-        if self.api_key:
-            req.add_header("Authorization", "Bearer %s" % self.api_key)
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", errors="replace")[:500]
-            raise RuntimeError("HTTP %s: %s" % (e.code, detail))
-        except urllib.error.URLError as e:
-            raise RuntimeError("连接失败（LLM 未启动？%s）：%s" % (self.url, e.reason))
+            payload = self._send(body)
+        except RuntimeError as e:
+            # 云端 OpenAI 严格校验字段，不认 chat_template_kwargs 这类扩展而回 400：
+            # 去掉该字段重发一次，兑现脚本声明的「任意 OpenAI 兼容端点均可」。
+            if "chat_template_kwargs" not in body or "HTTP 400" not in str(e):
+                raise
+            body = {k: v for k, v in body.items() if k != "chat_template_kwargs"}
+            payload = self._send(body)
         choices = payload.get("choices") or []
         if not choices:
             raise RuntimeError("响应无 choices：%s" % json.dumps(payload, ensure_ascii=False)[:500])
@@ -261,8 +281,13 @@ def build_user_prompt(novel_text):
 def run_gate(storyboard_path, compiler_path):
     """调用编译器门禁，返回 (errors, warns, parsed_ok)。"""
     cmd = [sys.executable, str(compiler_path), "--storyboard-file", str(storyboard_path), "--json"]
+    # 子进程 stdout 是管道，Windows 下默认按本地代码页（cp936）编码；本函数按 utf-8 解析 --json。
+    # 不加 PYTHONIOENCODING 会出现 UnicodeDecodeError → stdout 变 None → 门禁永远读不到结果、
+    # 每次尝试都报假错、必然 exit 1。errors="replace" 只作兜底（宁可报「无法解析」也不崩栈）。
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=120)
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", env=env, timeout=120)
     except subprocess.TimeoutExpired:
         return ["门禁超时"], [], False
     out = (proc.stdout or "").strip()

@@ -27,6 +27,15 @@ import json
 import sys
 from pathlib import Path, PurePosixPath
 
+# 机器可读输出统一 utf-8（Windows 下 stdout 为管道时默认走本地代码页，外部按 utf-8 读会崩栈）。
+# 只重设非终端流：真实控制台保留本地编码，人看中文不乱码。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        if not _stream.isatty():
+            _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 CHAR_VIEWS = ("front", "side", "back", "closeup")
 SCENE_VIEWS = ("wide",)
 EXTS = (".png", ".jpg", ".jpeg", ".webp")
@@ -98,7 +107,9 @@ def build_from_dir(assets_dir):
         for d in sorted(p for p in base.iterdir() if p.is_dir()):
             rel = PurePosixPath(str(assets_dir).replace("\\", "/")) / kind / d.name
             manifest[group][prefix + d.name] = {
-                "views": scan_views(rel, assets_dir, view_names),
+                # rel 已含 assets_dir 前缀（清单要跨机流转），不能再把它当 asset_root 拼一次，
+                # 否则 abs_dir = assets_dir/rel 双前缀 → 目录不存在 → 视图全空。相对/绝对路径都按 cwd 解析。
+                "views": scan_views(str(rel), None, view_names),
             }
             if group == "scenes":
                 manifest[group][prefix + d.name]["anchors"] = []
@@ -150,7 +161,9 @@ def main():
         asset_root = args.asset_root or str(sb_path.resolve().parent)
         manifest = build_from_storyboard(sb, asset_root)
     else:
-        asset_root = args.asset_root or args.assets_dir
+        # 清单里的视图路径保留了 assets_dir 前缀（跨机可读），故解析基准是它的父目录：
+        # 相对路径（assets）→ '.'（即 cwd）；绝对路径时 pathlib 自行丢弃多余前缀。
+        asset_root = args.asset_root or str(Path(args.assets_dir).parent)
         manifest = build_from_dir(args.assets_dir)
 
     out_chars = len(manifest.get("characters") or {})

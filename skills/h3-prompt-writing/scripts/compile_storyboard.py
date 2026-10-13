@@ -33,6 +33,16 @@ import re
 import sys
 from pathlib import Path
 
+# 机器可读输出统一 utf-8：调用方（gen_storyboard_llm.py 门禁闭环 / 外部 runner）一律按 utf-8
+# 解析 `--json`。Windows 下 stdout 为管道时默认走本地代码页（如 cp936），对面按 utf-8 解码会崩栈，
+# 门禁于是「每次尝试都报假错、永不收敛」。只重设非终端流：真实控制台保留本地编码，人看中文不乱码。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        if not _stream.isatty():
+            _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 SCHEMA_VERSION = "1.0"
 
 # 零指代禁用词（§8 第 4 条 7 类 + 常见同义；中英双查）
@@ -118,15 +128,45 @@ class StoryboardLoader:
         for key in ("art_style_prefix", "characters", "scenes", "shots"):
             if key not in sb:
                 issues.append(err("missing_top_field", "缺少顶层字段：%s" % key))
-        shots = sb.get("shots") or []
+        # 类型防御（bad_type）：契约由 LLM 起草，字段形状可能是任意值。这里先挡掉会让后续
+        # 渲染/锚点解析/台账直接抛栈（traceback）的形状，转成可读 error 交回门禁闭环。
+        for key, typ, cn in (("characters", dict, "对象"), ("scenes", dict, "对象"), ("shots", list, "数组")):
+            val = sb.get(key)
+            if val is not None and not isinstance(val, typ):
+                issues.append(err("bad_type", "%s 必须是%s，实际是 %s" % (key, cn, type(val).__name__)))
+        shots = sb.get("shots")
+        if not isinstance(shots, list):
+            return issues        # 形状不对，无法逐镜检查；bad_type 已说明原因
         if not shots:
             issues.append(err("no_shots", "shots 为空"))
+        bad_shots = [i for i, s in enumerate(shots) if not isinstance(s, dict)]
+        if bad_shots:
+            for i in bad_shots:
+                issues.append(err("bad_type", "shots[%d] 必须是对象，实际是 %s" % (i, type(shots[i]).__name__)))
+            return issues
         scenes = sb.get("scenes") or {}
         seen_ids = set()
         for i, shot in enumerate(shots):
             for key in ("id", "scene", "duration", "beats"):
                 if key not in shot:
                     issues.append(err("missing_shot_field", "shots[%d] 缺少字段：%s" % (i, key)))
+            beats = shot.get("beats")
+            if beats is not None and not isinstance(beats, list):
+                issues.append(err("bad_type", "shots[%d].beats 必须是数组，实际是 %s" % (i, type(beats).__name__)))
+            else:
+                for j, b in enumerate(beats or []):
+                    if not isinstance(b, dict):
+                        issues.append(err("bad_type", "shots[%d].beats[%d] 必须是对象，实际是 %s" % (i, j, type(b).__name__)))
+            for field in ("positions", "world_pos"):
+                val = shot.get(field)
+                if val is not None and not isinstance(val, dict):
+                    issues.append(err("bad_type", "shots[%d].%s 必须是对象，实际是 %s" % (i, field, type(val).__name__)))
+            pos = shot.get("positions")
+            if isinstance(pos, dict):
+                bad_pos = [k for k, v in pos.items() if not isinstance(v, dict)]
+                if bad_pos:
+                    issues.append(err("bad_type", "shots[%d].positions 的 %s 必须是对象（站位字段），不能写成字符串"
+                                      % (i, ", ".join(str(k) for k in bad_pos))))
             sid = shot.get("id")
             if sid in seen_ids:
                 issues.append(err("duplicate_shot_id", "重复 shot id：%s" % sid))
@@ -134,6 +174,9 @@ class StoryboardLoader:
             if shot.get("scene") and shot["scene"] not in scenes:
                 issues.append(err("unknown_scene", "shots[%d].scene 未在 scenes 定义：%s" % (i, shot["scene"])))
             refs = shot.get("refs") or {}
+            if not isinstance(refs, dict):
+                issues.append(err("bad_type", "shots[%d].refs 必须是对象，实际是 %s" % (i, type(refs).__name__)))
+                continue
             for label, p in refs.items():
                 if label.startswith("@") and label not in (sb.get("characters") or {}):
                     issues.append(err("unknown_character", "shots[%d].refs 引用了未定义角色：%s" % (i, label)))
@@ -448,9 +491,15 @@ class PromptLinter:
         # ④ 运镜可执行性
         issues += self._check_camera(shot)
         # ⑤ 逐段不重复（用户强调：每段提示词不得重复，除非本就做重复动作）
+        # action_sigs: {action_signature: 首个使用该签名的镜号}。只查「不同镜之间」重复——
+        # 同一个超长镜被自动拆出的兄弟子段必然共用签名（硬件切段所致，另报 auto_split_repeats_action
+        # warn），不该判 error 把「长度性 → 缩片段」这条降级梯子堵死。
         sig = action_signature(shot)
-        if sig and sig in action_sigs and not shot.get("allow_repeat"):
-            issues.append(err("duplicate_action", "%s 与另一镜动作完全重复（若为重复动作镜请设 allow_repeat=true）" % shot.get("id")))
+        prev_shot = action_sigs.get(sig) if sig else None
+        if sig and prev_shot is not None and prev_shot != shot_number and not shot.get("allow_repeat"):
+            issues.append(err("duplicate_action",
+                              "%s 与第 %s 镜动作完全重复（同一镜切分的子段不计；确属重复动作镜请设 allow_repeat=true）"
+                              % (shot.get("id"), prev_shot)))
         # ⑥ 参考图存在性（--strict-refs 时缺失判 error）
         issues += self._check_refs(ref_map, ref_root)
         # ⑦ 剧情保真锁（§8 第 2 条）
@@ -556,7 +605,7 @@ class PromptLinter:
         - 每拍 `source` ∈ {original, added, tbd}；缺省视为 original（未标注）。
         - `added`（创作补充）→ info：仅限呼吸/视线/走位等演出细节，列给人确认。
         - `tbd`（待确认项）→ warn；`--strict-fidelity` 时判 error（正式生成前必须确认）。
-        - 整镜未标注且 `fidelity_lock` 为真 → info：提示未启用的保真标注。
+        - 整镜未标注的情形（缺省视为 original）由 `check_film` 的 `fidelity_unmarked` 统一提示，本函数不重复报。
         - `fidelity_lock: false` → warn：该镜显式放弃保真锁，AI 可自补剧情。
         """
         issues = []
@@ -564,12 +613,10 @@ class PromptLinter:
         beats = shot.get("beats") or []
         if shot.get("fidelity_lock") is False:
             issues.append(warn("fidelity_lock_off", "%s fidelity_lock=false：该镜显式关闭剧情保真锁，AI 可自补剧情" % sid))
-        added, tbd, unmarked = [], [], []
+        added, tbd = [], []
         for i, b in enumerate(beats):
             src = (b.get("source") or "").strip().lower()
-            if src not in ("original", "added", "tbd"):
-                unmarked.append(i)
-            elif src == "added":
+            if src == "added":
                 added.append(i)
             elif src == "tbd":
                 tbd.append(i)
@@ -743,6 +790,17 @@ def main(argv=None):
         struct_issues = loader.validate(sb)
         all_issues += struct_issues
         payload["mode"] = "storyboard"
+        if any(i["rule"] == "bad_type" for i in struct_issues):
+            # 形状坏到无法安全渲染（如 positions 写成字符串）→ 不编译，直接把可读 error 交给门禁
+            # 闭环；否则渲染中途抛 traceback，报错不可读、LLM 也拿不到可执行的修正信息。
+            if args.json:
+                payload["issues"] = all_issues
+                _safe_print(json.dumps(payload, ensure_ascii=False, indent=2))
+            else:
+                _safe_print("== compile_storyboard: 模式=storyboard，字段形状错误（bad_type），未编译 ==")
+                for i in all_issues:
+                    _safe_print("[%s] %s: %s" % (i["level"].upper(), i["rule"], i["msg"]))
+            return 1
         max_duration = args.max_duration
         if max_duration is None:
             max_duration = float((sb.get("video") or {}).get("default_max_duration") or 5.0)
@@ -758,7 +816,7 @@ def main(argv=None):
         linter = PromptLinter(strict_fidelity=args.strict_fidelity, strict_refs=args.strict_refs)
         ref_builder = RefMapBuilder()
         shots = sb.get("shots") or []
-        action_sigs = set()
+        action_sigs = {}
 
         all_issues += linter.check_film(sb)
 
@@ -778,7 +836,7 @@ def main(argv=None):
                                    % (u["shot_id"], u["sub_units"])))
             all_issues += issues
             if sig:
-                action_sigs.add(sig)
+                action_sigs.setdefault(sig, u["shot_index"] + 1)
             payload["units"].append({
                 "index": u["index"], "shot_id": u["shot_id"], "kind": kind,
                 "duration": u["duration"], "sub_units": u["sub_units"], "unit_index": u["unit_index"],

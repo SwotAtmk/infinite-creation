@@ -1,0 +1,41 @@
+{
+  "characters": {
+    "@女孩": {
+      "views": {
+        "front": "assets/char/CHAR_001/front.png",
+        "side": "assets/char/CHAR_001/side.png",
+        "back": "assets/char/CHAR_001/back.png",
+        "closeup": "assets/char/CHAR_001/closeup.png"
+      },
+      "do_not_change": [
+        "hairstyle",
+        "face shape",
+        "outfit colours",
+        "body proportions"
+      ],
+      "notes": "the school-age girl long straight black hair parted down the centre and falling to her chest an oval face dark brown almond-shaped eyes fair skin a calm closed-lip smile"
+    },
+    "@男孩": {
+      "views": {
+        "front": "assets/char/CHAR_002/front.png"
+      },
+      "do_not_change": [
+        "hairstyle",
+        "outfit colours",
+        "body proportions"
+      ],
+      "notes": "the school-age boy short textured black hair with a side-swept fringe a round face dark brown eyes fair skin a broad toothy smile"
+    }
+  },
+  "scenes": {
+    "#白棚": {
+      "views": {
+        "wide": "assets/scene/SCENE_01/wide.png"
+      },
+      "anchors": [
+        "seamless backdrop = background edge of the frame",
+        "floor line = stable baseline along the bottom edge"
+      ]
+    }
+  }
+}

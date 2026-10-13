@@ -70,7 +70,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
   }
   async function runAll() {
     setBusy('正在提交全部章节生成…');
-    try { await onRun(null); } finally { setBusy(null); }
+    try { await onRun(null); } catch (e) { toast.error(e.message); } finally { setBusy(null); }
   }
   async function stopRun() {
     setBusy('正在停止生成…');
@@ -79,7 +79,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
   async function regenChapter(mode) {
     if (!cur) return;
     const msg = mode === 'storyboard'
-      ? '将清空「' + cur.title + '」当前的分镜，重新拆分并生成全部视频（素材保留）。确定继续？'
+      ? '将清空「' + cur.title + '」当前的分镜，按小说重新拆分分镜（只跑 LLM 文本，不生成图片/视频；素材保留）。确定继续？'
       : '将清空「' + cur.title + '」已生成的视频，按现有分镜重新生成全部视频（分镜与素材保留）。确定继续？';
     if (!(await toast.confirm(msg, { danger: true }))) return;
     setBusy(mode === 'storyboard' ? '正在提交重新生成分镜…' : '正在提交重新生成视频…');
@@ -116,7 +116,7 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
           </div>
           <p className="muted">
             点「生成/继续」就接着上次进度跑（已完成的素材/分镜/视频自动跳过），中断或失败后点它即可继续。
-            「重新生成分镜」清空本章分镜、重新拆分并出视频（素材保留）。
+            「重新生成分镜」清空本章分镜、按小说重新拆分（只跑 LLM 文本，不出图/视频；素材保留）。
             「重新生成视频」保留分镜，只重做本章全部视频。
           </p>
 
@@ -145,8 +145,8 @@ export default function GenerateView({ projectId, chapters, cursor, setCursor, r
               </div>
               {stageErr && <p className="m-0 text-danger">{stageErr}</p>}
               <p className="muted" style={{ fontSize: 12 }}>
-                受全部模型本地部署的硬件限制（显存有限），LLM 与 ComfyUI 不能同时运行，故按阶段拆分执行：勾「LLM 创作」只写文本（渲染工具已禁用），
-                勾「资产图」「分镜视频」为渲染阶段，同一批不能混勾 LLM 与渲染项；待办数由后端统计，不消耗 LLM。
+                建议按阶段拆分执行：勾「LLM 创作」只写文本（渲染工具已禁用），勾「资产图」「分镜视频」为渲染阶段；
+                待办数由后端统计，不消耗 LLM。可以一次勾多个阶段或直接提交整条流水线，任务之间会自动串行，不会并发出图/出片。
                 由于视频生成耗时较长，强烈建议在生成视频前先检查分镜与素材是否符合预期，再启动视频生成，避免素材不合格导致返工。
               </p>
             </div>

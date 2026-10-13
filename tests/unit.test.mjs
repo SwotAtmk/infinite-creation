@@ -16,7 +16,7 @@ import {
 import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, comfyBaseUrl, maskComfyBaseUrl } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
-import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool } from '../lib/agent/tools.js';
+import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
 import { runExclusiveVideo, concurrencyLimit } from '../lib/agent/job-runner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -319,13 +319,15 @@ test('buildWorkflow: RunningHub 工作流（子目录 + 带空格文件名）可
   assert.equal(tts['75'].inputs.value, '少女音');
 });
 
-test('preflight: 英伟达模式不拦 LLM/ComfyUI 同批与 vision，AMD 模式拦下', async () => {
-  const base = { llm: { baseUrl: 'http://127.0.0.1:1', vision: false }, comfyui: { baseUrl: 'http://127.0.0.1:1' } };
-  await assert.rejects(() => preflight(['llm', 'image'], { ...base, hardware: { mode: 'amd' } }), /不能同一批跑/);
-  await assert.rejects(() => preflight(['image'], { ...base, hardware: { mode: 'amd' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /llm\.vision/);
-  // 英伟达模式：同批不再被拦，走到「LLM 未就绪」这一步（说明互斥与 vision 拦截已放行）
-  await assert.rejects(() => preflight(['llm', 'image'], { ...base, hardware: { mode: 'nvidia' } }), /LLM 未就绪/);
-  await assert.rejects(() => preflight(['image'], { ...base, hardware: { mode: 'nvidia' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /ComfyUI 未就绪/);
+test('preflight: 不拦「同批/vision」这类服务状态判定，只做就绪检查（服务没起就报错退出）', async () => {
+  const local = { llm: { baseUrl: 'http://127.0.0.1:1', vision: false }, comfyui: { baseUrl: 'http://127.0.0.1:1' } };
+  // 同批勾「LLM 创作 + 资产图」不再被拦（应用不根据服务能否同时常驻替用户决定）→ 走到就绪检查才失败
+  await assert.rejects(() => preflight(['llm', 'image'], { ...local, hardware: { mode: 'amd' } }), /LLM 未就绪/);
+  // vision 开着也不再拦渲染阶段 → 同样只报 ComfyUI 未就绪
+  await assert.rejects(() => preflight(['image'], { ...local, hardware: { mode: 'amd' }, llm: { baseUrl: 'http://127.0.0.1:1', vision: true } }), /ComfyUI 未就绪/);
+  await assert.rejects(() => preflight(['llm', 'image'], { ...local, hardware: { mode: 'nvidia' } }), /LLM 未就绪/);
+  // 未选阶段仍然拦
+  await assert.rejects(() => preflight([], local), /未选择任何阶段/);
 });
 
 test('fallbackVideoPrompt: 占位符与一致性描述', () => {
@@ -749,6 +751,8 @@ test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时�
     const blocked = new Promise((r) => { releaseFns.push(r); });
     holders.push(runExclusiveVideo(() => blocked));
   }
+  // 闸门状态必须挂 globalThis：模块级变量在 Next dev 下每个 route 各一份 → 会真并发
+  assert.ok(globalThis.__infiniteCreationVideoGate, '槽位与队列应挂在 globalThis 上共享');
 
   // 排队前已带停止标记 → 直接拒绝，不进队列
   await assert.rejects(
@@ -767,6 +771,49 @@ test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时�
   // 释放占位任务，清理槽位
   releaseFns.forEach((release) => release());
   await Promise.all(holders.map((h) => h.catch(() => {})));
+});
+
+test('runExclusiveVideo: 不看服务状态——没有任务在跑时立即执行，且不做任何服务探测', async () => {
+  const orig = global.fetch;
+  let probes = 0;
+  global.fetch = async () => { probes++; return { ok: true }; };
+  try {
+    // 关键回归：以前 need='comfyui' 会在本机 LLM 也在跑时把任务挂成「等待服务」直到用户关掉 LLM。
+    // 现在即便两侧服务都在跑，没有别的任务占用槽位就必须立即执行。
+    let ran = false;
+    const r = await runExclusiveVideo(async () => { ran = true; return 'ok'; }, () => false, { need: 'comfyui' });
+    assert.equal(r, 'ok');
+    assert.equal(ran, true, '没有其他任务时必须立即执行（不排队、不等待）');
+    assert.equal(probes, 0, '不得探测 LLM /models 或 ComfyUI /system_stats —— 服务状态不参与调度');
+  } finally { global.fetch = orig; }
+});
+
+test('variantReusable / variantPrompt: 变体内容或提示词改过就必须重做，并用用户改过的提示词', () => {
+  const done = (over) => ({ image_path: 'a.png', status: 'done', description: '校服', prompt: 'P', prompt_used: 'P', ...over });
+  // 内容与提示词都没变 → 复用（幂等，避免每次写分镜都重渲染一遍衣橱）
+  assert.equal(variantReusable(done(), '校服', undefined), true);
+  assert.equal(variantReusable(done(), '校服', 'P'), true);
+  assert.equal(variantReusable(null, '校服', undefined), false);
+  assert.equal(variantReusable(done({ status: 'pending' }), '校服', undefined), false, '没出过图不能复用');
+  assert.equal(variantReusable(done({ image_path: '' }), '校服', undefined), false);
+  assert.equal(variantReusable(done(), '西装', undefined), false, '服装描述改了 → 必须重做');
+  // 用户在前端改过提示词（prompt ≠ prompt_used）→ 必须重做，否则用户的修改被旧图吞掉
+  assert.equal(variantReusable(done({ prompt: '用户改的' }), '校服', undefined), false);
+  // 调用方显式指定提示词且与库里不同 → 重做
+  assert.equal(variantReusable(done(), '校服', '别的'), false);
+
+  // 提示词取值：调用方显式 > 用户改过的 > 兜底
+  assert.equal(variantPrompt(done({ prompt: '用户改的' }), undefined, '兜底'), '用户改的');
+  assert.equal(variantPrompt(done(), undefined, '兜底'), '兜底', '没改过时不要把旧提示词当新指令');
+  assert.equal(variantPrompt(done({ prompt: '用户改的' }), '显式', '兜底'), '显式');
+  assert.equal(variantPrompt(null, undefined, '兜底'), '兜底');
+});
+
+test('keepsUserPrompt: 用户手动保存过的提示词是权威，LLM 不得覆盖', () => {
+  assert.equal(keepsUserPrompt({ prompt: '用户写的', prompt_locked: 1 }), true);
+  assert.equal(keepsUserPrompt({ prompt: 'LLM 写的', prompt_locked: 0 }), false);
+  assert.equal(keepsUserPrompt({ prompt: '', prompt_locked: 1 }), false, '清空保存 = 解锁，允许 LLM 重写');
+  assert.equal(keepsUserPrompt(null), false);
 });
 
 // —— TTS 音色性别/年龄兜底推断 ——

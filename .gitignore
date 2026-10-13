@@ -10,3 +10,7 @@ vendor/openclaude/dist/
 .pnpm-store/
 .idea/
 .trae/
+__pycache__/
+*.pyc
+# 测试素材（本地使用，不入库）
+docs/test/

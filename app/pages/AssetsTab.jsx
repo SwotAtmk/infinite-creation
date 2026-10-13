@@ -289,6 +289,7 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
                     <Textarea value={edit.description || ''} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="描述（可选，Agent 会自动补全）" minRows={4} />
                     <label style={{ display: 'block', marginTop: 12, marginBottom: 4, fontWeight: 600 }}>提示词</label>
                     <Textarea value={edit.prompt || ''} onChange={(e) => setEdit({ ...edit, prompt: e.target.value })} placeholder="提示词（可选，用于生成/重新生成）" minRows={8} />
+                    <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>{editingAsset && editingAsset.prompt_locked ? '已锁定：LLM 阶段不会覆盖这段提示词（清空保存即解锁）。' : '保存后即锁定：LLM 阶段不会覆盖你写的提示词；清空保存即解锁。'}</div>
                   </div>
                 </div>
               </ModalBody>

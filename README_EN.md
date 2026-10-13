@@ -124,12 +124,14 @@ infinite-creation/
 - Open Trae, Doubao, CodeX or similar tools; in Doubao use "Work Mode" and enter the prompt:
 
 ```text
-Help me clone this project https://github.com/SwotAtmk/infinite-creation.git locally (fill in the target install directory here), and run it locally.
+Help me clone this project https://github.com/SwotAtmk/infinite-creation.git 
+locally (fill in the target install directory here), and run it locally.
 ```
 
 - **国内使用：**
 ```text
-帮我克隆这个项目https://gitcode.com/SwotAtmk/infinite-creation.git到本地（这里填写要安装的项目目录），并且在本地运行这个项目
+帮我克隆这个项目https://gitcode.com/SwotAtmk/infinite-creation.git到本地（这里填写要安装的项目目录），
+并且在本地部署运行这个项目
 ```
 
 **Prerequisites**

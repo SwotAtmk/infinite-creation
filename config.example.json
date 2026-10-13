@@ -4,7 +4,10 @@
     "port": 4600
   },
   "comfyui": {
-    "baseUrl": "http://127.0.0.1:8188"
+    "provider": "native",
+    "baseUrl": "http://127.0.0.1:8188",
+    "apiKey": "",
+    "tier": "standard"
   },
   "hardware": {
     "mode": "nvidia"
@@ -19,6 +22,7 @@
   "generation": {
     "imageConcurrency": 2,
     "videoConcurrency": 1,
+    "runninghubConcurrency": 1,
     "retryTimes": 3,
     "videoTimeoutMinutes": 30,
     "imageTimeoutMinutes": 10

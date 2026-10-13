@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import next from 'next';
 import { WebSocketServer } from 'ws';
-import { DATA_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger, startupCleanup } from './lib/core/index.js';
+import { DATA_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger, startupCleanup, maskComfyBaseUrl } from './lib/core/index.js';
 import { scanSkills } from './lib/agent/index.js';
 import { setBroadcaster } from './lib/ws.js';
 
@@ -93,7 +93,7 @@ app.prepare().then(() => {
   const port = process.env.PORT || cfg.server.port || 4600;
   server.listen(port, () => {
     console.log('infinite-creation 已启动: http://127.0.0.1:' + port + (dev ? '（开发模式）' : ''));
-    console.log('  ComfyUI: ' + cfg.comfyui.baseUrl);
+    console.log('  ComfyUI: ' + maskComfyBaseUrl(cfg));
     console.log('  LLM:     ' + cfg.llm.baseUrl + ' (' + cfg.llm.model + ')');
   });
 });

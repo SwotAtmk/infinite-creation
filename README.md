@@ -19,7 +19,7 @@
 
 ## 项目计划
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
-- [计划中] 接入在线RunningHub-ComfyUI工作流生成，会员MiniMax-H3夜间免费运行
+- [✅] 接入在线RunningHub-ComfyUI工作流生成，会员MiniMax-H3夜间免费运行
 - [✅] 把项目装进Skill技能，支持Agent一键调用
 - [✅] 把文生图、图生图工作流进行整合使用最新Qwen-Image2.1的文生图+图生图工作流
 - [✅] 接入Qwen-Image-2.1文生图+图生图工作流
@@ -192,6 +192,9 @@ pnpm run build && pnpm start
 在使用此Agent项目工具之前，建议你先使用ComfyUI手动跑一遍所有工作流（即：跑通comfyui_original_workflows/目录下的所有工作流）之后使用Agent项目工具就能进行全自动生成。
 
 > 语音：MiniMax H3 依据「参考音色样本（flac 等，放 assets/voice/）+ 提示词对白」自行合成台词，无需单独 TTS。
+
+### 接入RunningHub原生ComfyUI接口
+
 
 ## 使用流程
 

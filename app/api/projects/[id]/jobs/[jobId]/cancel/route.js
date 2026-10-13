@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Jobs, loadConfig, interrupt } from '@/lib/core/index.js';
+import { Jobs, loadConfig, interruptTask } from '@/lib/core/index.js';
 import { stopJob } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ export async function POST(_req, { params }) {
   // 执行中的任务：主动打断 ComfyUI 当前 prompt，让取消立即生效（否则要等 generate() 轮询到下一拍）。
   // 只有「执行中」才打断——「排队中」的任务并未占用 ComfyUI，误打断会杀掉正在跑的前排任务。
   if (job.status === 'running') {
-    try { const cfg = loadConfig(); if (cfg?.comfyui?.baseUrl) await interrupt(cfg.comfyui.baseUrl); } catch {}
+    try { const cfg = loadConfig(); await interruptTask(cfg); } catch {}
   }
   return NextResponse.json({ ok: true, id: jobId });
 }

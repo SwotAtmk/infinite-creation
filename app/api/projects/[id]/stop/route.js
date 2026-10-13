@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Projects, Jobs, loadConfig, interrupt } from '@/lib/core/index.js';
+import { Projects, Jobs, loadConfig, interruptTask } from '@/lib/core/index.js';
 import { stopJob } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ export async function POST(_req, { params }) {
   // 下一拍（最多数秒）才会 /interrupt；这里主动打断能让「停止」立即生效并马上释放 GPU。
   try {
     const cfg = loadConfig();
-    if (cfg?.comfyui?.baseUrl) await interrupt(cfg.comfyui.baseUrl);
+    await interruptTask(cfg);
   } catch {}
   return NextResponse.json({ stopped: jobs.length });
 }

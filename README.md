@@ -120,6 +120,15 @@ infinite-creation/
 ```text
 帮我克隆这个项目https://github.com/SwotAtmk/infinite-creation.git到本地（这里填写要安装的项目目录），并且在本地运行这个项目
 ```
+- **国内使用：**
+```text
+帮我克隆这个项目https://gitcode.com/SwotAtmk/infinite-creation.git到本地（这里填写要安装的项目目录），并且在本地运行这个项目
+```
+**把项目安装为Skill技能**
+```text
+请根据 https://gitcode.com/SwotAtmk/infinite-creation/releases/download/v1.0.0/install-skill.md，从 https://gitcode.com/SwotAtmk/infinite-creation 安装 infinite-creation。
+```
+
 
 **前置要求**
 

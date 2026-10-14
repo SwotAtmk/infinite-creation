@@ -13,6 +13,7 @@ export default function SettingsPage({ onBack }) {
   const toast = useToast();
   const [cfg, setCfg] = useState(null);
   const [test, setTest] = useState('');
+  const [llmTest, setLlmTest] = useState('');
   const [comfyInfo, setComfyInfo] = useState(null);
   const [workflows, setWorkflows] = useState([]);
   useEffect(() => {
@@ -27,6 +28,10 @@ export default function SettingsPage({ onBack }) {
   }
   async function testComfy() {
     try { const r = await api.post('/api/comfyui/test', { comfyui: cfg.comfyui }); setComfyInfo(r); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }
+  }
+  async function testLlm() {
+    setLlmTest('测试中…');
+    try { const r = await api.post('/api/llm/test', { llm: cfg.llm }); setLlmTest(r.ok ? ('连接成功 · ' + r.model) : ('连接失败：' + r.error)); } catch (e) { setLlmTest('失败：' + e.message); }
   }
   if (!cfg) {
     return (
@@ -79,6 +84,7 @@ export default function SettingsPage({ onBack }) {
             <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
               <span style={{ flex: 'none' }}>Api-key</span>
               <Input size="sm" type="password" className="flex-1" placeholder="请输入 RunningHub Api-key" value={cfg.comfyui.apiKey || ''} onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, apiKey: e.target.value } })} />
+              <Button size="sm" onPress={() => window.open('https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer&inviteCode=6to0etcb', '_blank', 'noopener,noreferrer')}>查询Api-key</Button>
             </div>
             <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
               <span style={{ flex: 'none' }}>版本</span>
@@ -112,6 +118,10 @@ export default function SettingsPage({ onBack }) {
         <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
           <span style={{ flex: 'none' }}>API Key</span>
           <Input size="sm" className="flex-1" placeholder="API Key" type="password" value={cfg.llm.apiKey} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, apiKey: e.target.value } })} />
+        </div>
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <Button size="sm" onPress={testLlm}>测试连接</Button>
+          {llmTest && <span className="muted">{llmTest}</span>}
         </div>
         <Checkbox size="sm" isSelected={!!cfg.llm.vision} onValueChange={(v) => setCfg({ ...cfg, llm: { ...cfg.llm, vision: v } })}>
           支持图片输入（多模态/视觉模型）

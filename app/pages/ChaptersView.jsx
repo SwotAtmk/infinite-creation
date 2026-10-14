@@ -16,6 +16,7 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
   const [savedRefs, setSavedRefs] = useState([]);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => { if (cur) { setTitle(cur.title); setNovel(cur.novel || ''); setDirty(false); } }, [cur && cur.id]);
   useEffect(() => { api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {}); }, []);
@@ -31,7 +32,14 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
     try { await api.patch('/api/projects/' + projectId + '/chapters/' + cur.id, { title, novel }); toast.success('已保存「' + title + '」'); setDirty(false); onRefresh(); } catch (e) { toast.error(e.message); }
   }
   async function addChapter() {
-    try { const c = await api.post('/api/projects/' + projectId + '/chapters', { title: '第' + (chapters.length + 1) + '章' }); toast.success('已新增章节'); onRefresh(); setCursor(Math.max(0, chapters.length)); } catch (e) { toast.error(e.message); }
+    if (adding) return;
+    setAdding(true);
+    try {
+      await api.post('/api/projects/' + projectId + '/chapters', {});
+      toast.success('已新增章节');
+      onRefresh();
+      setCursor(Math.max(0, chapters.length));
+    } catch (e) { toast.error(e.message); } finally { setAdding(false); }
   }
   async function removeChapter(c) {
     if (!(await toast.confirm('删除「' + c.title + '」及其分镜？此操作不可逆。', { danger: true }))) return;
@@ -78,7 +86,7 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
       <CardBody className="gap-3">
         <div className="row justify-between">
           <h2 className="text-lg font-semibold m-0">章节管理</h2>
-          <Button color="primary" size="sm" onPress={addChapter}>＋ 新增章节</Button>
+          <Button color="primary" size="sm" isLoading={adding} onPress={addChapter}>＋ 新增章节</Button>
         </div>
         <p className="muted">先规划整本书的章节骨架，然后在「生成内容」页逐章生成。素材库为全项目共用。</p>
         {chapters.map((c, i) => (

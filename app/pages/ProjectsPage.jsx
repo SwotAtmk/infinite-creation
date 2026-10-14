@@ -4,6 +4,7 @@ import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spin
 import { api } from '../api-client.js';
 import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor } from './shared';
 import ReferencePicker from './ReferencePicker';
+import LoadingOverlay from './LoadingOverlay';
 import { useToast } from '../toast';
 
 // ============ 项目列表 ============
@@ -16,6 +17,8 @@ export default function ProjectsPage({ onOpen }) {
   const [customStyle, setCustomStyle] = useState('');
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
+  // 创建项目进行中：显示全屏加载层提示等待并阻断重复点击
+  const [busy, setBusy] = useState(null);
   const load = useCallback(() => api.get('/api/projects')
     .then(setProjects)
     .catch((e) => toast.error(e.message))
@@ -40,6 +43,7 @@ export default function ProjectsPage({ onOpen }) {
   }
 
   async function create() {
+    setBusy('正在创建项目…');
     try {
       const style = resolveStyle(form.style, customStyle);
       const p = await api.post('/api/projects', { ...form, style });
@@ -49,6 +53,7 @@ export default function ProjectsPage({ onOpen }) {
       }
       onOpen(p.id);
     } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
   async function del(id) {
     if (!(await toast.confirm('删除该项目及其所有素材？', { danger: true }))) return;
@@ -107,6 +112,7 @@ export default function ProjectsPage({ onOpen }) {
           {!loading && !projects.length && <p className="muted">暂无项目</p>}
         </CardBody>
       </Card>
+      <LoadingOverlay show={!!busy} text={busy} />
     </div>
   );
 }

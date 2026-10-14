@@ -647,6 +647,8 @@ test('checkComfyUI: dynamicVram 探测（--disable-dynamic-vram 关闭，否则�
 const truncMsg = () => ({ type: 'assistant', message: { content: [{ type: 'text', text: '\n\n[Response truncated — reached length limit or upstream stalled. Ask the model to continue.]' }] } });
 const toolMsg = () => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'generateImage', input: {} }] } });
 const plainMsg = () => ({ type: 'assistant', message: { content: [{ type: 'text', text: '正常输出' }] } });
+const toolResultMsg = () => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'done' }] } });
+const multiToolMsg = () => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'report', input: {} }, { type: 'tool_use', name: 'generate_chapter_videos', input: {} }] } });
 
 test('isTruncatedText: 识别 openclaude 截断标记', () => {
   assert.equal(isTruncatedText('[Response truncated — reached length limit or upstream stalled. Ask the model to continue.]'), true);
@@ -657,16 +659,17 @@ test('isTruncatedText: 识别 openclaude 截断标记', () => {
 });
 
 test('classifyAgentMsg: 截断/工具/正常文本分类', () => {
-  assert.deepEqual(classifyAgentMsg(truncMsg()), { hasToolUse: false, hasTrunc: true, hasPlainText: false });
-  assert.deepEqual(classifyAgentMsg(toolMsg()), { hasToolUse: true, hasTrunc: false, hasPlainText: false });
-  assert.deepEqual(classifyAgentMsg(plainMsg()), { hasToolUse: false, hasTrunc: false, hasPlainText: true });
-  assert.deepEqual(classifyAgentMsg({ type: 'result', result: 'x' }), { hasToolUse: false, hasTrunc: false, hasPlainText: false });
-  assert.deepEqual(classifyAgentMsg(null), { hasToolUse: false, hasTrunc: false, hasPlainText: false });
+  assert.deepEqual(classifyAgentMsg(truncMsg()), { hasToolUse: false, hasTrunc: true, hasPlainText: false, toolUseCount: 0, toolResultCount: 0 });
+  assert.deepEqual(classifyAgentMsg(toolMsg()), { hasToolUse: true, hasTrunc: false, hasPlainText: false, toolUseCount: 1, toolResultCount: 0 });
+  assert.deepEqual(classifyAgentMsg(plainMsg()), { hasToolUse: false, hasTrunc: false, hasPlainText: true, toolUseCount: 0, toolResultCount: 0 });
+  assert.deepEqual(classifyAgentMsg(toolResultMsg()), { hasToolUse: false, hasTrunc: false, hasPlainText: false, toolUseCount: 0, toolResultCount: 1 });
+  assert.deepEqual(classifyAgentMsg({ type: 'result', result: 'x' }), { hasToolUse: false, hasTrunc: false, hasPlainText: false, toolUseCount: 0, toolResultCount: 0 });
+  assert.deepEqual(classifyAgentMsg(null), { hasToolUse: false, hasTrunc: false, hasPlainText: false, toolUseCount: 0, toolResultCount: 0 });
 });
 
 test('watchdogStep: 连续纯截断 3 次熔断', () => {
   const t0 = 1_000_000;
-  let st = { lastAt: t0, sawToolUse: false, truncStreak: 0 };
+  let st = { lastAt: t0, pendingTools: 0, truncStreak: 0 };
   // 第 1、2 次截断：不熔断，streak 递增
   st = watchdogStep(st, truncMsg(), t0 + 1000).next;
   assert.equal(st.truncStreak, 1);
@@ -679,7 +682,7 @@ test('watchdogStep: 连续纯截断 3 次熔断', () => {
 });
 
 test('watchdogStep: 中间有工具调用/正常文本则重置截断计数', () => {
-  let st = { lastAt: 0, sawToolUse: false, truncStreak: 0 };
+  let st = { lastAt: 0, pendingTools: 0, truncStreak: 0 };
   st = watchdogStep(st, truncMsg(), 1000).next;
   assert.equal(st.truncStreak, 1);
   // 工具调用 = 实质进展，streak 归零
@@ -694,7 +697,7 @@ test('watchdogStep: 中间有工具调用/正常文本则重置截断计数', ()
 
 test('watchdogStep: 停滞超时熔断（非工具窗口）', () => {
   const now = 5_000_000;
-  let st = { lastAt: now - AGENT_WATCHDOG.STALL_MS - 1000, sawToolUse: false, truncStreak: 0 };
+  let st = { lastAt: now - AGENT_WATCHDOG.STALL_MS - 1000, pendingTools: 0, truncStreak: 0 };
   const r = watchdogStep(st, plainMsg(), now);
   assert.ok(r.halted, '间隔超过 STALL_MS 且非工具窗口应判停滞');
   assert.match(r.halted, /停滞/);
@@ -702,16 +705,33 @@ test('watchdogStep: 停滞超时熔断（非工具窗口）', () => {
 
 test('watchdogStallCheck: 工具执行窗口豁免，非工具窗口超时判定', () => {
   const now = 5_000_000;
-  // 上一条是工具调用 → 不判停滞（渲染可能很久）
-  assert.equal(watchdogStallCheck({ lastAt: now - 3600_000, sawToolUse: true, truncStreak: 0 }, now), null);
+  // 有待执行工具 → 不判停滞（渲染可能很久）
+  assert.equal(watchdogStallCheck({ lastAt: now - 3600_000, pendingTools: 1, truncStreak: 0 }, now), null);
   // 非工具窗口超时 → 判停滞
-  assert.ok(watchdogStallCheck({ lastAt: now - AGENT_WATCHDOG.STALL_MS - 1, sawToolUse: false, truncStreak: 0 }, now));
+  assert.ok(watchdogStallCheck({ lastAt: now - AGENT_WATCHDOG.STALL_MS - 1, pendingTools: 0, truncStreak: 0 }, now));
   // 非工具窗口未超时 → 不判停滞
-  assert.equal(watchdogStallCheck({ lastAt: now - 1000, sawToolUse: false, truncStreak: 0 }, now), null);
+  assert.equal(watchdogStallCheck({ lastAt: now - 1000, pendingTools: 0, truncStreak: 0 }, now), null);
+});
+
+test('watchdogStep: 同一轮多个工具时，慢工具运行期间不误判停滞', () => {
+  const t0 = 1_000_000;
+  let st = { lastAt: t0, pendingTools: 0, truncStreak: 0 };
+  // 一条 assistant 消息同时带 report + generate_chapter_videos 两个 tool_use
+  st = watchdogStep(st, multiToolMsg(), t0).next;
+  assert.equal(st.pendingTools, 2);
+  // report（快工具）先返回，只剩 generate_chapter_videos 仍在渲染
+  st = watchdogStep(st, toolResultMsg(), t0 + 1000).next;
+  assert.equal(st.pendingTools, 1);
+  // 慢工具渲染超过 STALL_MS，仍应豁免（pendingTools>0）
+  const t1 = t0 + 1000 + AGENT_WATCHDOG.STALL_MS + 60_000;
+  assert.equal(watchdogStallCheck(st, t1), null, '仍有工具在运行，不应判停滞');
+  // 慢工具也返回后，pendingTools 归零
+  st = watchdogStep(st, toolResultMsg(), t1).next;
+  assert.equal(st.pendingTools, 0);
 });
 
 test('watchdogStep: 截断后可恢复（截断→工具→截断→截断不熔断）', () => {
-  let st = { lastAt: 0, sawToolUse: false, truncStreak: 0 };
+  let st = { lastAt: 0, pendingTools: 0, truncStreak: 0 };
   st = watchdogStep(st, truncMsg(), 1000).next;   // streak 1
   st = watchdogStep(st, toolMsg(), 2000).next;    // 归零
   st = watchdogStep(st, truncMsg(), 3000).next;   // streak 1

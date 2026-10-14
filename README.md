@@ -194,7 +194,20 @@ pnpm run build && pnpm start
 
 > 语音：MiniMax H3 依据「参考音色样本（flac 等，放 assets/voice/）+ 提示词对白」自行合成台词，无需单独 TTS。
 
-### 接入RunningHub原生ComfyUI接口
+### 接入云端算力 - 接入RunningHub原生ComfyUI接口
+
+- 如果本地电脑配置比较低无法运行的话，可以选择使用云端算力免费试用
+
+**领取RunningHub免费云端算力试用**
+```text
+打开链接：[https://www.runninghub.cn?inviteCode=6to0etcb](https://www.runninghub.cn?inviteCode=6to0etcb) 
+现在注册还能领500RH币，可以免费生成不少图片和视频哦！
+```
+- 浏览器打开 [https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer](https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer) 获取RunningHub Api-Key
+![r2.png](images/r2.png)
+
+- 配置RunningHub Api-Key
+![r1.png](images/r1.png)
 
 
 ## 使用流程

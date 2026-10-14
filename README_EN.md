@@ -192,6 +192,21 @@ Before using this Agent project tool, it's recommended to manually run all workf
 
 > Voice: MiniMax H3 synthesizes dialogue itself based on "reference voice samples (flac, etc., placed in assets/voice/) + prompt dialogue"; no separate TTS needed.
 
+### Access cloud computing power - Access RunningHub native ComfyUI interface
+
+- If the local computer configuration is relatively low and cannot run the program, you can choose to use cloud computing power for a free trial
+
+**Claim your free trial of RunningHub's cloud computing power**
+```text
+Open the link: https://www.runninghub.ai?inviteCode=zjt69ib3
+Register now and you can receive 500 RH coins, which can be used to generate plenty of images and videos for free!
+```
+- Open the browser and navigate to [https://www.runninghub.ai/call-api/bill-task?tab=keys&type=consumer](https://www.runninghub.ai/call-api/bill-task?tab=keys&type=consumer) to obtain the RunningHub Api-Key
+![r2.png](images/r2.png)
+
+- Configure RunningHub Api-Key
+![r1.png](images/r1.png)
+
 ## Usage Flow
 
 1. New project → paste the novel text (or a one-line idea) + style.

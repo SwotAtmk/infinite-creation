@@ -18,6 +18,7 @@
 [更多样例](docs/run_demo.md)
 
 ## 项目计划
+- [计划中] Docker部署、桌面端App打包构建
 - [计划中] 工作流接入视频超分，让生成的视频更加清晰
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
 - [进行中……] 添加Agent安全审批策略，防止Agent越权操作，删除项目或执行危险命令

@@ -16,6 +16,12 @@ const handle = app.getRequestHandler();
 // 启动时注册默认工作流 + 扫描技能
 ensureDirs();
 startupCleanup();
+// 清理已被改名/删除的陈旧工作流记录：upsert 按 name 匹配，改名后会留下孤儿行（下拉出现重复选项），
+// 先按当前 DEFAULT_SPECS 的名称集合剔除不在其中的记录，再注册，保证列表与规格一致。
+const validWorkflowNames = new Set(DEFAULT_SPECS.map((s) => s.name));
+for (const w of Workflows.list()) {
+  if (!validWorkflowNames.has(w.name)) Workflows.remove(w.id);
+}
 for (const spec of DEFAULT_SPECS) {
   Workflows.upsert({ name: spec.name, kind: spec.kind, sourceFile: spec.sourceFile, spec, status: 'active' });
 }

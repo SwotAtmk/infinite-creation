@@ -6,7 +6,9 @@ English | [中文](README.md)
 
 ## Project Introduction
 
-**Generate videos from novels with one click, unlimited length. Paste a novel/script and let the local ComfyUI-MiniMax H3 + Agent + Skill pipeline automatically produce videos in a fully automated, unlimited-production workflow.**
+- An open-source project for fully automated video generation with a free and open-source local agent✨, enabling the creation of ultra-long videos locally with just one click, without requiring actors, voice-overs, directors, or editors. It can be used to generate videos from novels, comic ads, and story-based instructional videos, turning your imagination into billions of frames of visuals.
+- One-click generation of videos from novels, with no time limit. Enter the novel/script and use the local ComfyUI-MiniMaxH3+Agent+Skill to automatically generate unlimited videos with one click
+
 
 ## Sample Output
 

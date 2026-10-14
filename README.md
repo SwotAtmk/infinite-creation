@@ -7,7 +7,8 @@
 中文 | [English](README_EN.md)
 
 ## 项目简介
- **小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频**
+- 免费开源本地Agent全自动视频生成的开源项目✨，不用演员、配音、导演和剪辑师就能本地一键生成超长视频。可以做小说生成视频、漫剧广告、故事类讲解视频，让你所想到的故事变成亿帧画面。
+- 小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频
 
 ## 生成样例
 - 《妈妈的时间》
@@ -211,6 +212,7 @@ pnpm run build && pnpm start
 - 配置RunningHub Api-Key
 ![r1.png](images/r1.png)
 
+- 我的RunningHub工作流主页：[https://www.runninghub.cn/user-center/2013421139631808514/webapp?inviteCode=6to0etcb](https://www.runninghub.cn/user-center/2013421139631808514/webapp?inviteCode=6to0etcb)
 
 ## 使用流程
 

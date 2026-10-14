@@ -12,7 +12,7 @@ export default function ProjectsPage({ onOpen }) {
   const [projects, setProjects] = useState([]);
   // 首次加载标记：数据回来之前不要显示「暂无项目」，否则用户会误以为项目丢了
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: '', novel: '', idea: '', style: '' });
+  const [form, setForm] = useState({ name: '', novel: '', style: '' });
   const [customStyle, setCustomStyle] = useState('');
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
@@ -77,11 +77,10 @@ export default function ProjectsPage({ onOpen }) {
               <Input size="sm" placeholder="请填写自定义风格" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} className="w-60" />
             )}
           </div>
-          <Textarea size="sm" placeholder="粘贴小说原文（可留空，用下方一句话想法）" value={form.novel} onChange={(e) => setForm({ ...form, novel: e.target.value })} />
-          <Input size="sm" placeholder="或：一句话故事想法" value={form.idea} onChange={(e) => setForm({ ...form, idea: e.target.value })} />
+          <Textarea size="sm" placeholder="粘贴小说原文或一句话描述故事" value={form.novel} onChange={(e) => setForm({ ...form, novel: e.target.value })} />
           {vision && <ReferencePicker items={refs} onChange={setRefs} />}
           <div>
-            <Button color="primary" isDisabled={!form.name} onPress={create}>创建并打开</Button>
+            <Button color="primary" isDisabled={!form.name || !form.novel.trim()} onPress={create}>创建并打开</Button>
           </div>
         </CardBody>
       </Card>

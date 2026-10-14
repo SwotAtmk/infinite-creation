@@ -76,7 +76,10 @@ export default function SettingsPage({ onBack }) {
 
         {(cfg.comfyui.provider || 'native') === 'runninghub' && (
           <>
-            <Input size="sm" className="mt-2" placeholder="RunningHub Api-key" value={cfg.comfyui.apiKey || ''} onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, apiKey: e.target.value } })} />
+            <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+              <span style={{ flex: 'none' }}>Api-key</span>
+              <Input size="sm" type="password" className="flex-1" placeholder="请输入 RunningHub Api-key" value={cfg.comfyui.apiKey || ''} onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, apiKey: e.target.value } })} />
+            </div>
             <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
               <span style={{ flex: 'none' }}>版本</span>
               <Select size="sm" className="w-64" aria-label="RunningHub 版本" selectedKeys={selectKeys(cfg.comfyui.tier || 'standard')} onSelectionChange={(k) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, tier: pickKey(k) } })}>
@@ -98,11 +101,18 @@ export default function SettingsPage({ onBack }) {
         )}
 
         <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>LLM（Agent 大脑，OpenAI 兼容）</h3>
-        <div className="row">
-          <Input size="sm" className="flex-2 min-w-0" placeholder="Base URL（需 /v1 结尾）" value={cfg.llm.baseUrl} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, baseUrl: e.target.value } })} />
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 'none' }}>Base URL</span>
+          <Input size="sm" className="flex-1 min-w-0" placeholder="需 /v1 结尾" value={cfg.llm.baseUrl} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, baseUrl: e.target.value } })} />
+        </div>
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 'none' }}>模型</span>
           <Input size="sm" className="flex-1 min-w-0" placeholder="模型" value={cfg.llm.model} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, model: e.target.value } })} />
         </div>
-        <Input size="sm" className="mt-2" placeholder="API Key" type="password" value={cfg.llm.apiKey} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, apiKey: e.target.value } })} />
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 'none' }}>API Key</span>
+          <Input size="sm" className="flex-1" placeholder="API Key" type="password" value={cfg.llm.apiKey} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, apiKey: e.target.value } })} />
+        </div>
         <Checkbox size="sm" isSelected={!!cfg.llm.vision} onValueChange={(v) => setCfg({ ...cfg, llm: { ...cfg.llm, vision: v } })}>
           支持图片输入（多模态/视觉模型）
         </Checkbox>

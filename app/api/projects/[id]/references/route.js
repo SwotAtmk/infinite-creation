@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ReferenceImages, Assets, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger } from '@/lib/core/index.js';
+import { Projects, ReferenceImages, Assets, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger } from '@/lib/core/index.js';
 import { runInlineJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
 import { PROJECT_ASSET_SUBDIRS } from '@/lib/shared/index.js';
@@ -50,6 +50,10 @@ export async function GET(req, { params }) {
 
 export async function POST(req, { params }) {
   const { id } = await params;
+  // id 来自 URL，Next 的 route handler 会把 %2e%2e / %2f 解码成 '..' / '/'
+  // （vercel/next.js#64952）。本处理器要按 id 往磁盘写文件（resolveProjectPath），
+  // 不确认项目存在就写入，等于给出「任意目录写图片文件」的越界写入口。
+  if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
   const fd = await req.formData().catch(() => null);
   if (!fd) return NextResponse.json({ error: '缺少表单数据' }, { status: 400 });
   const file = fd.get('file');

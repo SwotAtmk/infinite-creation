@@ -2,12 +2,15 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
-import { projectDir } from '@/lib/core/index.js';
+import { Projects, projectDir } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(_req, { params }) {
   const { id } = await params;
+  // id 来自 URL，Next 的 route handler 会把 %2e%2e 解码成 '..'（vercel/next.js#64952）；
+  // projectDir 只是 path.join(PROJECTS_DIR, id)，不校验就 readdir 可越界列出任意目录。
+  if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
   const dir = path.join(projectDir(id), 'exports');
   let files = [];
   try {

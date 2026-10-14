@@ -91,8 +91,13 @@ app.prepare().then(() => {
 
   const cfg = loadConfig();
   const port = process.env.PORT || cfg.server.port || 4600;
-  server.listen(port, () => {
-    console.log('infinite-creation 已启动: http://127.0.0.1:' + port + (dev ? '（开发模式）' : ''));
+  // 默认只绑环回地址：本服务没有任何鉴权（改配置 / 删项目 / 读日志全开放），
+  // 而此前 server.listen(port) 会绑到 0.0.0.0，等于把控制面暴露给整个局域网
+  // （与启动日志宣称的 127.0.0.1 不符）。需要局域网访问就在 config.json 里设 server.host。
+  const host = process.env.HOST || cfg.server?.host || '127.0.0.1';
+  server.listen(port, host, () => {
+    const shown = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+    console.log('infinite-creation 已启动: http://' + shown + ':' + port + (dev ? '（开发模式）' : ''));
     console.log('  ComfyUI: ' + cfg.comfyui.baseUrl);
     console.log('  LLM:     ' + cfg.llm.baseUrl + ' (' + cfg.llm.model + ')');
   });

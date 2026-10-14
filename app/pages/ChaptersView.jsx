@@ -45,21 +45,26 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
 
   async function uploadRefs() {
     if (!cur) return;
-    for (const it of refs) {
-      const fd = new FormData();
-      fd.append('file', it.file);
-      fd.append('mode', it.mode);
-      fd.append('category', it.category || 'other');
-      fd.append('chapter_id', cur.id);
-      fd.append('description', it.description || '');
-      const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || ('参考图上传失败 HTTP ' + res.status));
+    // 上传失败必须让用户看到原因（如「参考图片最多 9 张」）：此前没有 catch，
+    // 抛出的错误成为未处理的 Promise 拒绝，按钮点了没反应、原因也丢了。
+    try {
+      for (const it of refs) {
+        const fd = new FormData();
+        fd.append('file', it.file);
+        fd.append('mode', it.mode);
+        fd.append('category', it.category || 'other');
+        fd.append('chapter_id', cur.id);
+        fd.append('description', it.description || '');
+        const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || ('参考图上传失败 HTTP ' + res.status));
+        }
       }
-    }
-    setRefs([]);
-    loadRefs();
+      setRefs([]);
+      loadRefs();
+      toast.success('参考素材已上传');
+    } catch (e) { toast.error(e.message); }
   }
   async function delRef(rid) {
     try { await api.del('/api/projects/' + projectId + '/references/' + rid); loadRefs(); } catch (e) { alert(e.message); }

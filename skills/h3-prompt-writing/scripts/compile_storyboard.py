@@ -64,6 +64,16 @@ PRESERVE_AVOID = (
 
 TIME_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*s\s*$")
 
+# 渲染器/linter 按字符串使用的字段（.strip()/.lower()/_cap()）：形状不对会直接抛栈，
+# 由 StoryboardLoader.validate 转成 bad_type 可读 error（见 validate 注释）。
+SHOT_STR_FIELDS = ("shot_purpose", "lighting_en", "camera_move", "camera_move_en", "shot_size_en",
+                   "angle_en", "overall_soundscape", "non_diegetic_music", "preserve_avoid",
+                   "axis_en", "first_frame_hard", "last_frame_hard")
+BEAT_STR_FIELDS = ("action", "sound", "source", "time")
+# 特征清单字段：允许「字符串数组」或「单个字符串」（渲染时用 as_list 归一化）。
+CHAR_FEATURE_FIELDS = ("static_features", "dynamic_features", "do_not_change")
+SCENE_FEATURE_FIELDS = ("static_features", "shared_by")
+
 
 # ─────────────────────────────────────────────
 # 0. 工具函数
@@ -100,6 +110,36 @@ def info(rule, msg):
     return {"level": "info", "rule": rule, "msg": msg}
 
 
+def is_number(v):
+    """数值判定：int/float，或能转成 float 的数字字符串（"3"、"3.5"）；bool 不算。
+
+    契约由 LLM 起草，「时长」写成 "3s"/"3 秒" 是常见失误。这里只做「能否参与 float() 运算」
+    的判定，用于 validate() 提前给出可读 error，避免 UnitPlanner/提示词 linter 直接抛栈。
+    """
+    if isinstance(v, bool):
+        return False
+    try:
+        float(v)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def as_list(v):
+    """特征字段归一化：None → []，字符串 → [字符串]，list/tuple → list。
+
+    契约里 static_features 之类写成单个字符串时，直接 ", ".join("a young boy") 会静默拆成
+    「a,  , y, o, ...」这样看似正常实则损坏的提示词；这里按「一个特征」处理。
+    """
+    if v is None:
+        return []
+    if isinstance(v, str):
+        return [v] if v.strip() else []
+    if isinstance(v, (list, tuple)):
+        return list(v)
+    return []
+
+
 def present_labels(sb, shot):
     """本镜出场角色的标签顺序（决定 <Subject N> 序号）。优先取 positions 键序，否则取 refs 中的角色。"""
     pos = shot.get("positions") or {}
@@ -134,6 +174,17 @@ class StoryboardLoader:
             val = sb.get(key)
             if val is not None and not isinstance(val, typ):
                 issues.append(err("bad_type", "%s 必须是%s，实际是 %s" % (key, cn, type(val).__name__)))
+        # art_style_prefix 渲染时 .strip()；video 渲染前 .get()，形状不对都会抛栈。
+        style = sb.get("art_style_prefix")
+        if style is not None and not isinstance(style, str):
+            issues.append(err("bad_type", "art_style_prefix 必须是字符串，实际是 %s" % type(style).__name__))
+        video = sb.get("video")
+        if video is not None and not isinstance(video, dict):
+            issues.append(err("bad_type", "video 必须是对象，实际是 %s" % type(video).__name__))
+        elif isinstance(video, dict):
+            vdur = video.get("default_max_duration")
+            if vdur is not None and not is_number(vdur):
+                issues.append(err("bad_type", "video.default_max_duration 必须是数值（秒），实际是 %s" % type(vdur).__name__))
         shots = sb.get("shots")
         if not isinstance(shots, list):
             return issues        # 形状不对，无法逐镜检查；bad_type 已说明原因
@@ -157,10 +208,24 @@ class StoryboardLoader:
                 for j, b in enumerate(beats or []):
                     if not isinstance(b, dict):
                         issues.append(err("bad_type", "shots[%d].beats[%d] 必须是对象，实际是 %s" % (i, j, type(b).__name__)))
+                        continue
+                    for field in BEAT_STR_FIELDS:
+                        val = b.get(field)
+                        if val is not None and not isinstance(val, str):
+                            issues.append(err("bad_type", "shots[%d].beats[%d].%s 必须是字符串，实际是 %s"
+                                              % (i, j, field, type(val).__name__)))
             for field in ("positions", "world_pos"):
                 val = shot.get(field)
                 if val is not None and not isinstance(val, dict):
                     issues.append(err("bad_type", "shots[%d].%s 必须是对象，实际是 %s" % (i, field, type(val).__name__)))
+            # 字符串字段形状（.strip()/.lower() 会抛栈）与 duration 数值性（UnitPlanner/linter 都做 float()）
+            for field in SHOT_STR_FIELDS:
+                val = shot.get(field)
+                if val is not None and not isinstance(val, str):
+                    issues.append(err("bad_type", "shots[%d].%s 必须是字符串，实际是 %s" % (i, field, type(val).__name__)))
+            dur = shot.get("duration")
+            if dur is not None and not is_number(dur):
+                issues.append(err("bad_type", "shots[%d].duration 必须是数值（秒），实际是 %s" % (i, type(dur).__name__)))
             pos = shot.get("positions")
             if isinstance(pos, dict):
                 bad_pos = [k for k, v in pos.items() if not isinstance(v, dict)]
@@ -182,6 +247,39 @@ class StoryboardLoader:
                     issues.append(err("unknown_character", "shots[%d].refs 引用了未定义角色：%s" % (i, label)))
                 if label.startswith("#") and label not in scenes:
                     issues.append(err("unknown_scene", "shots[%d].refs 引用了未定义场景：%s" % (i, label)))
+        # characters / scenes 的文本字段同理由渲染器 .strip()/join 使用，形状不对会抛栈或静默拼坏
+        chars = sb.get("characters")
+        if isinstance(chars, dict):
+            for label, c in chars.items():
+                if not isinstance(c, dict):
+                    issues.append(err("bad_type", "characters[%s] 必须是对象，实际是 %s" % (label, type(c).__name__)))
+                    continue
+                val = c.get("retention_en")
+                if val is not None and not isinstance(val, str):
+                    issues.append(err("bad_type", "characters[%s].retention_en 必须是字符串，实际是 %s" % (label, type(val).__name__)))
+                for field in CHAR_FEATURE_FIELDS:
+                    val = c.get(field)
+                    if val is not None and not isinstance(val, (str, list)):
+                        issues.append(err("bad_type", "characters[%s].%s 必须是字符串或字符串数组，实际是 %s"
+                                          % (label, field, type(val).__name__)))
+                    elif isinstance(val, list) and not all(isinstance(x, str) for x in val):
+                        issues.append(err("bad_type", "characters[%s].%s 数组元素必须是字符串" % (label, field)))
+        scene_map = sb.get("scenes")
+        if isinstance(scene_map, dict):
+            for label, s in scene_map.items():
+                if not isinstance(s, dict):
+                    issues.append(err("bad_type", "scenes[%s] 必须是对象，实际是 %s" % (label, type(s).__name__)))
+                    continue
+                val = s.get("retention_en")
+                if val is not None and not isinstance(val, str):
+                    issues.append(err("bad_type", "scenes[%s].retention_en 必须是字符串，实际是 %s" % (label, type(val).__name__)))
+                for field in SCENE_FEATURE_FIELDS:
+                    val = s.get(field)
+                    if val is not None and not isinstance(val, (str, list)):
+                        issues.append(err("bad_type", "scenes[%s].%s 必须是字符串或字符串数组，实际是 %s"
+                                          % (label, field, type(val).__name__)))
+                    elif isinstance(val, list) and not all(isinstance(x, str) for x in val):
+                        issues.append(err("bad_type", "scenes[%s].%s 数组元素必须是字符串" % (label, field)))
         return issues
 
 
@@ -274,8 +372,8 @@ class AnchorResolver:
             if not c:
                 continue
             pos = (shot.get("positions") or {}).get(label) or {}
-            static = ", ".join(c.get("static_features") or [])
-            dyn = ", ".join(c.get("dynamic_features") or [])
+            static = ", ".join(as_list(c.get("static_features")))
+            dyn = ", ".join(as_list(c.get("dynamic_features")))
             if labelled:
                 who = "<Subject %s>, %s" % (subj_index.get(label), c.get("name_en", label))
             else:
@@ -351,8 +449,8 @@ class H3PromptRenderer:
     # ---- Ref2VA 六段 ----
 
     def _char_def(self, c, n, picture_n):
-        static = ", ".join(c.get("static_features") or [])
-        dyn = ", ".join(c.get("dynamic_features") or [])
+        static = ", ".join(as_list(c.get("static_features")))
+        dyn = ", ".join(as_list(c.get("dynamic_features")))
         s = "<Subject %d> is %s" % (n, c.get("name_en", "the character"))
         if picture_n:
             s += " in <Picture %d>" % picture_n
@@ -364,8 +462,8 @@ class H3PromptRenderer:
 
     def _scene_def(self, label, n, picture_by_label):
         s = (self.sb.get("scenes") or {}).get(label) or {}
-        static = ", ".join(s.get("static_features") or [])
-        shared = [lab for lab in (s.get("shared_by") or []) if lab in picture_by_label]
+        static = ", ".join(as_list(s.get("static_features")))
+        shared = [lab for lab in as_list(s.get("shared_by")) if lab in picture_by_label]
         shared_txt = ""
         if len(shared) >= 2:
             shared_txt = " shared by " + " and ".join("<Picture %d>" % picture_by_label[l] for l in shared)
@@ -395,13 +493,13 @@ class H3PromptRenderer:
                 c = self.sb["characters"][label]
                 detail = c.get("retention_en")
                 if not detail:
-                    dnc = ", ".join(c.get("do_not_change") or [])
+                    dnc = ", ".join(as_list(c.get("do_not_change")))
                     detail = (dnc + " are retained") if dnc else "its defined role is fully preserved"
             else:
                 s = self.sb["scenes"][label]
                 detail = s.get("retention_en")
                 if not detail:
-                    detail = ", ".join(s.get("static_features") or []) + " are retained"
+                    detail = ", ".join(as_list(s.get("static_features"))) + " are retained"
             detail = detail.strip().rstrip(".")
             lines.append("<Subject %d> (appears in [Shot %d]): fully_preserved - %s." % (n, shot_number, detail))
         return lines

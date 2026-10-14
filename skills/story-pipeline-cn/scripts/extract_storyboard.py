@@ -240,6 +240,9 @@ def extract_scenes(paragraphs: List[Dict]) -> List[Dict]:
                 current["paragraphs"].append(p)
         else:
             current["paragraphs"].append(p)
+        # 对白角色收集必须在 if/else 之外：新场景的第一段走上面分支，
+        # 「开场即对白」（首段不是场次/章节标头）时此前会漏记该场对白角色。
+        if p["type"] not in ("scene_header", "chapter"):
             for m in DIALOGUE_PATTERN.finditer(p["text"]):
                 current["characters_in_scene"].add(m.group("character").strip())
 

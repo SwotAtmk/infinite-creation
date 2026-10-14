@@ -19,7 +19,7 @@ English | [中文](README.md)
 [More samples](docs/run_demo.md)
 
 ## Roadmap
-
+- [In the plan] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
 - [Planned] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
 - [In Progress... ] Add Agent security approval policies to prevent Agent from performing unauthorized operations, deleting projects, or executing dangerous commands
 - [✅] Integrate the online RunningHub-ComfyUI workflow for generation, with free overnight MiniMax-H3 runs for members

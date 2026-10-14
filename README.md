@@ -19,6 +19,7 @@
 
 ## 项目计划
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
+- [进行中……] 添加Agent安全审批策略，防止Agent越权操作，删除项目或执行危险命令
 - [✅] 接入在线RunningHub-ComfyUI工作流生成，会员MiniMax-H3夜间免费运行
 - [✅] 把项目装进Skill技能，支持Agent一键调用
 - [✅] 把文生图、图生图工作流进行整合使用最新Qwen-Image2.1的文生图+图生图工作流

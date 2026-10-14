@@ -21,6 +21,7 @@ English | [中文](README.md)
 ## Roadmap
 
 - [Planned] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
+- [In Progress... ] Add Agent security approval policies to prevent Agent from performing unauthorized operations, deleting projects, or executing dangerous commands
 - [✅] Integrate the online RunningHub-ComfyUI workflow for generation, with free overnight MiniMax-H3 runs for members
 - [✅] Consolidated text-to-image and image-to-image workflows using the latest Qwen-Image 2.1
 - [✅] Integrated the Qwen-Image 2.1 text-to-image + image-to-image workflow

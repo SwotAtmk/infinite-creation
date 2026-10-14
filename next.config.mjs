@@ -12,9 +12,9 @@ const nextConfig = {
   transpilePackages: ['@heroui/react', '@heroui/theme'],
   // 显式指定工作区根目录，避免 Next.js 因检测到多个 lockfile 而误判到用户主目录
   outputFileTracingRoot: __dirname,
-  // 允许所有开发来源访问 /_next/* 资源，消除跨域提示
-  // 注意：* 只匹配单个标签，** 才匹配一个或多个标签（即任意主机名）
-  allowedDevOrigins: ['**'],
+  // 允许这些来源访问 /_next/* 资源，消除跨域提示
+  // 注意：Next.js 禁止用单独的 * 或 ** 匹配整个域名（安全防护），必须列出具体主机名
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
 };
 
 export default nextConfig;

@@ -87,11 +87,28 @@ app.prepare().then(() => {
     handle(req, res);
   });
 
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({ noServer: true });
   setBroadcaster((obj) => {
     const msg = JSON.stringify(obj);
     for (const c of wss.clients) {
       if (c.readyState === 1) c.send(msg);
+    }
+  });
+
+  // WebSocket 升级路由：/ws 交给业务广播，/_next/* 交给 Next.js 的 HMR 热更新。
+  // 之前 wss 用 path:'/ws' 会把 /_next/webpack-hmr 的升级请求以 400 拒绝并销毁连接，
+  // 导致浏览器报 “WebSocket connection to .../_next/webpack-hmr failed”。
+  const upgradeHandler = app.getUpgradeHandler();
+  server.on('upgrade', (req, socket, head) => {
+    const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/ws') {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    } else if (url.pathname.startsWith('/_next/')) {
+      upgradeHandler(req, socket, head);
+    } else {
+      socket.destroy();
     }
   });
 

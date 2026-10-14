@@ -15,7 +15,9 @@
 ```
 
 ## 输出结果
-[查看演示视频：../images/妈妈的时间_061bc7e6.mp4](../images/%E5%A6%88%E5%A6%88%E7%9A%84%E6%97%B6%E9%97%B4_061bc7e6.mp4)
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/3ace95ff-1ec1-46b0-abab-115c76734ee3" width="70%" poster=""> </video>
+</div>
 
 
 ## 页面截图
@@ -65,7 +67,9 @@
 ```
 
 ## 输出结果
-[查看演示视频：../images/秋日暖意_一口治愈_燕麦拿铁广告短剧_2fbee66e.mp4](../images/秋日暖意_一口治愈_燕麦拿铁广告短剧_2fbee66e.mp4)
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/91fa6582-bcd0-4775-9783-ea80d413ab9c" width="70%" poster=""> </video>
+</div>
 
 
 ## 页面截图
@@ -107,4 +111,6 @@
 ```
 
 ## 输出结果
-[查看演示视频：../images/一份懂她的礼物_SK-II_神仙水明星礼盒_64b82af4.mp4](../images/%E4%B8%80%E4%BB%BD%E6%87%82%E5%A5%B9%E7%9A%84%E7%A4%BC%E7%89%A9_SK-II_%E7%A5%9E%E4%BB%99%E6%B0%B4%E6%98%8E%E6%98%9F%E7%A4%BC%E7%9B%92_64b82af4.mp4)
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/248ce1c0-6b94-454d-8a16-bdb8b409d427" width="70%" poster=""> </video>
+</div>

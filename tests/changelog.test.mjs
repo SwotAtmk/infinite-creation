@@ -609,3 +609,21 @@ test('set_storyboard：未声明字段当场拒绝（字段拼错不再被静默
   assert.equal(all[0].scene_name, '场景');
   Projects.remove(p.id);
 });
+
+test('变更日志：seed 是流水线易变字段（渲染回写不刷日志、不阻塞内容回滚）', () => {
+  const p = mkProject('seed 项目');
+  // harness 风格的一次写入：共享 batch，便于之后整批回滚
+  const s = withWriteContext('PUT /api/projects/:id/chapters/:cid/storyboard', () => Shots.create(p.id, { chapter: '第1章', visual: '画面' }));
+  const createLog = listChanges(p.id, { entity: 'shot', action: 'create' }).find((l) => l.entity_id === s.id);
+  const before = countChanges(p.id);
+  // 模拟一次渲染回写：seed 换新随机值 + 流水线字段
+  Shots.update(s.id, { seed: 987654, status: 'generating', video_path: 'shots/a.mp4', prompt_id: 'pid-1' });
+  assert.equal(countChanges(p.id), before, '只改 seed/状态/产物路径不该产生内容日志');
+  // 渲染回写后回滚那次内容写入：不该被判成漂移（seed 不是内容）
+  const r = rollbackLogs({ projectId: p.id, batchId: createLog.batch_id });
+  assert.equal(r.blocked, false, '渲染回写不该把内容回滚判成漂移');
+  assert.equal(r.conflicts.length, 0);
+  assert.equal(r.applied.length, 1);
+  assert.equal(Shots.get(s.id), null, '回滚后分镜应被删除');
+  Projects.remove(p.id);
+});

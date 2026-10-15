@@ -317,6 +317,11 @@ def shape_check(sb):
     if not shots:
         errs.append("shots 为空")
     for i, s in enumerate(shots):
+        # 元素不是对象时必须先挡下：`k not in s` 对 int/None 会抛 TypeError（对 str/list
+        # 则变成子串/成员判定，给出误导性结论）。与 compile_storyboard.validate 的 bad_type 一致。
+        if not isinstance(s, dict):
+            errs.append("shots[%d] 不是对象（实际是 %s）" % (i, type(s).__name__))
+            continue
         for k in ("id", "scene", "duration", "beats"):
             if k not in s:
                 errs.append("shots[%d] 缺少 %s" % (i, k))

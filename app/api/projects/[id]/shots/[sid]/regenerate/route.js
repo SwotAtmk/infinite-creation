@@ -10,7 +10,9 @@ export async function POST(req, { params }) {
   const { id, sid } = await params;
   const body = await req.json().catch(() => ({}));
   const shot = Shots.get(sid);
-  if (!shot) return NextResponse.json({ error: '分镜不存在' }, { status: 404 });
+  // 必须确认分镜属于本项目：与 shots/[sid] PATCH 保持一致，否则可用他项目的 sid
+  // 借道本项目 id 生成视频（产物写进本项目目录、却用的是别人的分镜数据）。
+  if (!shot || shot.project_id !== id) return NextResponse.json({ error: '分镜不存在' }, { status: 404 });
   // 不再因「已有任务」拒绝：提交即入全局队列，等前面任务跑完自动逐个执行（ComfyUI 单队列）
   try {
     const job = startRegenerateJob({ projectId: id, shotId: sid, feedback: body?.feedback, render: body?.render, onProgress: (p) => broadcast(p) });

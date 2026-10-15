@@ -52,7 +52,7 @@ SCENE_HEADERS = re.compile(
     r"^[\s]*"
     r"("
     r"(?:INT\.|EXT\.|内景|外景|内:|外:|场景:|场景\s*\d+|第\s*\d+\s*[场幕节]|"
-    r"镜头\s*\d+|shot\s*\d+|scene\s*\d+)"
+    r"镜头\s*\d+|shot\s*\d+|scene\s*\d+|【场景)"
     r".*"
     r")$",
     re.IGNORECASE | re.MULTILINE
@@ -252,7 +252,9 @@ def extract_scenes(paragraphs: list[dict]) -> list[dict]:
                 current_scene["paragraphs"].append(p)
         else:
             current_scene["paragraphs"].append(p)
-            # 从对白行收集出场角色
+        # 从对白行收集出场角色。扫描必须放在 if/else 之外：新场景的第一段走上面那个分支，
+        # 「开场即对白」（首段不是场次/章节标头）时此前会漏记该场的对白角色。
+        if p["type"] not in ("scene_header", "chapter"):
             for m in DIALOGUE_PATTERN.finditer(p["text"]):
                 current_scene["characters_in_scene"].add(m.group("character").strip())
 

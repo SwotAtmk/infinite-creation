@@ -113,9 +113,19 @@ app.prepare().then(() => {
   });
 
   const cfg = loadConfig();
-  const port = process.env.PORT || cfg.server.port || 4600;
-  server.listen(port, () => {
-    console.log('infinite-creation 已启动: http://127.0.0.1:' + port + (dev ? '（开发模式）' : ''));
+  const port = process.env.PORT || cfg.server?.port || 4600;
+  // 默认只绑环回地址：本服务没有任何鉴权（改配置 / 删项目 / 读日志全开放）。
+  // 优先级：config.json 的 server.host > 环境变量 HOST > 默认 127.0.0.1
+  // 需要局域网访问就在 config.json 里设 server.host = '0.0.0.0'
+  let host = '127.0.0.1';
+  if (typeof cfg?.server?.host === 'string' && cfg.server.host.trim()) {
+    host = cfg.server.host.trim();
+  } else if (process.env.HOST) {
+    host = process.env.HOST;
+  }
+  server.listen(port, host, () => {
+    const shown = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+    console.log('infinite-creation 已启动: http://' + shown + ':' + port + (dev ? '（开发模式）' : ''));
     console.log('  ComfyUI: ' + maskComfyBaseUrl(cfg));
     console.log('  LLM:     ' + cfg.llm.baseUrl + ' (' + cfg.llm.model + ')');
   });

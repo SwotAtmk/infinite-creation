@@ -47,6 +47,14 @@ def generate_all_tables(
     Returns:
         dict: 包含生成的文件路径
     """
+    # 形状校验：三个数据源要么缺省，要么必须是 list（JSON 对象/标量都不是合法输入）。
+    # 此前 {"a": 1} 会一路进到子脚本的 `for row, char in enumerate(characters)`，迭代出字符串键、
+    # 随后 char.get 抛 AttributeError，被 main 的 except 吞成含义不清的通用错误。
+    # 三个子脚本 CLI 各自都有 isinstance(list) 校验，这里对齐，给出可读原因。
+    for _name, _data in (("characters", characters), ("scenes", scenes), ("storyboards", storyboards)):
+        if _data is not None and not isinstance(_data, list):
+            raise ValueError("%s 必须是数组（list），实际是 %s" % (_name, type(_data).__name__))
+
     results = {}
     
     # 确保输出目录存在

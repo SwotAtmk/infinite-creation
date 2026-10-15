@@ -627,3 +627,19 @@ test('变更日志：seed 是流水线易变字段（渲染回写不刷日志、
   assert.equal(Shots.get(s.id), null, '回滚后分镜应被删除');
   Projects.remove(p.id);
 });
+
+test('变更日志：total 与 items 同口径（entity/action/source 筛选一致）', () => {
+  const p = mkProject('日志筛选项目');
+  const s = withWriteContext('PUT /api/projects/:id/chapters/:cid/storyboard', () => Shots.create(p.id, { chapter: '第1章', visual: '画面' }));
+  withWriteContext('PATCH /api/projects/:id/shots/:sid', () => Shots.update(s.id, { visual: '改后' }));
+  const all = countChanges(p.id);
+  const creates = listChanges(p.id, { entity: 'shot', action: 'create', limit: 500 });
+  assert.ok(all >= 4, '项目/章节/分镜新建 + 分镜更新');
+  assert.equal(countChanges(p.id), all, '不传筛选时不变');
+  assert.equal(countChanges(p.id, { entity: 'shot', action: 'create' }), creates.length);
+  assert.ok(countChanges(p.id, { entity: 'shot', action: 'create' }) < all, '筛选后的 total 必须小于全部（否则等于没筛）');
+  const src = 'PATCH /api/projects/:id/shots/:sid';
+  assert.equal(countChanges(p.id, { source: src }), listChanges(p.id, { source: src, limit: 500 }).length);
+  assert.equal(countChanges(p.id, { entity: 'shot', action: 'create', source: src }), 0, '多条件是 AND');
+  Projects.remove(p.id);
+});

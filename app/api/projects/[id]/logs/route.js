@@ -9,12 +9,16 @@ export async function GET(req, { params }) {
   const { id } = await params;
   if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
   const url = new URL(req.url);
-  const items = listChanges(id, {
+  const filters = {
     entity: url.searchParams.get('entity') || undefined,
     action: url.searchParams.get('action') || undefined,
     source: url.searchParams.get('source') || undefined,
+  };
+  const items = listChanges(id, {
+    ...filters,
     limit: url.searchParams.get('limit') || undefined,
     offset: url.searchParams.get('offset') || undefined,
   });
-  return NextResponse.json({ total: countChanges(id), items });
+  // total 必须与 items 同口径（同一组筛选）：否则客户端按 total 翻页会翻出空页
+  return NextResponse.json({ total: countChanges(id, filters), items });
 }

@@ -13,6 +13,7 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-changelog-'));
 process.env.IC_DATA_DIR = TMP;
 
 const core = await import('../lib/core/index.js');
+const shared = await import('../lib/shared/index.js');
 const {
   Projects, Chapters, Shots, listChanges, countChanges, rollbackLogs,
   withWriteContext, rawGet, pickShotFields, validateShotContent, tx, DB_PATH,
@@ -221,7 +222,47 @@ test('分镜业务校验：时长区间 / 镜号 / 分辨率与宽高比枚举',
   assert.ok(pickShotFields({ aspect_ratio: '5:4' }).errors.length, '非法宽高比应报错');
   assert.deepEqual(pickShotFields({ resolution: '' }).errors, [], '空串 = 继承项目设置，合法');
   assert.deepEqual(pickShotFields({ resolution: '720P', aspect_ratio: '9:16' }).errors, []);
+  // 取值域来自 lib/shared（单一事实来源）：界面下拉给的、映射表能解析的，写接口都必须放行，
+  // 否则会出现「界面里能选、写接口写不进」这种自相矛盾
+  for (const v of shared.VIDEO_RESOLUTIONS) assert.deepEqual(pickShotFields({ resolution: v }).errors, [], v + ' 应可写');
+  for (const r of shared.VIDEO_ASPECT_RATIOS) assert.deepEqual(pickShotFields({ aspect_ratio: r }).errors, [], r + ' 应可写');
   assert.ok(pickShotFields({ parent_shot_id: 'x' }).errors.length, '无人消费的 parent_shot_id 不再可写（无效字段）');
+});
+
+test('分辨率/宽高比：共享常量、工作流映射表、界面下拉三者不许再各写一份漂移', () => {
+  const { VIDEO_ASPECT_RATIOS, VIDEO_RESOLUTION_MP, VIDEO_RESOLUTION_OPTIONS, VIDEO_RESOLUTIONS } = shared;
+  const gguf = core.DEFAULT_SPECS.find((s) => s.id === 'minimax_h3_r2v_gguf');
+  assert.ok(gguf, '找不到 GGUF 视频规格');
+  // 映射表就是共享常量本身（同一对象），键与值都不允许再分叉
+  assert.deepEqual(gguf.roles.resolution.map, VIDEO_RESOLUTION_MP);
+  // 宽高比映射表的键必须是共享列表的子集：多一处或少一处都会让某个方向「选了就报错」
+  for (const k of Object.keys(gguf.roles.aspect_ratio.map)) {
+    assert.ok(VIDEO_ASPECT_RATIOS.includes(k), k + ' 不在共享宽高比列表里');
+  }
+  // 下拉只给实测确认过的标签；映射表里多出来的（1080P/2K/4K）只用于兼容历史数据
+  for (const v of VIDEO_RESOLUTION_OPTIONS) {
+    assert.ok(VIDEO_RESOLUTIONS.includes(v), v + ' 出现在下拉里却没进可写集合');
+  }
+  // custom 不是查表值：它走 width/height 直写（见 tools.js 生成分支）
+  assert.ok(VIDEO_RESOLUTIONS.includes('custom') && !VIDEO_RESOLUTION_MP.custom);
+  assert.ok(VIDEO_RESOLUTION_MP['360P'] && VIDEO_RESOLUTION_MP['768P'], '下拉给的 360P/768P 必须在映射表里有条目');
+});
+
+test('合成顺序：按章节 seq → 章内 idx（多章整片不会交叉）', () => {
+  const p = mkProject('多章顺序');
+  const c1 = Chapters.list(p.id)[0];                       // 建项目时自动建「第1章」
+  const c2 = Chapters.create(p.id, { title: '第2章' });
+  const a1 = Shots.create(p.id, { chapter: c1.title, visual: '甲1' });
+  const a2 = Shots.create(p.id, { chapter: c1.title, visual: '甲2' });
+  const b1 = Shots.create(p.id, { chapter: c2.title, visual: '乙1' });
+  const b2 = Shots.create(p.id, { chapter: c2.title, visual: '乙2' });
+  assert.deepEqual([a1.idx, a2.idx, b1.idx, b2.idx], [1, 2, 1, 2], '每章独立镜号空间');
+  // 旧口径「全局按 idx 排」会得到 甲1、乙1、甲2、乙2（两章 idx 都从 1 起）
+  assert.deepEqual(Shots.listInNarrativeOrder(p.id).map((s) => s.visual), ['甲1', '甲2', '乙1', '乙2']);
+  // 归属不到章节的历史脏数据排最后，不丢（b1 比 b2 早建，但因为找不到章节反而排在后面）
+  Shots.update(b1.id, { chapter: '不存在的章' });
+  assert.deepEqual(Shots.listInNarrativeOrder(p.id).map((s) => s.visual), ['甲1', '甲2', '乙2', '乙1']);
+  Projects.remove(p.id);
 });
 
 test('分镜业务校验：台词速度按「真正落库的时长」算，说话人超 2 个拒绝', () => {

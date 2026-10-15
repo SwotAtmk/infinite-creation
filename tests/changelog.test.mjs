@@ -14,6 +14,7 @@ process.env.IC_DATA_DIR = TMP;
 
 const core = await import('../lib/core/index.js');
 const shared = await import('../lib/shared/index.js');
+const { createToolRuntime, runTool } = await import('../lib/agent/tools.js');
 const {
   Projects, Chapters, Shots, listChanges, countChanges, rollbackLogs,
   withWriteContext, rawGet, pickShotFields, validateShotContent, tx, DB_PATH, chapterStats,
@@ -403,5 +404,31 @@ test('叙事顺序：章节标题重复时分镜不翻倍（按标题取最小 s
     .run('dup-' + p.id, p.id, '第1章', '', '', 9, 'pending', t, t);
   const order = Shots.listInNarrativeOrder(p.id).map((x) => x.id);
   assert.deepEqual(order, [s1.id, s2.id], '同名章节不得让同一条分镜在成片里出现两次');
+  Projects.remove(p.id);
+});
+
+test('set_storyboard：章节必须存在（标题与 id 都认），不得写出孤儿分镜', async () => {
+  const p = mkProject('分镜章节校验项目');
+  const cid = Chapters.list(p.id)[0].id;
+  const ctx = createToolRuntime({ projectId: p.id });
+  // 未知章节：整批拒绝，且不留下任何分镜（校验在 clear 之前）
+  await assert.rejects(
+    () => runTool(ctx, 'set_storyboard', { shots: [{ chapter: '第9章', idx: 1, visual: '画面一' }] }),
+    /章节不存在/,
+  );
+  assert.equal(Shots.list(p.id).length, 0);
+  // 章节 id 也认（get_project/list_chapters 同时给出 id 与标题，模型传哪个都得对）
+  await runTool(ctx, 'set_storyboard', { shots: [{ chapter: cid, idx: 1, visual: '画面一' }] });
+  assert.deepEqual(Shots.list(p.id).map((s) => s.chapter), ['第1章']);
+  // 缺 chapter 时回退到任务所在章节（ctx.chapter）
+  const scoped = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  await runTool(scoped, 'set_storyboard', { shots: [{ idx: 2, visual: '画面二' }] });
+  assert.deepEqual(Shots.list(p.id).map((s) => s.chapter), ['第1章', '第1章']);
+  // 既没传 chapter 也不在章节任务里：拒绝（否则就是永不显示的孤儿分镜）
+  await assert.rejects(
+    () => runTool(ctx, 'set_storyboard', { shots: [{ idx: 3, visual: '画面三' }] }),
+    /缺少 chapter/,
+  );
+  assert.equal(Shots.list(p.id).length, 2);
   Projects.remove(p.id);
 });

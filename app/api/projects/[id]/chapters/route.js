@@ -50,8 +50,14 @@ export async function POST(req, { params }) {
   // id 未校验就 create，会留下挂在不存在项目下的孤儿章节行（DB 垃圾）；与 /run、/stages 一致先确认项目存在
   if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
   return withWriteContext('POST /api/projects/:id/chapters', async () => {
-    const c = Chapters.create(id, body || {});
-    return NextResponse.json(c);
+    try {
+      const c = Chapters.create(id, body || {});
+      return NextResponse.json(c);
+    } catch (e) {
+      // 同项目标题唯一（章节是分镜的归属键，重名会让两章共用分镜）：底层抛错，这里翻成 400
+      if (e && e.code === 'DUP_CHAPTER_TITLE') return NextResponse.json({ error: e.message }, { status: 400 });
+      throw e;
+    }
   });
 }
 

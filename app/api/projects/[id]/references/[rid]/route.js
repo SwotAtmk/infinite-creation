@@ -50,7 +50,19 @@ export async function PATCH(req, { params }) {
     }
     // 素材库 -> 参考：移除关联资产（保留原图文件供参考图继续使用）
     if (mode === 'reference' && ref.mode === 'library') {
-      if (ref.asset_id) Assets.remove(ref.asset_id);
+      if (ref.asset_id) {
+        // 先问「这条素材还在被用吗」：删掉它等于把子变体（服装/年龄）一并删掉，
+        // 分镜上的引用会静默失效（参考图少一张、提示词里的 __MINIMAX_H3_REF_N__ 编号错位）。
+        // 与其静默损失，不如让用户先处理掉引用或保留在素材库。
+        const use = Assets.usageOf(ref.asset_id);
+        const why = [];
+        if (use.children) why.push('有 ' + use.children + ' 个变体素材（服装/年龄）会一起被删');
+        if (use.shotIds.length) why.push('正被 ' + use.shotIds.length + ' 个分镜引用，删除后这些引用会失效');
+        if (why.length) {
+          return NextResponse.json({ error: '该素材仍在使用中：' + why.join('；') + '。请先删除变体/解除分镜引用，或保留「素材库」用途。' }, { status: 400 });
+        }
+        Assets.remove(ref.asset_id);
+      }
       ReferenceImages.update(rid, { mode, category, description, asset_id: '' });
       return NextResponse.json({ reference: ReferenceImages.get(rid) });
     }

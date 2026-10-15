@@ -759,3 +759,20 @@ test('force 回滚「行已不存在」的日志：仍留审计记录并打上 r
   assert.ok(again.skipped.some((x) => x.log_id === createLog.id && x.reason === '已被回滚'), '应报告为已回滚跳过');
   Projects.remove(p.id);
 });
+
+test('Assets.usageOf：能看出子变体与被分镜引用（用途切换/删除前的前置检查）', () => {
+  const p = mkProject('素材占用项目');
+  const ch = withWriteContext('POST /api/projects/:id/assets', () => Assets.create(p.id, { category: 'character', name: '甲' }));
+  const costume = withWriteContext('POST /api/projects/:id/assets', () => Assets.create(p.id, { category: 'costume', name: '甲-礼服', parent_id: ch.id }));
+  const prop = withWriteContext('POST /api/projects/:id/assets', () => Assets.create(p.id, { category: 'prop', name: '剑' }));
+  assert.deepEqual(Assets.usageOf(ch.id), { children: 1, shotIds: [] }, '角色挂着 1 个服装变体');
+  assert.deepEqual(Assets.usageOf(prop.id), { children: 0, shotIds: [] }, '没被引用的道具干净');
+  const s = withWriteContext('PUT /api/projects/:id/chapters/:cid/storyboard', () => Shots.create(p.id, { chapter: '第1章', idx: 1, visual: 'A', character_ids: [ch.id], costume_ids: [costume.id] }));
+  assert.deepEqual(Assets.usageOf(ch.id), { children: 1, shotIds: [s.id] });
+  assert.deepEqual(Assets.usageOf(costume.id), { children: 0, shotIds: [s.id] }, '变体本身无子，但有分镜引用');
+  Shots.update(s.id, { audio_ids: [prop.id] });
+  assert.deepEqual(Assets.usageOf(prop.id), { children: 0, shotIds: [s.id] }, 'audio_ids 里的引用同样算占用');
+  Shots.remove(s.id);
+  assert.deepEqual(Assets.usageOf(ch.id), { children: 1, shotIds: [] }, '分镜删掉后不再算被引用');
+  Projects.remove(p.id);
+});

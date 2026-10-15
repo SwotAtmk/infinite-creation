@@ -17,7 +17,7 @@ const shared = await import('../lib/shared/index.js');
 const { createToolRuntime, runTool } = await import('../lib/agent/tools.js');
 const {
   Projects, Chapters, Shots, Assets, listChanges, countChanges, rollbackLogs,
-  withWriteContext, rawGet, pickShotFields, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
+  withWriteContext, rawGet, pickShotFields, pickChapterFields, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
 } = core;
 
 const findLog = (pid, pred) => listChanges(pid, { limit: 500 }).find(pred);
@@ -641,5 +641,32 @@ test('变更日志：total 与 items 同口径（entity/action/source 筛选一�
   const src = 'PATCH /api/projects/:id/shots/:sid';
   assert.equal(countChanges(p.id, { source: src }), listChanges(p.id, { source: src, limit: 500 }).length);
   assert.equal(countChanges(p.id, { entity: 'shot', action: 'create', source: src }), 0, '多条件是 AND');
+  Projects.remove(p.id);
+});
+
+test('章节写入白名单：只认 title/novel/script，seq/status/music_* 当场拒绝', () => {
+  const p = mkProject('章节白名单项目');
+  const ch = Chapters.list(p.id)[0];
+  // 允许的内容字段
+  const ok = pickChapterFields({ title: '第1章', novel: '正文', script: '剧本' });
+  assert.deepEqual(ok.errors, []);
+  assert.deepEqual(ok.patch, { title: '第1章', novel: '正文', script: '剧本' });
+  // 顺序键与流水线产物不可外部写入
+  for (const k of ['seq', 'status', 'music_path', 'music_prompt', 'music_prompt_used', 'project_id', 'id']) {
+    const r = pickChapterFields({ [k]: 'x' });
+    assert.ok(r.errors.some((e) => e.includes(k)), k + ' 必须被拒：' + JSON.stringify(r.errors));
+    assert.equal(r.patch[k], undefined);
+  }
+  // 拼错的字段不能静默通过（否则回 200 却什么都没改）
+  assert.ok(pickChapterFields({ titel: '拼错' }).errors.length === 1);
+  // 非对象请求体
+  assert.deepEqual(pickChapterFields(null).errors, ['请求体必须是 JSON 对象']);
+  // 值一律按字符串落库（与 Chapters.update 的 String 化口径一致）
+  assert.deepEqual(pickChapterFields({ novel: 123 }).patch, { novel: '123' });
+  // 允许字段真的能落库、且不动 seq
+  const seqBefore = ch.seq;
+  Chapters.update(ch.id, pickChapterFields({ script: '剧本正文' }).patch);
+  assert.equal(Chapters.get(ch.id).script, '剧本正文');
+  assert.equal(Chapters.get(ch.id).seq, seqBefore);
   Projects.remove(p.id);
 });

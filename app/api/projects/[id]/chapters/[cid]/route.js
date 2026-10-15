@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Chapters, Shots, withWriteContext, tx } from '@/lib/core/index.js';
+import { Chapters, Shots, withWriteContext, tx, pickChapterFields } from '@/lib/core/index.js';
 import { activeJobOf } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
@@ -12,14 +12,18 @@ export async function PATCH(req, { params }) {
   // cid 来自 URL 且会被解码（vercel/next.js#64952）。不校验归属就能借别的 projectId 改他项目的
   // 章节标题/正文——与 chapters/[cid]/regenerate 的写法保持一致：先确认章节属于本项目。
   if (!before || before.project_id !== id) return NextResponse.json({ error: '章节不存在' }, { status: 404 });
+  // 只接受内容字段（title/novel/script）：seq 是叙事顺序键、status/music_* 是流水线产物，
+  // 由外部写入会被用来伪造状态或撞乱成片顺序，见 lib/core/shot-write.js 的说明。
+  const { patch, errors } = pickChapterFields(body);
+  if (errors.length) return NextResponse.json({ error: errors.join('；') }, { status: 400 });
   return withWriteContext('PATCH /api/projects/:id/chapters/:cid', async () => {
     try {
       // 改标题要连带迁移该章分镜的 chapter 字段（shots 按标题归属）：包一个事务，
       // 避免「标题改了、部分分镜还挂在旧标题下」这种半迁移状态。
       const c = tx(() => {
-        const updated = Chapters.update(cid, body || {});
+        const updated = Chapters.update(cid, patch);
         if (!updated) return null;
-        if (body?.title && before.title !== updated.title) {
+        if (patch.title && before.title !== updated.title) {
           for (const s of Shots.list(id)) if (s.chapter === before.title) Shots.update(s.id, { chapter: updated.title });
         }
         return updated;

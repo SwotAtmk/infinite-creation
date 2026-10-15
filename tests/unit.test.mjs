@@ -11,9 +11,9 @@ import {
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks,
   freeComfy, checkComfyUI, generate, queuePrompt, getHistory, interrupt, downloadOutput, getObjectInfo, resolveHardwareConfig, HW_PRESETS, loadConfig,
-  toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask,
+  toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, comfyBaseUrl, maskComfyBaseUrl } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
@@ -219,6 +219,37 @@ test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前�
   assert.equal(isPresetWorkflows({ ...SHARED_HW_PRESETS.nvidia, t2i: 'my_custom_t2i' }), false, '手改过 → 不随模式切换');
   assert.equal(isPresetWorkflows({ t2i: 'krea2_hyperreal_t2i' }), false, '缺键 → 不算预设');
   assert.equal(isPresetWorkflows(null), false);
+});
+
+test('工作流规格自检: roles/outputs 指向的节点必须在 sourceFile 里真实存在', () => {
+  // 防回归：setInput 找不到节点时只打一条 warn 就跳过参数写入（不抛错），
+  // 一旦规格与工作流文件对不上，caption/seed 这类参数会被静默丢掉，只留下「用模板占位值生成」的假成功。
+  for (const spec of DEFAULT_SPECS) {
+    assert.ok(fs.existsSync(path.join(WF, spec.sourceFile)), spec.id + ' 的 sourceFile 不存在: ' + spec.sourceFile);
+    const wf = load(spec.sourceFile);
+    for (const [role, r] of Object.entries(spec.roles || {})) {
+      const node = wf[r.node];
+      assert.ok(node, spec.id + ' 的 roles.' + role + ' 指向不存在的节点 ' + r.node);
+      assert.ok(Object.prototype.hasOwnProperty.call(node.inputs || {}, r.field), spec.id + ' 的 roles.' + role + ' 指向节点 ' + r.node + ' 上不存在的字段 ' + r.field);
+    }
+    assert.ok((spec.outputs || []).some((ct) => Object.values(wf).some((n) => n.class_type === ct)), spec.id + ' 的 outputs 在 sourceFile 里一个都匹配不上');
+  }
+});
+
+test('presetModeOf/isPresetWorkflows: 缺后加的 music 键的老配置仍算预设（AMD 不会被误判成 NVIDIA）', () => {
+  // 实测踩坑：music 键加入预设后，老配置（只有 t2i/i2i/r2v/tts）被判为「自定义映射」，
+  // 模式推断退化成 nvidia → AMD 专属保护（preflight 的 CK 缺陷与显存余量）静默失效。
+  const legacyAmd = { t2i: 'qwen_image_2_1_t2i_gguf', i2i: 'qwen_image_2_1_i2i_gguf', r2v: 'minimax_h3_r2v_gguf', tts: 'qwen3_tts_voice_design_gguf' };
+  assert.equal(isPresetWorkflows(legacyAmd), true, '缺 music 键仍应认成 AMD 预设');
+  assert.equal(presetModeOf(legacyAmd), 'amd');
+  const resolved = resolveHardwareConfig({ workflows: legacyAmd });
+  assert.equal(resolved.hardware.mode, 'amd');
+  assert.equal(resolved.workflows.music, HW_PRESETS.amd.music, '缺的 music 由预设补齐');
+  assert.equal(resolved.generation.freeAfterEvery, 3, 'AMD 默认显存释放次数适用');
+  // music 被改成自定义值 → 有自定义键 → 不再当作纯预设（不会随模式切换被覆盖）
+  assert.equal(isPresetWorkflows({ ...legacyAmd, music: 'my_music' }), false);
+  // 缺的是非后加键 → 依旧不算预设
+  assert.equal(isPresetWorkflows({ ...SHARED_HW_PRESETS.nvidia, tts: undefined }), false);
 });
 
 test('comfyBaseUrl: native 返回原地址，runninghub 返回固定域名', () => {

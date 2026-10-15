@@ -11,6 +11,10 @@ export async function POST(req, { params }) {
   const body = await req.json().catch(() => ({}));
   if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
   const { asset_id, caption, lyrics, max_duration, name } = body || {};
+  // 非有限数（如 "Infinity"）会一路写进工作流输入 → JSON.stringify 后变 null，ComfyUI 侧报错，这里直接挡掉
+  if (max_duration != null && max_duration !== '' && (!Number.isFinite(Number(max_duration)) || Number(max_duration) < 0)) {
+    return NextResponse.json({ error: 'max_duration 必须是不小于 0 的数字' }, { status: 400 });
+  }
 
   let asset;
   if (asset_id) {

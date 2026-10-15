@@ -7,18 +7,24 @@ import { Chapters, Shots, Projects, extractFrame, resolveProjectPath } from '@/l
 export const dynamic = 'force-dynamic';
 
 // 懒生成章节首帧预览图（存在即复用）：从章节第一个已完成分镜的视频抽首帧存为 jpg
+// 同一章节的抽取只允许一个在跑：GET /chapters 会被前端高频轮询（WS 每条进度都刷新 + 运行期每 2.5s 一次），
+// 少了这道闸门，同一张 posters/<章节id>.jpg 会被多个请求并发抽取/写入，既同时起一堆 ffmpeg，
+// 又可能写出半截文件——而「存在即复用」会让这张坏图被永久缓存下来。
+const posterInflight = new Set();
 async function ensurePoster(projectId, chapterId, firstDoneShot) {
   const rel = 'posters/' + chapterId + '.jpg';
   const abs = resolveProjectPath(projectId, rel);
   if (!abs) return '';
   if (fs.existsSync(abs)) return rel;
-  const videoAbs = resolveProjectPath(projectId, firstDoneShot.video_path);
-  if (!videoAbs || !fs.existsSync(videoAbs)) return '';
+  if (posterInflight.has(abs)) return '';
+  posterInflight.add(abs);
   try {
+    const videoAbs = resolveProjectPath(projectId, firstDoneShot.video_path);
+    if (!videoAbs || !fs.existsSync(videoAbs)) return '';
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     await extractFrame(videoAbs, abs);
     return fs.existsSync(abs) ? rel : '';
-  } catch { return ''; }
+  } catch { return ''; } finally { posterInflight.delete(abs); }
 }
 
 export async function GET(_req, { params }) {

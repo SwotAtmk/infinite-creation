@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import next from 'next';
 import { WebSocketServer } from 'ws';
-import { DATA_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger, startupCleanup, maskComfyBaseUrl } from './lib/core/index.js';
+import { DATA_DIR, PROJECTS_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger, startupCleanup, maskComfyBaseUrl } from './lib/core/index.js';
 import { scanSkills } from './lib/agent/index.js';
 import { setBroadcaster } from './lib/ws.js';
 
@@ -76,10 +76,12 @@ app.prepare().then(() => {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/files/')) {
-      // 相对路径 -> data/ 下的绝对路径，并做路径穿越防护
+      // 相对路径 -> data/ 下的绝对路径，并做路径穿越防护。
+      // 只放开 data/projects/：data/ 根下还放着数据库（ic.db）等本不该对外暴露的文件，
+      // 前台所有 /files 链接都是 /files/projects/<项目id>/... ，收窄到项目目录不影响功能。
       const rel = decodeURIComponent(url.pathname.slice('/files/'.length));
       const abs = path.resolve(DATA_DIR, '.' + path.sep + rel.replace(/^\/+/, ''));
-      const safe = path.relative(DATA_DIR, abs);
+      const safe = path.relative(PROJECTS_DIR, abs);
       if (safe && !safe.startsWith('..') && !path.isAbsolute(safe) && serveFile(res, req, abs)) return;
       res.writeHead(404).end();
       return;

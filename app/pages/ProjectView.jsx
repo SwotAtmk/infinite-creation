@@ -15,7 +15,7 @@ import EditProject from './EditProject';
 // 任务类型 → 中文名（任务列表显示用）
 const JOB_LABEL = { create: '生成流水线', regenerate: '重生成分镜', 'asset-image': '资产出图', 'voice-design': '音色设计', costume: '换装', age: '年龄变体', stage: '阶段运行', 'chapter-video': '章节视频重生成', llm: '素材命名（LLM）', export: '导出成片', music: '生成背景音乐', 'music-apply': '应用背景音乐' };
 // 可取消的任务类型（走队列/闸门，能被打断）；llm/export 是请求内同步任务，无取消入口
-const CANCELLABLE = new Set(['create', 'regenerate', 'asset-image', 'voice-design', 'costume', 'age', 'stage', 'chapter-video']);
+const CANCELLABLE = new Set(['create', 'regenerate', 'asset-image', 'voice-design', 'costume', 'age', 'stage', 'chapter-video', 'music', 'music-apply']);
 // 任务状态 → 标签与颜色
 const JOB_STATUS = {
   running: { label: '执行中', color: 'primary' },

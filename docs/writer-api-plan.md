@@ -115,6 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 | `PATCH` | `/api/projects/:id/shots/:sid` | 除 6 个 `*_ids` 外，接受分镜正文字段：`chapter/idx/scene_name/camera/visual/dialogue/narration/sub_shots/duration/seed/references/resolution/aspect_ratio/video_prompt`（**不接受** `status/error/video_path/video_prompt_used`，防伪造生成结果）。写入前过一遍业务校验：`duration` 1~15 秒、`dialogue` ≤ duration×5.5 字、单镜说话人 ≤2、`resolution`/`aspect_ratio` 走枚举 |
 | `PATCH` | `/api/projects/:id/chapters/:cid` | 新增 `script` 字段 |
 | `POST` | `/api/projects/:id/chapters` | `script` 可选 |
+| `POST` | `/api/projects`、`PATCH` `/api/projects/:id` | 新增项目级校验：`video_resolution`/`video_aspect_ratio` 走 `lib/shared` 同一份枚举（空串 = 默认 `480P`/`16:9`），非法值 400。分镜生成时取 `shot.resolution \|\| project.video_resolution`，项目这一层写错会让整个项目在渲染阶段才炸 |
 | 全部内容写路由 | 项目/章节/分镜/资产/参考图 | 统一包 `writeContext(...)`，写日志 |
 
 ### 4.3 明确不提供 / 禁止
@@ -190,9 +191,12 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 | 低 | 音乐工作流描述写「本地英伟达原版」，实际引用 `minimax_music3_dit_int8_convrot.safetensors`（fp16 只出现在云端 `workflows/RunningHub/`） | 描述改为「本地工作流，DiT int8 量化版」/「云端 fp16」 |
 | 低 | 「合成整片」（`assemble_video` 不带 `chapter`、`POST …/export` 不带 `chapter`）按全局 `idx` 排序，多章项目会交叉成「第1章第1镜、第2章第1镜…」 | 新增 `Shots.listInNarrativeOrder`（章节 `seq` → 章内 `idx`），两条合并路径改用 |
 | 低 | `pnpm run install:ic-writer` 别名缺失 | 回补到 `package.json` |
+| 中 | 项目级 `video_resolution` / `video_aspect_ratio` 无校验：`PATCH /api/projects/:id` 把 body 直通 `Projects.update`，`{"video_resolution":"banana"}` 返回 200。而生成时取 `shot.resolution \|\| project.video_resolution`，**一处脏写让整个项目的每一镜都在渲染阶段才炸** | 校验下沉到 `lib/core/db.js` 的 `Projects.create/update`（复用 `lib/shared` 的 `VIDEO_RESOLUTIONS`/`VIDEO_ASPECT_RATIOS`），两条项目路由翻 400；`update` 只校验本次要写的键，存量行里的历史脏值不会让「改个名字」也失败 |
 
 ### 复核对齐结论
 
 - 「本地/云端」与「int8/fp16」是两件事：本地 `audio_minimax_music_3.json` 与云端 `RunningHub/audio_minimax_music_3.json` 的 DiT 权重不同（int8 convrot / fp16），文生图与视频工作流同理（映射表按 `hardware.mode` 选，云端固定走 RunningHub）。描述里只写「英伟达」会让人误以为是模型版本。
-- 分辨率只保证「下拉给的、以及映射表能解析的」这批标签可用；`1080P`/`2K`/`4K` 保留在映射表里是为了兼容历史数据，未列入下拉（上游 `MiniMaxH3Easy` 节点的 `resolution` 选项表未实测确认过，宁可少给选项，也不给「选了就报错」的选项）。
+- 分辨率标签的上游已核对清楚（不再是推测）：`ResolutionSelector` 是 **ComfyUI 核心节点**（`comfy_extras/nodes_resolution.py`），`megapixels` 为 Float、只有 `min=0.1`/`max=16` 的范围校验（`execution.py` 的 `validate_inputs` 只查 min/max，**不查 step**）、`aspect_ratio` 的 8 个选项与本文档的共享列表逐字相同；映射表由 `ComfyUI_MiniMaxH3_Director` 的 `resolution_from_selector`（面积 → 按宽高比折算 → 宽高取 32 的倍数、下限夹到 16 MP）消费。
+- 因此 `1080P`/`2K`/`4K` 是**合法入参**（`2`/`4` 在 0.1~16 内），留在映射表里、不进下拉是**成本**取舍而非「选了就报错」：2 MP/4 MP 就是 1080p/4K 级出片，AMD 单卡上不现实（作者原下拉本来也止于 `768P`）。
+- 顺带核对到：英伟达原版视频路径的 `MiniMaxH3Easy` 节点在本机 **ComfyUI 里不存在**（核心 `comfy_extras/nodes_minimax_h3.py` 只有 `MiniMaxH3ImageToVideo`/`AddGuide`/`ReferenceToVideo`/`SigmaShift`，第三方包只注册 `MiniMaxH3Director*`），`workflows/MiniMax_H3_Easy_r2v.json` 在本机跑不起来——本机视频只走 GGUF 那条（`minimax_h3_r2v_gguf`），即 `resolution` 只会经上面的 megapixels 映射表。
 - 实例仍然零鉴权：默认只绑 `127.0.0.1`；改成 `0.0.0.0` 等于把「读全文 / 改内容 / 回滚」端点开给整个局域网，技能里已写明只对本机用。

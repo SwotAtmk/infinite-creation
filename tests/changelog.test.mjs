@@ -16,7 +16,7 @@ const core = await import('../lib/core/index.js');
 const shared = await import('../lib/shared/index.js');
 const { createToolRuntime, runTool } = await import('../lib/agent/tools.js');
 const {
-  Projects, Chapters, Shots, Assets, listChanges, countChanges, rollbackLogs,
+  Projects, Chapters, Shots, Assets, Jobs, listChanges, countChanges, rollbackLogs,
   withWriteContext, rawGet, pickShotFields, pickChapterFields, idxTakenBy, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
 } = core;
 
@@ -695,4 +695,19 @@ test('validateShotContent：显式空 chapter 被拒（否则分镜从章节视�
     const errs = validateShotContent({ chapter: v, visual: 'x' }, {});
     assert.ok(errs.some((e) => e.includes('chapter 不能为空')), JSON.stringify(errs));
   }
+});
+
+test('activeJobOf：queued（排队中）也算活动任务，防重与 409 守卫不被绕过', async () => {
+  const { activeJobOf } = await import('../lib/agent/job-runner.js');
+  const p = mkProject('排队任务项目');
+  const job = Jobs.create({ projectId: p.id, type: 'video' });
+  assert.equal(activeJobOf(p.id)?.id, job.id, 'running 任务算活动');
+  Jobs.update(job.id, { status: 'queued' });
+  assert.equal(activeJobOf(p.id)?.id, job.id, 'queued 任务也必须算活动（否则可再起一条流水线/删掉它要写的行）');
+  Jobs.update(job.id, { status: 'done' });
+  assert.equal(activeJobOf(p.id), undefined, '结束后不再是活动任务');
+  const other = mkProject('无任务项目');
+  assert.equal(activeJobOf(other.id), undefined);
+  Projects.remove(p.id);
+  Projects.remove(other.id);
 });

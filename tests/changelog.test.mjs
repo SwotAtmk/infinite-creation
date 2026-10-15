@@ -16,7 +16,7 @@ const core = await import('../lib/core/index.js');
 const shared = await import('../lib/shared/index.js');
 const { createToolRuntime, runTool } = await import('../lib/agent/tools.js');
 const {
-  Projects, Chapters, Shots, Assets, Jobs, listChanges, countChanges, rollbackLogs,
+  Projects, Chapters, Shots, Assets, Jobs, listChanges, countChanges, rollbackLogs, getChange,
   withWriteContext, rawGet, pickShotFields, pickChapterFields, idxTakenBy, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
 } = core;
 
@@ -739,5 +739,23 @@ test('回滚「章节新建」：级联删的分镜逐条留 delete 日志，重
   assert.deepEqual(shots.map((s) => s.id), [s1.id, s2.id].sort((a, b) => (a === s1.id ? -1 : 1)), '两条分镜都恢复');
   assert.deepEqual(shots.map((s) => s.idx), [1, 2]);
   assert.ok(shots.every((s) => s.chapter === '待撤章节' && s.visual === 'A' || s.visual === 'B'), '内容与归属原样恢复');
+  Projects.remove(p.id);
+});
+
+test('force 回滚「行已不存在」的日志：仍留审计记录并打上 reverted_by', () => {
+  const p = mkProject('审计兜底项目');
+  const s = withWriteContext('POST /api/projects/:id/shots', () => Shots.create(p.id, { chapter: '第1章', idx: 1, visual: 'A' }));
+  const createLog = listChanges(p.id, { entity: 'shot', action: 'create', limit: 500 }).find((l) => l.entity_id === s.id);
+  assert.ok(createLog?.id);
+  // 该行先被别处删掉，之后才来 force 回滚这条 create：两侧都没有行可归属
+  withWriteContext('DELETE /api/projects/:id/shots/:sid', () => Shots.remove(s.id));
+  const r = rollbackLogs({ projectId: p.id, logId: createLog.id, force: true });
+  assert.equal(r.applied.length, 1);
+  assert.ok(r.applied[0].rollback_log_id, 'force 回滚也必须写出 rollback 审计记录');
+  assert.equal(getChange(createLog.id).reverted_by, r.applied[0].rollback_log_id, 'reverted_by 指向本次回滚日志');
+  // 之后的全量回滚不该再把这条 create 当「未回滚」重撤一次
+  const again = rollbackLogs({ projectId: p.id, sinceTs: createLog.ts, force: true });
+  assert.equal(again.applied.some((a) => a.log_id === createLog.id), false, '已回滚的日志不再被重复撤销');
+  assert.ok(again.skipped.some((x) => x.log_id === createLog.id && x.reason === '已被回滚'), '应报告为已回滚跳过');
   Projects.remove(p.id);
 });

@@ -18,6 +18,7 @@ import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
 import { runExclusiveVideo, concurrencyLimit } from '../lib/agent/job-runner.js';
+import { guardToolCall } from '../lib/agent/guard.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -881,4 +882,23 @@ test('inferVoiceBaseline: 推断不出性别（中性/冲突）返回空串，�
   assert.equal(inferVoiceBaseline('路人甲', '没有性别标志的剪影'), '');
   // 性别词冲突（如「男主角的女友」同时含男女）：保守返回空，避免给错性别
   assert.equal(inferVoiceBaseline('某角色', '男主角的女友，温柔'), '');
+});
+
+test('guardToolCall: 危险命令只扫非正文参数（创作文本不该被误拦）', () => {
+  // 台词/画面描述里出现命令字样：本项目没有任何能执行命令的工具，这类拦截只会误伤合法写入
+  const prose = guardToolCall('set_storyboard', {
+    shots: [{ idx: 1, chapter: '第1章', visual: '他敲下 rm -rf / 清空服务器', dialogue: '张工：快执行 chmod 777！', sub_shots: 'git reset --hard' }],
+  });
+  assert.equal(prose.blocked, false, '创作正文里的命令字样不该拦');
+
+  // 非正文字段/未知字段仍然照常扫描（默认检查，防御性不下降）
+  assert.equal(guardToolCall('some_tool', { command: 'rm -rf /tmp/x', note: 'y' }).blocked, true);
+  assert.equal(guardToolCall('set_storyboard', { shots: [{ idx: 1, visual: 'x' }], cmd: 'sudo su -' }).blocked, true);
+});
+
+test('guardToolCall: 路径穿越仍按路径类参数拦截（与正文无关）', () => {
+  assert.equal(guardToolCall('edit_asset_image', { file_path: '../../etc/passwd' }).blocked, true);
+  assert.equal(guardToolCall('edit_asset_image', { reference_image_path: '/etc/passwd' }).blocked, true);
+  // 路径穿越只在路径类参数上判：普通文本里出现 ../ 不算（例如正文提及相对路径）
+  assert.equal(guardToolCall('set_storyboard', { shots: [{ visual: '她从 ../ 的岔路口走来' }] }).blocked, false);
 });

@@ -554,3 +554,17 @@ test('停止：当前分镜复位为待生成，不再留在「失败」', async
   assert.equal(Shots.get(s.id).error, '');
   Projects.remove(p.id);
 });
+
+test('save_context：key 值域与 schema/路由一致；continuity 文件损坏时自愈', async () => {
+  const p = mkProject('上下文项目');
+  const ctx = createToolRuntime({ projectId: p.id });
+  await assert.rejects(() => runTool(ctx, 'save_context', { key: 'bible2', content: 'x' }), /key 只能是/);
+  // 手改坏 continuity.json（非数组）：写入必须自愈，不能抛 TypeError
+  const f = path.join(projectDir(p.id), 'context', 'continuity.json');
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, '{"oops": 1}');
+  await runTool(ctx, 'save_context', { key: 'continuity', content: '第一条' });
+  const arr = JSON.parse(fs.readFileSync(f, 'utf8'));
+  assert.ok(Array.isArray(arr) && arr.length === 1 && arr[0].content === '第一条');
+  Projects.remove(p.id);
+});

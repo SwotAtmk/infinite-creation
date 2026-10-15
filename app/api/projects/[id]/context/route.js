@@ -3,12 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
 import { Projects, projectDir, withWriteContext } from '@/lib/core/index.js';
+import { CONTEXT_KEYS } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
 // 项目上下文（人物圣经 / 风格指南 / 连续性记录）。写入语义与内置 Agent 的 save_context 完全一致：
 // context 表存 JSON，同时落盘 context/*.md，保证「界面/API 写入」与「Agent 写入」产物一致。
-export const CONTEXT_KEYS = ['bible', 'style', 'continuity'];
+// 键列表来自 lib/shared（单一事实来源，Agent 侧用同一份做值域校验）。
+export { CONTEXT_KEYS };
 
 export async function GET(_req, { params }) {
   const { id } = await params;

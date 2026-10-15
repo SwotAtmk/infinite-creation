@@ -592,3 +592,20 @@ test('Chapters.reorder：必须给出完整 id 集合，否则 seq 撞号', () =
   assert.deepEqual(Chapters.list(p.id).map((x) => x.seq), [1, 2, 3]);
   Projects.remove(p.id);
 });
+
+test('set_storyboard：未声明字段当场拒绝（字段拼错不再被静默丢弃）', async () => {
+  const p = mkProject('分镜字段项目');
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  await assert.rejects(
+    () => runTool(ctx, 'set_storyboard', { shots: [{ idx: 1, sence_name: '拼错的场景', cast: ['甲'] }] }),
+    /未声明字段/,
+  );
+  // 拼错的批次不能留下空分镜
+  assert.equal(Shots.list(p.id).length, 0, '被拒的批次必须一行都不写');
+  // 正确字段照常写入
+  await runTool(ctx, 'set_storyboard', { shots: [{ idx: 1, scene_name: '场景', visual: '画面' }] });
+  const all = Shots.list(p.id);
+  assert.equal(all.length, 1);
+  assert.equal(all[0].scene_name, '场景');
+  Projects.remove(p.id);
+});

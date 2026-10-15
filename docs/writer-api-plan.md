@@ -186,3 +186,13 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 | 中 | `Shots.create` 自动镜号是项目级 `MAX(idx)+1`，与「每章独立镜号空间」的约定不一致 | 改为按章取 `MAX(idx)+1` |
 | 低 | `parent_shot_id` 在可写白名单里但全仓库无人读取（无效字段） | 从白名单移除（列保留，不影响老数据） |
 | 低 | §3.1/§3.3/§八 的表述与实现不一致 | 本文档已按实现改正 |
+| 低 | 分辨率取值域三处各写一份：界面下拉 `360P/480P/720P/768P/custom`、工作流映射表 `480P/720P/1080P/2K/4K`、写入白名单（两者并集）。`360P`/`768P` 在映射表里没有条目 → 标签被原样写进 `megapixels`，提交才报错；`1080P`/`2K`/`4K` 在下拉里根本选不到 | 统一到 `lib/shared/index.js`：`VIDEO_RESOLUTION_MP`（补 360P/768P）、`VIDEO_RESOLUTION_OPTIONS`（下拉）、`VIDEO_RESOLUTIONS`/`VIDEO_ASPECT_RATIOS`（校验）。新增一致性回归盯着「映射表键 = 共享常量键」 |
+| 低 | 音乐工作流描述写「本地英伟达原版」，实际引用 `minimax_music3_dit_int8_convrot.safetensors`（fp16 只出现在云端 `workflows/RunningHub/`） | 描述改为「本地工作流，DiT int8 量化版」/「云端 fp16」 |
+| 低 | 「合成整片」（`assemble_video` 不带 `chapter`、`POST …/export` 不带 `chapter`）按全局 `idx` 排序，多章项目会交叉成「第1章第1镜、第2章第1镜…」 | 新增 `Shots.listInNarrativeOrder`（章节 `seq` → 章内 `idx`），两条合并路径改用 |
+| 低 | `pnpm run install:ic-writer` 别名缺失 | 回补到 `package.json` |
+
+### 复核对齐结论
+
+- 「本地/云端」与「int8/fp16」是两件事：本地 `audio_minimax_music_3.json` 与云端 `RunningHub/audio_minimax_music_3.json` 的 DiT 权重不同（int8 convrot / fp16），文生图与视频工作流同理（映射表按 `hardware.mode` 选，云端固定走 RunningHub）。描述里只写「英伟达」会让人误以为是模型版本。
+- 分辨率只保证「下拉给的、以及映射表能解析的」这批标签可用；`1080P`/`2K`/`4K` 保留在映射表里是为了兼容历史数据，未列入下拉（上游 `MiniMaxH3Easy` 节点的 `resolution` 选项表未实测确认过，宁可少给选项，也不给「选了就报错」的选项）。
+- 实例仍然零鉴权：默认只绑 `127.0.0.1`；改成 `0.0.0.0` 等于把「读全文 / 改内容 / 回滚」端点开给整个局域网，技能里已写明只对本机用。

@@ -464,3 +464,14 @@ test('update_shot：时长归一化后才落库（越界裁剪、非数字拒绝
   assert.equal(Shots.get(id).duration, 15);
   Projects.remove(p.id);
 });
+
+test('update_shot：不得改写别的项目的分镜（归属校验）', async () => {
+  const p1 = mkProject('归属校验甲');
+  const p2 = mkProject('归属校验乙');
+  const s2 = Shots.create(p2.id, { chapter: '第1章', visual: '乙项目的画面' });
+  const ctx = createToolRuntime({ projectId: p1.id });
+  await assert.rejects(() => runTool(ctx, 'update_shot', { shot_id: s2.id, visual: '被改掉' }), /分镜不存在/);
+  assert.equal(Shots.get(s2.id).visual, '乙项目的画面', '别的项目的分镜不能被改');
+  Projects.remove(p1.id);
+  Projects.remove(p2.id);
+});

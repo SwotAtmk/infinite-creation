@@ -16,8 +16,8 @@ const core = await import('../lib/core/index.js');
 const shared = await import('../lib/shared/index.js');
 const { createToolRuntime, runTool } = await import('../lib/agent/tools.js');
 const {
-  Projects, Chapters, Shots, listChanges, countChanges, rollbackLogs,
-  withWriteContext, rawGet, pickShotFields, validateShotContent, tx, DB_PATH, chapterStats,
+  Projects, Chapters, Shots, Assets, listChanges, countChanges, rollbackLogs,
+  withWriteContext, rawGet, pickShotFields, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
 } = core;
 
 const findLog = (pid, pred) => listChanges(pid, { limit: 500 }).find(pred);
@@ -474,4 +474,30 @@ test('update_shot：不得改写别的项目的分镜（归属校验）', async 
   assert.equal(Shots.get(s2.id).visual, '乙项目的画面', '别的项目的分镜不能被改');
   Projects.remove(p1.id);
   Projects.remove(p2.id);
+});
+
+test('自动换装：同章第二次换装事件不被首次结果误判为「已显式引用」', async () => {
+  const p = mkProject('自动换装项目');
+  const mkImg = (rel) => {
+    const abs = path.join(projectDir(p.id), rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, 'x');
+    return rel;
+  };
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png') });
+  // 预置一套「内容与提示词都没改过」的服装：change_outfit 判定可复用 → 直接返回，不触发渲染
+  const costume = Assets.create(p.id, { category: 'costume', name: '小明-沐浴后换上的干净衣裳', description: '沐浴后换上的干净衣裳', prompt: 'keep', parent_id: ch.id });
+  Assets.update(costume.id, { status: 'done', image_path: mkImg('assets/costume/y.png'), prompt_used: 'keep' });
+  const reports = [];
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  ctx.report = (x) => reports.push(x);
+  await runTool(ctx, 'set_storyboard', { shots: [
+    { idx: 1, characters: ['小明'], visual: '小明在屋后沐浴' },
+    { idx: 2, characters: ['小明'], visual: '小明又一次沐浴' },
+  ] });
+  const outfit = reports.find((r) => r.phase === '人物换装' && /套/.test(r.detail));
+  assert.ok(outfit, '换装事件应被处理并上报');
+  assert.match(outfit.detail, /2 套/, '第二次事件不能被首次自动绑定的服装当成「显式引用」而跳过');
+  Projects.remove(p.id);
 });

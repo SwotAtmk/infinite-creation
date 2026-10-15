@@ -138,7 +138,19 @@ curl http://127.0.0.1:4600/api/health # 期望 {"ok":true}
 
 **方式 B · 不启动本项目（Agent 手工映射）**：Agent 按上方「工作流规格」字段，把用户提供的 ComfyUI JSON 手动整理成规格（roles/media/outputs/prune），再复刻 `workflow-runner` 的「克隆模板 → 写 roles 参数 → 绑定 media 参考 → prune 无效节点 → 提交 ComfyUI」流程。解析逻辑参考 `analyzeWorkflow()`（识别 LoadImage/LoadAudio/LoadVideo、Save*、KSampler、prompt/text 字段、seed、尺寸）。
 
-## 六、使用方式小结
+## 六、外部 Agent 通过 API 写入内容（harness 写入）
+
+外部 harness（opencode 等）可以把**文本内容**写进一个正在运行的实例：新建项目、小说原文、剧本、分镜、人物圣经/风格。
+
+- **技能**：`skills/ic-writer/SKILL.md`（端点速查 + 铁律）。装到 harness 技能目录：`node scripts/install-writer-skill.mjs`（默认 `~/.agents/skills/ic-writer`，新技能需重启会话）。
+- **只写 LLM 文本**：小说/剧本/分镜/上下文/素材提示词；**禁止**触发生成与导出（`/run`、`/stages`、`/regenerate`、`/generate`、`/music`、`/export`）。图片、视频、语音、音乐、成片一律由用户在界面启动。
+- **可改写已有产物**：覆盖已生成章节的 `novel`/`script`、逐条改已有分镜正文与 `video_prompt`、覆盖 `bible`/`style`；但 `status/video_path` 等产物字段不可写。
+- **补齐的接口**：`PUT …/context`（上下文，落盘 `context/*.md`）、`POST/DELETE …/shots`、`PATCH …/shots/:sid`（可写分镜正文，产物字段不可写）、`PUT …/chapters/:cid/storyboard`（整章批量写分镜）、`GET …/logs`、`POST …/logs/rollback`。章节新增 `script` 字段承载剧本。
+- **可回滚日志**：内容表（projects/chapters/shots/assets/reference_images）的每次增删改都在 DB 层留原始行快照，UI / 内置 Agent / 外部 harness 三方写入全部覆盖；支持单条、整批（`batch_id`）、按时间点回滚，带漂移保护（变更之后又被改过 → 409 拒绝，`force:true` 才覆盖）。
+- **硬约束**：**没有任何 API 用于删除项目**；回滚也拒绝回滚「项目创建」。日志随用户手动删除项目一并清除，不自动清理。
+- 设计细节见 `docs/writer-api-plan.md`。
+
+## 七、使用方式小结
 
 - **要跑本项目**：见「二、快速启动」。
 - **要脱离本项目、在自己 Agent 里实现同样方案**：读「三、全链路流程」+ 用「四」的 `skills/` 技能库，按五接入自己的工作流。

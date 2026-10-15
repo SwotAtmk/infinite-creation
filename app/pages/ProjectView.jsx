@@ -1,18 +1,19 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Button, Chip, Tabs, Tab, Card, CardBody, Spinner } from '@heroui/react';
+import { Button, Chip, Tabs, Tab, Card, CardBody, Spinner, Select, SelectItem } from '@heroui/react';
 import { api } from '../api-client.js';
-import { statusColor } from './shared';
+import { statusColor, selectKeys, pickKey } from './shared';
 import { useToast } from '../toast';
 import ChaptersView from './ChaptersView';
-import GenerateView from './GenerateView';
 import AssetsTab from './AssetsTab';
+import ShotsTab from './ShotsTab';
+import MusicTab from './MusicTab';
 import ExportsTab from './ExportsTab';
 import ConsoleTab from './ConsoleTab';
 import EditProject from './EditProject';
 
 // 任务类型 → 中文名（任务列表显示用）
-const JOB_LABEL = { create: '生成流水线', regenerate: '重生成分镜', 'asset-image': '资产出图', 'voice-design': '音色设计', costume: '换装', age: '年龄变体', stage: '阶段运行', 'chapter-video': '章节视频重生成', llm: '素材命名（LLM）', export: '导出成片' };
+const JOB_LABEL = { create: '生成流水线', regenerate: '重生成分镜', 'asset-image': '资产出图', 'voice-design': '音色设计', costume: '换装', age: '年龄变体', stage: '阶段运行', 'chapter-video': '章节视频重生成', llm: '素材命名（LLM）', export: '导出成片', music: '生成背景音乐', 'music-apply': '应用背景音乐' };
 // 可取消的任务类型（走队列/闸门，能被打断）；llm/export 是请求内同步任务，无取消入口
 const CANCELLABLE = new Set(['create', 'regenerate', 'asset-image', 'voice-design', 'costume', 'age', 'stage', 'chapter-video']);
 // 任务状态 → 标签与颜色
@@ -45,7 +46,7 @@ function fmtDuration(a, b) {
 export default function ProjectView({ id, onBack, initialTab = 'chapters', onTabChange }) {
   const toast = useToast();
   const [project, setProject] = useState(null);
-  const [pview, setPview] = useState(initialTab);
+  const [pview, setPview] = useState(initialTab === 'generate' ? 'chapters' : initialTab);
   // tab 切换同步到 URL（page.jsx replaceState 更新，刷新后停留原 tab）
   const setTab = (t) => { setPview(t); if (onTabChange) onTabChange(t); };
   const [events, setEvents] = useState([]);
@@ -236,16 +237,28 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
 
 <Tabs aria-label="项目工作区" selectedKey={pview} onSelectionChange={setTab} variant="underlined">
         <Tab key="chapters" title="📚 章节管理" />
-        <Tab key="generate" title="🎬 生成内容" />
         <Tab key="assets" title="🎨 素材库" />
+        <Tab key="shots" title="🎬 分镜审查" />
+        <Tab key="music" title="🎵 背景音乐" />
         <Tab key="exports" title="🎞 成片" />
         <Tab key="logs" title="📜 运行日志" />
       </Tabs>
 
       <div>
-        {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} onRefresh={loadProject} />}
-        {pview === 'generate' && <GenerateView projectId={id} chapters={chapters} cursor={cursor} setCursor={setCursor} running={running} jobs={jobs} onRun={run} onStop={stop} onRefresh={loadProject} onGoLogs={() => setTab('logs')} />}
+        {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} onRefresh={loadProject} running={running} onRun={run} onStop={stop} onGoLogs={() => setTab('logs')} />}
         {pview === 'assets' && <AssetsTab projectId={id} jobs={jobs} onRefresh={loadProject} />}
+        {pview === 'shots' && (
+          <div className="flex flex-col gap-3">
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <span className="muted">章节</span>
+              <Select size="sm" className="w-52" aria-label="选择章节" selectedKeys={selectKeys(String(cursor))} onSelectionChange={(k) => setCursor(Number(pickKey(k)) || 0)}>
+                {chapters.map((c, i) => <SelectItem key={String(i)}>{c.title}</SelectItem>)}
+              </Select>
+            </div>
+            <ShotsTab projectId={id} chapter={chapters[cursor]?.title || ''} running={running} jobs={jobs} onRefresh={loadProject} />
+          </div>
+        )}
+        {pview === 'music' && <MusicTab projectId={id} chapters={chapters} running={running} onRefresh={loadProject} />}
         {pview === 'exports' && <ExportsTab projectId={id} />}
         {pview === 'logs' && <ConsoleTab projectId={id} events={events} jobs={jobs} onRefresh={loadProject} />}
       </div>

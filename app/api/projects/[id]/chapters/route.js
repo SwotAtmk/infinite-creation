@@ -1,20 +1,41 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
+import fs from 'node:fs';
+import path from 'node:path';
 import { NextResponse } from 'next/server';
-import { Chapters, Shots, Projects } from '@/lib/core/index.js';
+import { Chapters, Shots, Projects, extractFrame, resolveProjectPath } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
+
+// 懒生成章节首帧预览图（存在即复用）：从章节第一个已完成分镜的视频抽首帧存为 jpg
+async function ensurePoster(projectId, chapterId, firstDoneShot) {
+  const rel = 'posters/' + chapterId + '.jpg';
+  const abs = resolveProjectPath(projectId, rel);
+  if (!abs) return '';
+  if (fs.existsSync(abs)) return rel;
+  const videoAbs = resolveProjectPath(projectId, firstDoneShot.video_path);
+  if (!videoAbs || !fs.existsSync(videoAbs)) return '';
+  try {
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    await extractFrame(videoAbs, abs);
+    return fs.existsSync(abs) ? rel : '';
+  } catch { return ''; }
+}
 
 export async function GET(_req, { params }) {
   const { id } = await params;
   const chs = Chapters.list(id);
   const all = Shots.list(id);
-  return NextResponse.json(chs.map((c) => {
+  const out = [];
+  for (const c of chs) {
     const shots = all.filter((s) => s.chapter === c.title);
     const done = shots.filter((s) => s.status === 'done').length;
     let gen = 'empty';
     if (shots.length) { if (done === shots.length) gen = 'done'; else if (shots.some((s) => s.status === 'running')) gen = 'running'; else if (shots.some((s) => s.status === 'failed')) gen = 'failed'; else gen = 'pending'; }
-    return { ...c, shotCount: shots.length, doneCount: done, genStatus: gen };
-  }));
+    const firstDone = shots.find((s) => s.status === 'done' && s.video_path);
+    const poster = firstDone ? await ensurePoster(id, c.id, firstDone) : '';
+    out.push({ ...c, shotCount: shots.length, doneCount: done, genStatus: gen, poster });
+  }
+  return NextResponse.json(out);
 }
 
 export async function POST(req, { params }) {
@@ -24,4 +45,16 @@ export async function POST(req, { params }) {
   if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
   const c = Chapters.create(id, body || {});
   return NextResponse.json(c);
+}
+
+// 拖拽排序：按传入 id 顺序重排章节 seq（seq 从 1 起，与 create 的 maxSeq+1 一致）
+export async function PATCH(req, { params }) {
+  const { id } = await params;
+  const body = await req.json().catch(() => ({}));
+  const ids = Array.isArray(body.ids) ? body.ids : [];
+  if (!ids.length) return NextResponse.json({ error: '缺少 ids' }, { status: 400 });
+  const valid = new Set(Chapters.list(id).map((c) => c.id));
+  if (ids.some((cid) => !valid.has(cid))) return NextResponse.json({ error: '章节不存在' }, { status: 400 });
+  ids.forEach((cid, i) => Chapters.update(cid, { seq: i + 1 }));
+  return NextResponse.json({ ok: true });
 }

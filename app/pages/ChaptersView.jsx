@@ -1,35 +1,72 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Button, Input, Card, CardBody, Textarea, Chip } from '@heroui/react';
+import { Button, Input, Card, CardBody, Textarea, Chip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from '@heroui/react';
 import { api } from '../api-client.js';
 import ReferencePicker from './ReferencePicker';
-import { statusColor } from './shared';
+import ChapterOps from './ChapterOps';
+import { fileUrl, statusColor } from './shared';
 import { useToast } from '../toast';
 
-// ============ 页1 · 章节管理 ============
-export default function ChaptersView({ projectId, chapters, cursor, setCursor, onRefresh }) {
+// 拖拽手柄图标（6 点 grip）
+function GripIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="8" cy="5" r="1.7" />
+      <circle cx="16" cy="5" r="1.7" />
+      <circle cx="8" cy="12" r="1.7" />
+      <circle cx="16" cy="12" r="1.7" />
+      <circle cx="8" cy="19" r="1.7" />
+      <circle cx="16" cy="19" r="1.7" />
+    </svg>
+  );
+}
+
+// ============ 章节管理（合并原「章节管理」+「生成内容」） ============
+export default function ChaptersView({ projectId, chapters, onRefresh, running, onRun, onStop, onGoLogs }) {
   const toast = useToast();
-  const cur = chapters[cursor] || chapters[0] || null;
-  const [title, setTitle] = useState('');
-  const [novel, setNovel] = useState('');
-  const [dirty, setDirty] = useState(false);
+  const [adding, setAdding] = useState(false);
+  // 本地顺序副本：拖拽排序时即时更新，drop 后再写回后端 seq
+  const [order, setOrder] = useState(chapters);
+  const [dragIndex, setDragIndex] = useState(null);
+  const [overIndex, setOverIndex] = useState(null);
+  // 编辑弹窗
+  const [editing, setEditing] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editNovel, setEditNovel] = useState('');
+  const [editDirty, setEditDirty] = useState(false);
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
   const [savedRefs, setSavedRefs] = useState([]);
-  const [adding, setAdding] = useState(false);
+  // 操作弹窗
+  const [operating, setOperating] = useState(null);
 
-  useEffect(() => { if (cur) { setTitle(cur.title); setNovel(cur.novel || ''); setDirty(false); } }, [cur && cur.id]);
+  useEffect(() => { setOrder(chapters); }, [chapters]);
   useEffect(() => { api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {}); }, []);
   const loadRefs = useCallback(() => {
     api.get('/api/projects/' + projectId + '/references').then(setSavedRefs).catch(alert);
   }, [projectId]);
   useEffect(() => { loadRefs(); }, [loadRefs]);
 
-  // 参考素材按章节归属：仅展示当前章（chapter_id = cur.id）的参考素材
-  const chapterRefs = cur ? savedRefs.filter((r) => r.chapter_id === cur.id) : [];
+  // 参考素材按章节归属：仅展示当前编辑章节（chapter_id = editing.id）的参考素材
+  const chapterRefs = editing ? savedRefs.filter((r) => r.chapter_id === editing.id) : [];
 
-  async function save() {
-    try { await api.patch('/api/projects/' + projectId + '/chapters/' + cur.id, { title, novel }); toast.success('已保存「' + title + '」'); setDirty(false); onRefresh(); } catch (e) { toast.error(e.message); }
+  function openEdit(c) {
+    setEditing(c);
+    setEditTitle(c.title || '');
+    setEditNovel(c.novel || '');
+    setEditDirty(false);
+    setRefs([]);
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    try {
+      await api.patch('/api/projects/' + projectId + '/chapters/' + editing.id, { title: editTitle, novel: editNovel });
+      toast.success('已保存「' + editTitle + '」');
+      setEditDirty(false);
+      setEditing(null);
+      onRefresh();
+    } catch (e) { toast.error(e.message); }
   }
   async function addChapter() {
     if (adding) return;
@@ -38,21 +75,18 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
       await api.post('/api/projects/' + projectId + '/chapters', {});
       toast.success('已新增章节');
       onRefresh();
-      setCursor(Math.max(0, chapters.length));
     } catch (e) { toast.error(e.message); } finally { setAdding(false); }
+  }
+  async function runAll() {
+    try { await onRun(null); } catch (e) { toast.error(e.message); }
   }
   async function removeChapter(c) {
     if (!(await toast.confirm('删除「' + c.title + '」及其分镜？此操作不可逆。', { danger: true }))) return;
     try { await api.del('/api/projects/' + projectId + '/chapters/' + c.id); toast.success('已删除「' + c.title + '」'); onRefresh(); } catch (e) { toast.error(e.message); }
   }
-  async function move(i, dir) {
-    const target = i + dir; if (target < 0 || target >= chapters.length) return;
-    const a = chapters[i], b = chapters[target];
-    try { await api.patch('/api/projects/' + projectId + '/chapters/' + a.id, { seq: b.seq }); await api.patch('/api/projects/' + projectId + '/chapters/' + b.id, { seq: a.seq }); onRefresh(); } catch (e) { toast.error(e.message); }
-  }
 
   async function uploadRefs() {
-    if (!cur) return;
+    if (!editing) return;
     // 上传失败必须让用户看到原因（如「参考图片最多 9 张」）：此前没有 catch，
     // 抛出的错误成为未处理的 Promise 拒绝，按钮点了没反应、原因也丢了。
     try {
@@ -61,7 +95,7 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
         fd.append('file', it.file);
         fd.append('mode', it.mode);
         fd.append('category', it.category || 'other');
-        fd.append('chapter_id', cur.id);
+        fd.append('chapter_id', editing.id);
         fd.append('description', it.description || '');
         const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
         if (!res.ok) {
@@ -85,38 +119,109 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
     } catch (e) { alert(e.message); loadRefs(); }
   }
 
+  // 拖拽排序：本地立即重排，drop 后把新顺序写回后端 seq
+  async function persistReorder(list) {
+    try {
+      await api.patch('/api/projects/' + projectId + '/chapters', { ids: list.map((c) => c.id) });
+      onRefresh();
+    } catch (e) {
+      toast.error(e.message);
+      onRefresh();
+    }
+  }
+  function handleDrop(to) {
+    const from = dragIndex;
+    setDragIndex(null);
+    setOverIndex(null);
+    if (from === null || from === to) return;
+    const next = [...order];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setOrder(next);
+    persistReorder(next);
+  }
+
   const label = { empty: '无分镜', pending: '待生成', running: '生成中', done: '完成', failed: '失败' };
   return (
-    <Card>
-      <CardBody className="gap-3">
-        <div className="row justify-between">
-          <h2 className="text-lg font-semibold m-0">章节管理</h2>
-          <Button color="primary" size="sm" isLoading={adding} onPress={addChapter}>＋ 新增章节</Button>
-        </div>
-        <p className="muted">先规划整本书的章节骨架，然后在「生成内容」页逐章生成。素材库为全项目共用。</p>
-        {chapters.map((c, i) => (
-          <Card key={c.id} className={i === cursor ? 'border-primary' : ''}>
-            <CardBody className="gap-2">
-              <div className="row justify-between">
-                <div className="row">
-                  <b>{c.title}</b>
-                  <Chip size="sm" variant="flat" color={statusColor(c.genStatus)}>{label[c.genStatus] || c.status}{c.shotCount > 0 ? ' · ' + c.doneCount + '/' + c.shotCount : ''}</Chip>
-                </div>
-                <div className="row">
-                  <Button size="sm" color={i === cursor ? 'primary' : 'default'} variant={i === cursor ? 'solid' : 'flat'} onPress={() => setCursor(i)}>编辑</Button>
-                  <Button size="sm" variant="flat" isIconOnly onPress={() => move(i, -1)}>↑</Button>
-                  <Button size="sm" variant="flat" isIconOnly onPress={() => move(i, 1)}>↓</Button>
-                  <Button size="sm" color="danger" variant="flat" onPress={() => removeChapter(c)}>删除</Button>
-                </div>
+    <div className="flex flex-col gap-3">
+      <Card>
+        <CardBody className="gap-4">
+          <div className="row justify-between">
+            <h2 className="text-lg font-semibold m-0">章节管理</h2>
+            <div className="row" style={{ gap: 8 }}>
+              <Button color="primary" size="sm" isLoading={adding} onPress={addChapter}>＋ 新增章节</Button>
+              <Button size="sm" variant="flat" isDisabled={running || !chapters.length} onPress={runAll}>▶ 生成全部章节</Button>
+            </div>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>先规划整本书的章节骨架，再逐章生成。素材库为全项目共用，分镜在「分镜审查」页查看。</p>
+
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+            {order.map((c, i) => (
+              <div
+                key={c.id}
+                className="group relative"
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (overIndex !== i) setOverIndex(i); }}
+                onDrop={() => handleDrop(i)}
+              >
+                <Card className={overIndex === i && dragIndex !== null && dragIndex !== i ? 'ring-2 ring-primary/60' : ''}>
+                  <CardBody className="gap-3 p-4">
+                    <div className="relative">
+                      {c.poster
+                        ? <img src={fileUrl(projectId, c.poster)} alt={c.title} style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 10 }} />
+                        : <div className="muted bg-default-100" style={{ width: '100%', aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10 }}>暂无预览</div>}
+                      {/* 右上角关闭图标（删除） */}
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        color="danger"
+                        variant="flat"
+                        className="absolute top-2 right-2 z-10"
+                        onPress={() => removeChapter(c)}
+                        title="删除"
+                      >✕</Button>
+                      {/* 左上角拖拽手柄：悬浮卡片时显示 */}
+                      <button
+                        type="button"
+                        draggable
+                        onDragStart={(e) => { setDragIndex(i); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); } catch {} }}
+                        onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+                        className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing bg-black/40 text-white rounded-md p-1.5"
+                        title="拖拽排序"
+                      ><GripIcon /></button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <b className="text-base" style={{ wordBreak: 'break-all' }}>{c.title}</b>
+                      <Chip size="sm" variant="flat" color={statusColor(c.genStatus)}>{label[c.genStatus] || c.status}{c.shotCount > 0 ? ' · ' + c.doneCount + '/' + c.shotCount : ''}</Chip>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" color={running ? 'danger' : 'success'} variant="flat" className="flex-1" onPress={() => (running ? onStop() : onRun(c.title))}>
+                        {running ? '■ 停止' : '▶ 生成'}
+                      </Button>
+                      <Button size="sm" color="primary" variant="flat" className="flex-1" onPress={() => openEdit(c)}>编辑</Button>
+                      <Button size="sm" color="primary" variant="flat" className="flex-1" onPress={() => setOperating(c)}>操作</Button>
+                    </div>
+                  </CardBody>
+                </Card>
               </div>
-              {i === cursor && (
-                <div className="flex flex-col gap-2">
-                  <div className="row">
-                    <Input size="sm" value={title} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} placeholder="章节标题" className="w-40" />
-                    <Button color="primary" size="sm" onPress={save} isDisabled={!dirty}>保存本章</Button>
+            ))}
+          </div>
+          {!chapters.length && <p className="muted">还没有章节，点「＋ 新增章节」。</p>}
+        </CardBody>
+      </Card>
+
+      {/* 编辑章节弹窗 */}
+      <Modal isOpen={!!editing} size="2xl" backdrop="blur" onClose={() => setEditing(null)}>
+        <ModalContent>
+          {() => (
+            <>
+              <ModalHeader className="pb-2"><h2 className="m-0 text-lg font-semibold">编辑章节{editing ? ' · ' + editing.title : ''}</h2></ModalHeader>
+              <ModalBody>
+                <div className="flex flex-col gap-3">
+                  <Input size="sm" label="章节标题" value={editTitle} onChange={(e) => { setEditTitle(e.target.value); setEditDirty(true); }} placeholder="章节标题" />
+                  <div>
+                    <h3 className="text-sm m-0" style={{ marginBottom: 6 }}>本章小说原文</h3>
+                    <Textarea size="sm" minRows={6} value={editNovel} onChange={(e) => { setEditNovel(e.target.value); setEditDirty(true); }} placeholder="粘贴或编辑本章原文…" />
                   </div>
-                  <h3 className="text-sm m-0">本章小说原文</h3>
-                  <Textarea size="sm" minRows={4} value={novel} onChange={(e) => { setNovel(e.target.value); setDirty(true); }} placeholder="粘贴或编辑本章原文…" />
                   <ReferencePicker
                     projectId={projectId}
                     items={refs}
@@ -127,17 +232,34 @@ export default function ChaptersView({ projectId, chapters, cursor, setCursor, o
                     allowAdd={vision}
                   />
                   {vision && refs.length > 0 && (
-                    <div className="row">
+                    <div className="row justify-end">
                       <Button color="primary" size="sm" onPress={uploadRefs}>上传本章参考素材</Button>
                     </div>
                   )}
                 </div>
-              )}
-            </CardBody>
-          </Card>
-        ))}
-        {!chapters.length && <p className="muted">还没有章节，点「＋ 新增章节」。</p>}
-      </CardBody>
-    </Card>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="flat" onPress={() => setEditing(null)}>取消</Button>
+                <Button color="primary" isDisabled={!editDirty} onPress={saveEdit}>保存本章</Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      {/* 生成操作弹窗 */}
+      <Modal isOpen={!!operating} size="2xl" backdrop="blur" onClose={() => setOperating(null)}>
+        <ModalContent>
+          {() => (
+            <>
+              <ModalHeader className="pb-2"><h2 className="m-0 text-lg font-semibold">生成操作{operating ? ' · ' + operating.title : ''}</h2></ModalHeader>
+              <ModalBody>
+                {operating && <ChapterOps projectId={projectId} chapter={operating} running={running} onRun={onRun} onStop={onStop} onRefresh={onRefresh} onGoLogs={onGoLogs} />}
+              </ModalBody>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+    </div>
   );
 }

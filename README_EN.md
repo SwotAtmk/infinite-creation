@@ -21,7 +21,7 @@ English | [中文](README.md)
 [More samples](docs/run_demo.md)
 
 ## Roadmap
-- [In Progress... ] Support background music management, integrate with MiniMax Music to automatically generate background music locally, and integrate it into the video
+- [✅] Support background music management: integrate MiniMax Music3 for local/cloud automatic background-music generation and synthesis into videos, with a "Background Music" library (manual generation / preview / select / apply to chapters)
 - [In the plan] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
 - [In the plan] For the beautification work of the tool Web page, a highly aesthetic AI designer is needed
 - [In plan] Package and build Docker deployment, desktop app
@@ -44,11 +44,11 @@ Provide an end-to-end integration solution for generating ultra-long videos with
 
 ## Architecture
 
-An **automated "novel/script → video" Agent workflow** built on **local ComfyUI** (MiniMax H3 video GGUF edition + Qwen-Image 2.1 text-to-image/image-to-image + Krea2 text-to-image + Qwen3-TTS). The project currently organizes 27 Skills, including MiniMax-H3 prompt optimization, storyboard script generation, and novel-to-script conversion.
+An **automated "novel/script → video" Agent workflow** built on **local ComfyUI** (MiniMax H3 video GGUF edition + Qwen-Image 2.1 text-to-image/image-to-image + Krea2 text-to-image + Qwen3-TTS + MiniMax Music3 background music). The project currently organizes 27 Skills, including MiniMax-H3 prompt optimization, storyboard script generation, and novel-to-script conversion.
 
 Just paste a novel/script into the project and click "Start" — the Agent fully automates:
 
-> Script/Outline → Character Bible + Style Guide (consistency anchors) → Character/Scene/Prop/Voice asset generation → Storyboard script → Per-shot video (MiniMax H3 Ref2VA) → Self-review & retry → ffmpeg merge into final film.
+> Script/Outline → Character Bible + Style Guide (consistency anchors) → Character/Scene/Prop/Voice asset generation → Storyboard script → Per-shot video (MiniMax H3 Ref2VA) → Background music (MiniMax Music3) → Self-review & retry → ffmpeg merge into final film.
 
 **No manual intervention required.** It can run unattended for long periods (overnight or all day); when finished, you can review shots segment by segment and regenerate any unsatisfactory clip individually.
 
@@ -75,6 +75,7 @@ RAM: 32GB DDR4 3200 MT/s (16GBx2)
 - **Self-iteration (skill factory)**: Upload a new ComfyUI workflow JSON, automatically parse nodes → generate a workflow spec + draft the corresponding skill — the Agent can call it immediately.
 - **Checkpoint/resume**: Task persistence + idempotent skipping; after a process crash/restart it continues without regenerating completed items.
 - **Review/regenerate**: Shot-level preview and regeneration (change seed / rewrite prompt based on feedback).
+- **Background music**: The video stage automatically generates instrumental background music and synthesizes it into the final film; a dedicated "Background Music" library supports manual generation (with caption / lyrics / duration), preview, selection, and applying a track to multiple completed chapters at once.
 - **Staged execution**: Generation is split into four independent stages — text creation / asset image generation / voice design / storyboard video — any subset can be toggled to run or resume. Batches are split automatically by VRAM constraints, and unneeded stages don't spin up their processes.
 - **VRAM maintenance**: The settings page lets you configure "release ComfyUI VRAM every N generations" (default 3, 0 = off), covering text-to-image / image-to-image / costume change / voice / video rendering — AMD Dynamic VRAM's memory accumulation isn't only triggered by video. After a release, the next generation reloads models (about 1–3 minutes extra). When Dynamic VRAM is disabled, the UI shows a prompt recommending it be turned on.
 - **Online preview**: Final films / shot videos are streamed via backend Range requests — drag the progress bar freely and jump instantly.
@@ -216,8 +217,8 @@ Register now and you can receive 500 RH coins, which can be used to generate ple
 ## Usage Flow
 
 1. New project → paste the novel text (or a one-line idea) + style.
-2. On the "Generate Content" page, check the stages to run (text creation / asset image generation / voice design / storyboard video; you can check only a subset for resuming), click ▶ Start → watch progress in the console in real time (no intermediate actions needed).
-3. After the video stage finishes, the film is merged automatically; go to Shot Review to preview segment by segment, and click ↻ to regenerate any unsatisfactory shot (optional feedback).
+2. In "Chapter Management", click a chapter's "Actions", check the stages to run (text creation / asset image generation / voice design / storyboard video; you can check only a subset for resuming), click ▶ Start → watch progress in the console in real time (no intermediate actions needed).
+3. After the video stage finishes, background music is generated automatically and the film is merged; go to "Shot Review" to preview segment by segment and click ↻ to regenerate any unsatisfactory shot (optional feedback); the "Background Music" page lets you manually generate / preview / select a track and apply it to multiple chapters.
 4. Go to the "Final Film" page to preview online (draggable progress bar) and ⬇ download.
 
 ## Self-Iteration: New Workflow → New Skill
@@ -237,6 +238,8 @@ On the Workflows page, paste a new ComfyUI workflow JSON → "Analyze nodes/role
 | POST     | /api/projects/:id/export                  | Merge & export the final film        |
 | GET      | /api/projects/:id/stages                  | Pending counts + stage definitions   |
 | POST     | /api/projects/:id/stages                  | Run by stages (check llm/image/tts/video to start a batch, incl. preflight) |
+| POST     | /api/projects/:id/music                   | Generate background music (create / regenerate a music asset) |
+| POST     | /api/projects/:id/music/apply             | Apply background music to multiple chapters and re-merge the final film |
 | GET      | /api/skills                               | Skill list                           |
 | GET/POST | /api/workflows                            | Workflow list / register (self-iteration) |
 | GET/PUT  | /api/config                               | Configuration                        |

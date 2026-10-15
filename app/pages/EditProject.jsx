@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Input, Select, SelectItem } from '@heroui/react';
+import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Input, Select, SelectItem, Switch } from '@heroui/react';
 import { api } from '../api-client.js';
 import { VIDEO_RESOLUTIONS, VIDEO_RATIOS, STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, splitStyle, selectKeys, pickKey } from './shared';
 import { useToast } from '../toast';
@@ -16,6 +16,7 @@ export default function EditProject({ project, onClose, onSaved }) {
   const [ratio, setRatio] = useState(project.video_aspect_ratio || '16:9');
   const [cw, setCw] = useState(project.video_width ? String(project.video_width) : '');
   const [ch, setCh] = useState(project.video_height ? String(project.video_height) : '');
+  const [enableBgm, setEnableBgm] = useState(project.enable_bgm !== false);
   const [saving, setSaving] = useState(false);
   async function save() {
     setSaving(true);
@@ -26,6 +27,7 @@ export default function EditProject({ project, onClose, onSaved }) {
         video_aspect_ratio: ratio,
         video_width: Number(cw) || 0,
         video_height: Number(ch) || 0,
+        enable_bgm: enableBgm,
       });
       toast.success('已保存'); onClose(); onSaved();
     }
@@ -67,6 +69,10 @@ export default function EditProject({ project, onClose, onSaved }) {
                     <Input size="sm" type="number" min="64" step="32" value={ch} onChange={(e) => setCh(e.target.value)} placeholder="576" className="w-24" />
                   </>
                 )}
+              </div>
+              <div className="row" style={{ marginTop: 12, alignItems: 'center', gap: 8 }}>
+                <Switch size="sm" isSelected={enableBgm} onValueChange={setEnableBgm}>是否生成背景音乐</Switch>
+                <span className="muted" style={{ fontSize: 12 }}>开启后，视频阶段会自动生成纯音乐背景音乐并合成到成片。</span>
               </div>
               <p className="muted" style={{ marginTop: 8 }}>章节与小说原文在「章节管理」页编辑；素材在「素材库」页管理（全项目共用）。</p>
             </ModalBody>

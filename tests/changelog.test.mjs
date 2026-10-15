@@ -448,3 +448,19 @@ test('set_storyboard：同批重复 (chapter, idx) 只落一条，镜号归一�
   assert.equal(Shots.list(p.id).length, 3, '镜号非法时整批不写入');
   Projects.remove(p.id);
 });
+
+test('update_shot：时长归一化后才落库（越界裁剪、非数字拒绝）', async () => {
+  const p = mkProject('分镜时长项目');
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  await runTool(ctx, 'set_storyboard', { shots: [{ idx: 1, visual: '画面一' }] });
+  const id = Shots.list(p.id)[0].id;
+  // 越界：裁剪到 1..15（与 set_storyboard 的 duration 口径一致），不是原值入库
+  await runTool(ctx, 'update_shot', { shot_id: id, duration: -5 });
+  assert.equal(Shots.get(id).duration, 1, '负时长不能原样落库（会以 seconds=-5 提交给 H3）');
+  await runTool(ctx, 'update_shot', { shot_id: id, duration: 99 });
+  assert.equal(Shots.get(id).duration, 15);
+  // 非数字：拒绝，而不是把 '8秒' 写进 REAL 列
+  await assert.rejects(() => runTool(ctx, 'update_shot', { shot_id: id, duration: '8秒' }), /duration 必须是数字/);
+  assert.equal(Shots.get(id).duration, 15);
+  Projects.remove(p.id);
+});

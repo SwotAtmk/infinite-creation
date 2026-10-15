@@ -432,3 +432,19 @@ test('set_storyboard：章节必须存在（标题与 id 都认），不得写�
   assert.equal(Shots.list(p.id).length, 2);
   Projects.remove(p.id);
 });
+
+test('set_storyboard：同批重复 (chapter, idx) 只落一条，镜号归一为 ≥1 整数', async () => {
+  const p = mkProject('分镜同批去重项目');
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  await runTool(ctx, 'set_storyboard', { shots: [{ idx: 3, visual: '第一次' }, { idx: 3, visual: '第二次' }] });
+  const shots = Shots.list(p.id);
+  assert.equal(shots.length, 1, '同一 (chapter, idx) 视为同一个镜头，不能落两条');
+  assert.equal(shots[0].idx, 3);
+  assert.equal(shots[0].visual, '第二次', '同批后者覆盖前者（走到 update 分支）');
+  // 小数镜号截断；同批里显式镜号参与「章内续号」，自动镜号不会与它撞号
+  await runTool(ctx, 'set_storyboard', { shots: [{ idx: 4.7, visual: '小数' }, { visual: '自动续号' }] });
+  assert.deepEqual(Shots.list(p.id).map((s) => s.idx).sort((a, b) => a - b), [3, 4, 5]);
+  await assert.rejects(() => runTool(ctx, 'set_storyboard', { shots: [{ idx: 0, visual: 'x' }] }), /idx 必须是/);
+  assert.equal(Shots.list(p.id).length, 3, '镜号非法时整批不写入');
+  Projects.remove(p.id);
+});

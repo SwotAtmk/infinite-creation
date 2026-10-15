@@ -15,7 +15,7 @@ process.env.IC_DATA_DIR = TMP;
 const core = await import('../lib/core/index.js');
 const {
   Projects, Chapters, Shots, listChanges, countChanges, rollbackLogs,
-  withWriteContext, rawGet, pickShotFields, DB_PATH,
+  withWriteContext, rawGet, pickShotFields, validateShotContent, tx, DB_PATH,
 } = core;
 
 const findLog = (pid, pred) => listChanges(pid, { limit: 500 }).find(pred);
@@ -205,4 +205,105 @@ test('pickShotFields：白名单外的字段一律报错，产物字段不可写
 
   const wrongType = pickShotFields({ duration: 'abc', character_ids: 'a' });
   assert.equal(wrongType.errors.length, 2);
+});
+
+// —— 以下为审计修复的回归：业务校验 / 标题唯一 / 事务 / since_ts 语义 / 章内镜号 ——
+// 这些约束原先只在内置 Agent 的 set_storyboard、update_shot 里做，外部 API 直写会整条绕过，
+// 结果是「写入合法、渲染阶段才炸」。测试盯着「写入点就拒绝」。
+
+test('分镜业务校验：时长区间 / 镜号 / 分辨率与宽高比枚举', () => {
+  assert.ok(pickShotFields({ duration: 60 }).errors.length, 'duration 超 15 秒应报错');
+  assert.ok(pickShotFields({ duration: 0 }).errors.length, 'duration 低于 1 秒应报错');
+  assert.ok(pickShotFields({ idx: 0 }).errors.length, 'idx < 1 应报错');
+  assert.ok(pickShotFields({ idx: -3 }).errors.length, '负 idx 应报错');
+  // 未在 workflow-specs 映射表里的值会原样写进 ComfyUI 参数，必须在写入口挡住
+  assert.ok(pickShotFields({ resolution: 'banana' }).errors.length, '未映射的分辨率应报错');
+  assert.ok(pickShotFields({ aspect_ratio: '5:4' }).errors.length, '非法宽高比应报错');
+  assert.deepEqual(pickShotFields({ resolution: '' }).errors, [], '空串 = 继承项目设置，合法');
+  assert.deepEqual(pickShotFields({ resolution: '720P', aspect_ratio: '9:16' }).errors, []);
+  assert.ok(pickShotFields({ parent_shot_id: 'x' }).errors.length, '无人消费的 parent_shot_id 不再可写（无效字段）');
+});
+
+test('分镜业务校验：台词速度按「真正落库的时长」算，说话人超 2 个拒绝', () => {
+  // 10 秒上限 55 字（5.5 字/秒）
+  assert.deepEqual(validateShotContent({ dialogue: '字'.repeat(50), duration: 10 }, {}), []);
+  assert.ok(validateShotContent({ dialogue: '字'.repeat(60), duration: 10 }, {}).length, '60 字 / 10 秒超速');
+  // 只改台词：上限要按行上已有时长算（而不是回落到默认 5 秒）
+  assert.ok(validateShotContent({ dialogue: '字'.repeat(20) }, { duration: 2 }).length, '20 字 / 2 秒超速');
+  assert.deepEqual(validateShotContent({ dialogue: '字'.repeat(20) }, { duration: 5 }), []);
+  // 省略时长 → 与 Shots.create 的默认值（5 秒）一致
+  assert.ok(validateShotContent({ dialogue: '字'.repeat(30) }, {}).length, '30 字 / 默认 5 秒超速');
+  // 说话人：单镜最多 2 人（参考音色段数上限）
+  assert.deepEqual(validateShotContent({ dialogue: '甲：看\n乙：走\n', duration: 5 }, {}), []);
+  assert.ok(validateShotContent({ dialogue: '甲：看\n乙：走\n丙：停\n', duration: 5 }, {}).length, '3 个说话人应报错');
+});
+
+test('章节标题唯一：同项目重名（含只差空格）被拒绝', () => {
+  const p = mkProject('标题唯一项目');
+  assert.throws(() => Chapters.create(p.id, { title: '第1章' }), (e) => e.code === 'DUP_CHAPTER_TITLE', '与自动建的第1章重名');
+  assert.throws(() => Chapters.create(p.id, { title: '第1章 ' }), (e) => e.code === 'DUP_CHAPTER_TITLE', 'trim 后重名也拒绝');
+  const c2 = Chapters.create(p.id, { title: '第2章' });
+  assert.throws(() => Chapters.update(c2.id, { title: '第1章' }), (e) => e.code === 'DUP_CHAPTER_TITLE', '改名撞上已有标题');
+  // 改回自己的标题（含仅空格差异）不算冲突，其它字段照常写入
+  Chapters.update(c2.id, { title: '第2章 ', novel: '第二章原文' });
+  assert.equal(Chapters.get(c2.id).novel, '第二章原文');
+  // 别的项目同名不受影响（唯一性只在项目内）
+  const p2 = mkProject('标题唯一项目2');
+  assert.ok(Chapters.create(p2.id, { title: '第2章' }));
+  Projects.remove(p.id);
+  Projects.remove(p2.id);
+});
+
+test('写入事务：中途抛错整体回滚，不留半吊子状态', () => {
+  const p = mkProject('事务项目');
+  const c = Chapters.create(p.id, { title: '第2章' });
+  Shots.create(p.id, { chapter: '第2章', visual: '镜头1' });
+  const n = countChanges(p.id);
+  assert.throws(() => tx(() => {
+    Chapters.remove(c.id);          // 多语句：章节 + 级联分镜
+    throw new Error('boom');        // 之后失败
+  }), /boom/);
+  assert.ok(Chapters.get(c.id), '抛错后章节应回滚回来');
+  assert.equal(Shots.list(p.id).filter((s) => s.chapter === '第2章').length, 1, '级联删除的分镜也应回滚回来');
+  assert.equal(countChanges(p.id), n, '事务里的变更日志同样要撤销（否则日志与数据不一致）');
+  Projects.remove(p.id);
+});
+
+test('since_ts 回滚不反转既有的回滚日志（否则等于悄悄重做）', () => {
+  const p = mkProject('since 项目');
+  const s = Shots.create(p.id, { chapter: '第1章', visual: 'v1' });
+  const createLog = shotLog(p.id, s.id, 'create');
+  rollbackLogs({ projectId: p.id, logId: createLog.id });        // 撤销新建 → 写一条 rollback 日志
+  assert.equal(Shots.get(s.id), null);
+  const rb = findLog(p.id, (l) => l.action === 'rollback' && l.entity_id === s.id);
+  // 从 0 起回滚（窗口覆盖全部历史，含那条 rollback 日志）
+  const res = rollbackLogs({ projectId: p.id, sinceTs: 0 });
+  assert.equal(res.applied.filter((a) => a.original_action === 'rollback').length, 0, 'rollback 日志必须被 SQL 排除');
+  assert.equal(Shots.get(s.id), null, '既有的回滚不能被反转成重做');
+  assert.equal(findLog(p.id, (l) => l.id === rb.id).reverted_by, '', 'rollback 日志不该被标记为已回滚');
+  Projects.remove(p.id);
+});
+
+test('整批回滚：窗口内「先建后删」同一行不被误判漂移（预检按执行顺序推演状态）', () => {
+  const p = mkProject('误报项目');
+  const s = Shots.create(p.id, { chapter: '第1章', visual: 'v1' });
+  Shots.remove(s.id);                       // 同一窗口内又删掉：create 日志的 after 与「当前行」不再一致
+  const res = rollbackLogs({ projectId: p.id, sinceTs: 0 });
+  // 按真实执行顺序（ts DESC）推演：先撤销 delete（行回来）→ 再撤销 create（行删掉）→ 全程无冲突。
+  // 若拿库里的真实状态做预检，create 那条会因为行已被删而误报 blocked=true。
+  assert.equal(res.blocked, false, '不应因「窗口内先建后删」误判漂移');
+  assert.equal(res.conflicts.length, 0);
+  assert.equal(Shots.get(s.id), null, '先建后删净效果 = 不存在');
+  Projects.remove(p.id);
+});
+
+test('Shots.create 自动镜号按章续号（每章独立 idx 空间）', () => {
+  const p = mkProject('镜号项目');
+  Chapters.create(p.id, { title: '第2章' });
+  Shots.create(p.id, { chapter: '第1章', visual: 'a' });
+  Shots.create(p.id, { chapter: '第1章', visual: 'b' });
+  const s = Shots.create(p.id, { chapter: '第2章', visual: 'c' });
+  assert.equal(s.idx, 1, '新章镜号应从 1 起，而不是接着项目级 MAX(idx)');
+  assert.deepEqual(Shots.list(p.id).filter((x) => x.chapter === '第1章').map((x) => x.idx), [1, 2]);
+  Projects.remove(p.id);
 });

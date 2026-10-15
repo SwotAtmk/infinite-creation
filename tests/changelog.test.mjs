@@ -16,7 +16,7 @@ const core = await import('../lib/core/index.js');
 const shared = await import('../lib/shared/index.js');
 const {
   Projects, Chapters, Shots, listChanges, countChanges, rollbackLogs,
-  withWriteContext, rawGet, pickShotFields, validateShotContent, tx, DB_PATH,
+  withWriteContext, rawGet, pickShotFields, validateShotContent, tx, DB_PATH, chapterStats,
 } = core;
 
 const findLog = (pid, pred) => listChanges(pid, { limit: 500 }).find(pred);
@@ -373,5 +373,21 @@ test('Shots.create 自动镜号按章续号（每章独立 idx 空间）', () =>
   const s = Shots.create(p.id, { chapter: '第2章', visual: 'c' });
   assert.equal(s.idx, 1, '新章镜号应从 1 起，而不是接着项目级 MAX(idx)');
   assert.deepEqual(Shots.list(p.id).filter((x) => x.chapter === '第1章').map((x) => x.idx), [1, 2]);
+  Projects.remove(p.id);
+});
+
+test('章节进度摘要：分镜「生成中」是 generating（历史 running 兼容）', () => {
+  const p = mkProject('章节进度项目');
+  assert.deepEqual(chapterStats(p.id, '第1章'), { total: 0, done: 0, status: 'empty' });
+  const s = Shots.create(p.id, { chapter: '第1章', visual: '画面一' });
+  assert.equal(chapterStats(p.id, '第1章').status, 'pending');
+  // 分镜状态机（lib/shared 的 SHOT_STATUS）里用的是 generating；判 'running' 会让
+  // 「正在出视频」的章节永远显示成「待生成」
+  Shots.update(s.id, { status: 'generating' });
+  assert.equal(chapterStats(p.id, '第1章').status, 'running');
+  Shots.update(s.id, { status: 'running' }); // 历史库里可能存在的旧值
+  assert.equal(chapterStats(p.id, '第1章').status, 'running');
+  Shots.update(s.id, { status: 'done' });
+  assert.deepEqual(chapterStats(p.id, '第1章'), { total: 1, done: 1, status: 'done' });
   Projects.remove(p.id);
 });

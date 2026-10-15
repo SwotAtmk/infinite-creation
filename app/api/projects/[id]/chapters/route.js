@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
-import { Chapters, Shots, Projects, extractFrame, resolveProjectPath, withWriteContext } from '@/lib/core/index.js';
+import { Chapters, Shots, Projects, extractFrame, resolveProjectPath, withWriteContext, chapterStats } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,12 +34,12 @@ export async function GET(_req, { params }) {
   const out = [];
   for (const c of chs) {
     const shots = all.filter((s) => s.chapter === c.title);
-    const done = shots.filter((s) => s.status === 'done').length;
-    let gen = 'empty';
-    if (shots.length) { if (done === shots.length) gen = 'done'; else if (shots.some((s) => s.status === 'running')) gen = 'running'; else if (shots.some((s) => s.status === 'failed')) gen = 'failed'; else gen = 'pending'; }
     const firstDone = shots.find((s) => s.status === 'done' && s.video_path);
     const poster = firstDone ? await ensurePoster(id, c.id, firstDone) : '';
-    out.push({ ...c, shotCount: shots.length, doneCount: done, genStatus: gen, poster });
+    // 进度摘要走 lib/core 的唯一实现：分镜的「生成中」状态是 generating，不是 running
+    // （早先这里内联判 running，永远不命中 → 正在出视频的章节被显示成「待生成」）
+    const st = chapterStats(id, c.title);
+    out.push({ ...c, shotCount: st.total, doneCount: st.done, genStatus: st.status, poster });
   }
   return NextResponse.json(out);
 }

@@ -13,10 +13,10 @@ export async function POST(req, { params }) {
     const body = await req.json().catch(() => ({}));
     const url = new URL(req.url);
     const chapter = body?.chapter || url.searchParams.get('chapter') || '';
-    let done = Shots.list(id).filter((s) => s.video_path && s.status === 'done');
+    // 顺序：先章节 seq 再章内 idx（多章合并按全局 idx 会交叉成「第1章第1镜、第2章第1镜…」）
+    let done = Shots.listInNarrativeOrder(id).filter((s) => s.video_path && s.status === 'done');
     if (chapter) done = done.filter((s) => s.chapter === chapter);
     if (!done.length) return NextResponse.json({ error: chapter ? ('章节「' + chapter + '」没有已完成的镜头') : '没有已完成的分镜' }, { status: 400 });
-    done.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
     const inputs = done.map((s) => resolveProjectPath(id, s.video_path)).filter(Boolean);
     const p = Projects.get(id);
     const base = chapter ? slugify(p.name) + '_' + slugify(chapter) : slugify(p.name);

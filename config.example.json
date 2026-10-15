@@ -10,6 +10,24 @@
     "apiKey": "",
     "tier": "standard"
   },
+  "mediaApi": {
+    "image": {
+      "baseUrl": "https://tu.988236.xyz/v1",
+      "apiKey": "your-api-key",
+      "model": "gpt-image-2.5"
+    },
+    "video": {
+      "baseUrl": "https://tu.988236.xyz/v1",
+      "apiKey": "your-api-key",
+      "model": "grok-imagine-video-1.5-fast"
+    },
+    "tts": {
+      "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
+      "apiKey": "your-api-key",
+      "model": "mimo-v2.5-tts-voicedesign",
+      "voiceId": ""
+    }
+  },
   "hardware": {
     "mode": "nvidia"
   },

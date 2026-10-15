@@ -126,7 +126,7 @@ app.prepare().then(() => {
   server.listen(port, host, () => {
     const shown = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
     console.log('infinite-creation 已启动: http://' + shown + ':' + port + (dev ? '（开发模式）' : ''));
-    console.log('  ComfyUI: ' + maskComfyBaseUrl(cfg));
+    console.log('  渲染后端: ' + maskComfyBaseUrl(cfg));
     console.log('  LLM:     ' + cfg.llm.baseUrl + ' (' + cfg.llm.model + ')');
   });
 });

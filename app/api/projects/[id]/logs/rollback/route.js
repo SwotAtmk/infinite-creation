@@ -25,6 +25,11 @@ export async function POST(req, { params }) {
     return NextResponse.json(result, { status: result.blocked ? 409 : 200 });
   } catch (e) {
     const status = e && (e.code === 'NO_PROJECT_DELETE' || e.code === 'BAD_TARGET' || e.code === 'BAD_ENTITY') ? 400 : 500;
-    return NextResponse.json({ error: e.message }, { status });
+    // 逆操作整批跑在事务里：失败即整体回滚，这里如实回报「一条都没应用」，不给「改了一半」的假象
+    return NextResponse.json({
+      error: e.message,
+      applied: [],
+      ...(e && e.rolledBack ? { rolled_back: true, attempted: e.attempted || 0, failed_log_id: e.failedLogId || '' } : {}),
+    }, { status });
   }
 }

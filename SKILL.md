@@ -142,7 +142,7 @@ curl http://127.0.0.1:4600/api/health # 期望 {"ok":true}
 
 外部 harness（opencode 等）可以把**文本内容**写进一个正在运行的实例：新建项目、小说原文、剧本、分镜、人物圣经/风格。
 
-- **技能**：`skills/ic-writer/SKILL.md`（端点速查 + 铁律）。装到 harness 技能目录：`node scripts/install-writer-skill.mjs`（默认 `~/.agents/skills/ic-writer`，新技能需重启会话）。
+- **技能**：`harness-skills/ic-writer/SKILL.md`（端点速查 + 铁律；放在 `skills/` 之外，避免被 `scanSkills()` 当成应用内 Agent 的技能）。装到 harness 技能目录：`node scripts/install-writer-skill.mjs`（默认 `~/.agents/skills/ic-writer`，新技能需重启会话）。
 - **只写 LLM 文本**：小说/剧本/分镜/上下文/素材提示词；**禁止**触发生成与导出（`/run`、`/stages`、`/regenerate`、`/generate`、`/music`、`/export`）。图片、视频、语音、音乐、成片一律由用户在界面启动。
 - **可改写已有产物**：覆盖已生成章节的 `novel`/`script`、逐条改已有分镜正文与 `video_prompt`、覆盖 `bible`/`style`；但 `status/video_path` 等产物字段不可写。
 - **补齐的接口**：`PUT …/context`（上下文，落盘 `context/*.md`）、`POST/DELETE …/shots`、`PATCH …/shots/:sid`（可写分镜正文，产物字段不可写）、`PUT …/chapters/:cid/storyboard`（整章批量写分镜）、`GET …/logs`、`POST …/logs/rollback`。章节新增 `script` 字段承载剧本。

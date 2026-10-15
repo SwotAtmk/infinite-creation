@@ -17,6 +17,8 @@ description: 把内容写进一个正在运行的 infinite-creation 实例（本
 4. **长文本一律走文件，不要内联进命令行**。Windows 上 `cmd.exe` 的 `%*` 会把裸换行当成命令结束，静默截断你传的小说。用 Node 读文件拼 JSON，或 `curl --data-binary @body.json`。
 5. **分镜按章节整体写**（`PUT …/storyboard`），不要一条条乱序插；整章一次调用 = 一个批次，写坏了整批回滚。
 6. **一次写入就是一个批次**。同一个 API 调用产生的所有变更共享 `batch_id`，可整批回滚。
+7. **项目正在跑任务时不要写**。先 `GET /api/projects/:id` 看 `status`：是 `running` 就等（或让用户先停任务）——运行中的任务正持着当前分镜行，删除类写入会被直接拒（409），内容类写入也可能被任务用旧数据覆盖，最后「成片与分镜表对不上」。
+8. **写进去的分镜要能过应用的业务校验**，否则接口直接 400：`duration` 1~15 秒；`dialogue` 字数 ≤ `duration × 5.5`（超速会被 TTS/H3 压成听不清的模糊声）；单个分镜说话人 ≤ 2（每说话人一段参考音色）；`resolution` ∈ `360P/480P/720P/768P/1080P/2K/4K/custom`（空串 = 继承项目设置）；`aspect_ratio` ∈ `1:1/2:3/3:2/3:4/4:3/9:16/16:9/21:9`；`idx` 从 1 起、同章内不重复。
 
 ## 禁止调用的接口（会把任务推进生成链路）
 
@@ -36,6 +38,7 @@ description: 把内容写进一个正在运行的 infinite-creation 实例（本
 ## 前置
 
 - 服务地址：环境变量 `IC_BASE_URL`，默认 `http://127.0.0.1:4600`。
+- **只对本机的 127.0.0.1 使用**：该实例零鉴权，能读项目全文、改内容、回滚。用户若把 `server.host` 配成 `0.0.0.0`，它就是一台对局域网开放的写入端点——遇到这种配置先提醒用户改回本机。
 - 探活：`GET {base}/api/health` 期望 `{"ok":true}`。
 - 运行环境有 Node ≥ 22（本项目前置依赖），所以**推荐用 `node -e` 发请求**：跨 shell 一致、不用跟引号搏斗。
 
@@ -67,10 +70,10 @@ node -e "const fs=require('fs');fetch('http://127.0.0.1:4600/api/projects/PID/ch
 | POST | `/api/projects/:id/chapters` | `{title?, novel?, script?}` | **新增章节**（小说原文按章写） |
 | PATCH | `/api/projects/:id/chapters` | `{ids:[...]}` | 按数组顺序重排章节 |
 | PATCH | `/api/projects/:id/chapters/:cid` | `{title?, novel?, script?}` | 改章节；改标题会同步迁移该章分镜 |
-| DELETE | `/api/projects/:id/chapters/:cid` | — | 删章节（级联删该章分镜，可整批回滚） |
-| PUT | `/api/projects/:id/chapters/:cid/storyboard` | `{shots:[…], replace?}` | **整章写分镜**（默认 `replace:true` 先清空该章），单次 ≤500 条 |
+| DELETE | `/api/projects/:id/chapters/:cid` | — | 删章节（级联删该章分镜，可整批回滚）。**任务运行中 409** |
+| PUT | `/api/projects/:id/chapters/:cid/storyboard` | `{shots:[…], replace?}` | **整章写分镜**（默认 `replace:true` 先清空该章），单次 ≤500 条。**任务运行中 409**；`replace:false` 追加时镜号自动接在该章现有最大 `idx` 之后 |
 | GET / POST | `/api/projects/:id/shots` | POST 见下 | 列 / 建单个分镜 |
-| PATCH / DELETE | `/api/projects/:id/shots/:sid` | PATCH 见下 | 改 / 删单个分镜 |
+| PATCH / DELETE | `/api/projects/:id/shots/:sid` | PATCH 见下 | 改 / 删单个分镜（删除在**任务运行中 409**） |
 | GET | `/api/projects/:id/logs` | 查询串 `entity/action/source/limit/offset` | **变更日志**（回滚依据） |
 | POST | `/api/projects/:id/logs/rollback` | `{log_id}` \| `{batch_id}` \| `{since_ts}`，可加 `force:true` | **回滚** |
 | GET | `/api/projects/:id/assets` | — | 素材（人物/场景/道具/音色/音乐），只读为主 |
@@ -88,11 +91,12 @@ node -e "const fs=require('fs');fetch('http://127.0.0.1:4600/api/projects/PID/ch
 
 ```
 chapter, idx, scene_name, camera, visual, dialogue, narration, sub_shots,
-duration, seed, resolution, aspect_ratio, video_prompt, parent_shot_id,
+duration, seed, resolution, aspect_ratio, video_prompt,
 character_ids, scene_ids, prop_ids, costume_ids, age_ids, audio_ids, references
 ```
 
 `status / error / video_path / video_prompt_used / prompt_id` 是生成产物，**不可写**（防伪造「已生成」）。
+`resolution` / `aspect_ratio` 只接受枚举值（见铁律 8）；`duration` / `idx` 有区间约束。
 
 ## 改写已生成的 LLM 产物
 
@@ -147,9 +151,12 @@ node -e "fetch('$BASE/api/projects/PID/logs?limit=20').then(r=>r.json()).then(o=
 node -e "fetch('$BASE/api/projects/PID/logs/rollback',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({batch_id:'BATCH_ID'})}).then(async r=>console.log(r.status,await r.text()))"
 ```
 
-- 目标三选一：`log_id`（单条）/ `batch_id`（整批）/ `since_ts`（该时刻含之后全部）。
+- 目标三选一：`log_id`（单条）/ `batch_id`（整批）/ `since_ts`（该时刻含之后全部内容变更）。
+  - **整批回滚用 `batch_id`**：单条 `log_id` 只恢复那一条——回滚「删章节」时章节回来了，它的分镜不会（分镜各有自己的删除日志）。要「整个操作一起还原」就用那次的 `batch_id`。
+  - `since_ts` 只覆盖内容变更，**不会反转此前的回滚**（要重做请显式回滚那条 `action='rollback'` 的日志）。
 - **漂移保护**：那条变更之后又被改过时，接口回 **409** 且**不做任何改动**，返回 `conflicts`（当前值 vs 期望值）。确认要覆盖新改动才加 `force:true`。
 - 返回 `skipped` 里的 `reason` 会说明为什么某条没回滚（例如「项目创建不可回滚（禁止删项目）」）。
+- 逆操作整批跑在一个事务里：**中途失败 → 全部撤销**，返回 `applied: []` + `rolled_back: true`（不会留下「改了一半」的状态）。
 - **回滚只恢复数据库行，不删磁盘上的图片/视频文件**；图片文件要重传。
 - 回滚本身也记日志，所以「再回滚一次」= 重做。
 
@@ -157,6 +164,8 @@ node -e "fetch('$BASE/api/projects/PID/logs/rollback',{method:'POST',headers:{'c
 
 - [ ] `DELETE /api/projects/...` 一次都没调用
 - [ ] 没有调用任何生成/渲染/导出接口（run / stages / regenerate / generate / music / export）
+- [ ] 写入前查过 `GET /api/projects/:id`，`status` 不是 `running`
 - [ ] 每章 `novel`/`script` 都回读确认非空；被改写的内容与用户要求一致
 - [ ] 分镜 `shotCount` 与预期一致，`idx` 连续、`chapter` 落在正确章节
+- [ ] 所有写入都拿到了 2xx（400 说明有条分镜没过业务校验：时长/台词速度/说话人/枚举，已按铁律 8 修正）
 - [ ] 需要时给用户一份「本次写入的 batch_id 列表」，方便一键回滚

@@ -5,8 +5,9 @@
 //   node scripts/install-writer-skill.mjs --target <dir>   # 自定义技能根目录
 //   node scripts/install-writer-skill.mjs --print          # 只打印目标路径，不写文件
 //
-// 为什么要有这一步：仓库 skills/ 是「内置 Agent 的技能库」，而外部 harness 只读自己的
-// 技能目录（opencode 读 ~/.agents/skills/）。仓库内保留一份可版本化的源，安装脚本负责同步。
+// 为什么要有这一步：仓库 skills/ 是「内置 Agent 的技能库」——它会被 scanSkills() 扫进应用内
+// Agent 的技能目录，教它用 HTTP 调自己的 API 没有意义（它本来就有领域工具）。所以本技能的源放在
+// 不被扫描的 harness-skills/，安装脚本负责同步到外部 harness 的技能目录（opencode 读 ~/.agents/skills/）。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
-const SRC = path.join(ROOT, 'skills', 'ic-writer');
+const SRC = path.join(ROOT, 'harness-skills', 'ic-writer');
 const NAME = 'ic-writer';
 
 const args = process.argv.slice(2);

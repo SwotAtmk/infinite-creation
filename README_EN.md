@@ -21,8 +21,10 @@ English | [中文](README.md)
 [More samples](docs/run_demo.md)
 
 ## Roadmap
-- [In progress... ] Generating background music and synthesizing it into the video
-- [Planned] Docker deployment, desktop app packaging and building
+- [In Progress... ] Support background music management, integrate with MiniMax Music to automatically generate background music locally, and integrate it into the video
+- [In the plan] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
+- [In the plan] For the beautification work of the tool Web page, a highly aesthetic AI designer is needed
+- [In plan] Package and build Docker deployment, desktop app
 - [Planned] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
 - [Planned] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
 - [✅] Add Agent security approval policies to prevent Agent from performing unauthorized operations, deleting projects, or executing dangerous commands

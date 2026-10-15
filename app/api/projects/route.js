@@ -18,8 +18,14 @@ export async function POST(req) {
   if (!body || !String(body.name || '').trim()) return NextResponse.json({ error: '缺少 name' }, { status: 400 });
   // 整段包在写上下文里：项目 + 自动创建的「第1章」共享同一 batch_id，可整批回滚
   return withWriteContext('POST /api/projects', async () => {
-    const p = Projects.create(body || {});
-    ensureProjectDirs(p.id);
-    return NextResponse.json(p);
+    try {
+      const p = Projects.create(body || {});
+      ensureProjectDirs(p.id);
+      return NextResponse.json(p);
+    } catch (e) {
+      // 项目级分辨率 / 宽高比枚举（分镜会继承它出片）：底层抛错，这里翻成 400
+      if (e && e.code === 'BAD_PROJECT_ENUM') return NextResponse.json({ error: e.message }, { status: 400 });
+      throw e;
+    }
   });
 }

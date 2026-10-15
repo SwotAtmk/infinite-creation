@@ -248,6 +248,33 @@ test('分辨率/宽高比：共享常量、工作流映射表、界面下拉三�
   assert.ok(VIDEO_RESOLUTION_MP['360P'] && VIDEO_RESOLUTION_MP['768P'], '下拉给的 360P/768P 必须在映射表里有条目');
 });
 
+test('项目级取值域：video_resolution / video_aspect_ratio 直写被拒（分镜整项目继承）', () => {
+  // 这两项是分镜的回退上游（生成时取 shot.resolution || project.video_resolution）：写错不是
+  // 「一个字段难看」，而是整个项目的每一镜都在渲染阶段才炸（标签查不到映射表就被原样写进 ComfyUI）。
+  // 界面下拉只给合法值，但 PATCH /api/projects/:id 能直写 → 校验放在 db 层，UI/内置 Agent/外部 API 一并覆盖。
+  assert.throws(() => Projects.create({ name: '脏分辨率', video_resolution: 'banana' }), (e) => e.code === 'BAD_PROJECT_ENUM');
+  assert.throws(() => Projects.create({ name: '脏宽高比', video_aspect_ratio: '5:4' }), (e) => e.code === 'BAD_PROJECT_ENUM');
+  const p = mkProject('项目枚举');
+  assert.throws(() => Projects.update(p.id, { video_resolution: 'banana' }), (e) => e.code === 'BAD_PROJECT_ENUM');
+  assert.throws(() => Projects.update(p.id, { video_aspect_ratio: '5:4' }), (e) => e.code === 'BAD_PROJECT_ENUM');
+  assert.equal(Projects.get(p.id).video_resolution, '480P', '被拒的写入不许留下半截状态');
+  // 空串 = 用默认：内置 Agent / 外部 harness 常把「没填」发成空串，不该因此 400
+  assert.equal(Projects.update(p.id, { video_resolution: '', video_aspect_ratio: '' }).video_resolution, '480P');
+  // 共享常量里的每个值都必须能写：包括不进下拉的 1080P/2K/4K（兼容历史）与 custom（走 width/height）
+  for (const v of shared.VIDEO_RESOLUTIONS) {
+    assert.equal(Projects.update(p.id, { video_resolution: v }).video_resolution, v, v + ' 应可写');
+  }
+  for (const r of shared.VIDEO_ASPECT_RATIOS) {
+    assert.equal(Projects.update(p.id, { video_aspect_ratio: r }).video_aspect_ratio, r, r + ' 应可写');
+  }
+  // 只校验本次要写的键：存量行里的历史脏值不该把「改个名字」也堵死（否则老项目直接不可维护）
+  core.getDb().prepare('UPDATE projects SET video_resolution = ? WHERE id = ?').run('banana', p.id);
+  assert.equal(Projects.update(p.id, { name: '改个名字' }).name, '改个名字');
+  assert.equal(Projects.get(p.id).video_resolution, 'banana', '没提这个字段就不动它');
+  assert.equal(Projects.update(p.id, { video_resolution: '720P' }).video_resolution, '720P', '显式改正必须能写进去');
+  Projects.remove(p.id);
+});
+
 test('合成顺序：按章节 seq → 章内 idx（多章整片不会交叉）', () => {
   const p = mkProject('多章顺序');
   const c1 = Chapters.list(p.id)[0];                       // 建项目时自动建「第1章」

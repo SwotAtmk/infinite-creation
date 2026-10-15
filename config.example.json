@@ -26,6 +26,11 @@
     "runninghubConcurrency": 1,
     "retryTimes": 3,
     "videoTimeoutMinutes": 30,
-    "imageTimeoutMinutes": 10
+    "imageTimeoutMinutes": 10,
+    "videoProvider": "comfyui",
+    "agnes": {
+      "baseUrl": "https://apihub.agnes-ai.com/v1",
+      "apiKey": ""
+    }
   }
 }

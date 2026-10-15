@@ -48,7 +48,7 @@
 - 内置 Agent：在 `runTool()` 统一包一层 → `source = 'agent:<tool>'`
 - 流水线/其它：默认 `source = 'internal'`
 
-**不记录**：`jobs` / `messages` 等任务表；纯生成产物字段（`shots.status/error/video_path`）**会随整行快照一起被记录**，但可通过 `source` 过滤只看人工/API 写入。
+**不记录**：`jobs` / `messages` 等任务表；以及 `update` 只动了产物/易变字段（`shots.status|error|video_path|video_prompt_used|prompt_id`、`chapters.music_path|music_prompt_used`、`assets.image_path|status|…`）的情形——这类变更**整条不写日志**，否则每跑一轮渲染都会为每条分镜刷出成批噪音、把内容日志彻底淹掉。它们只在别的内容变更的整行快照里作为上下文出现。
 
 ### 3.2 表结构
 
@@ -83,7 +83,9 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 | `rollback` | 再回滚 = **重做**（保留可逆性） |
 
 - **漂移保护**：执行前比对「当前行」与日志 `after`；不一致 → `409` 并给出冲突详情，`force=true` 才强制覆盖。
-- **批次回滚**：`batch_id` 内按 `ts` 倒序逐条应用；中途失败**中止并如实报告已应用条数**（不静默成功）。
+- **批次回滚**：`batch_id` 内按 `ts` 倒序逐条应用；逆操作整批跑在**一个事务**里，中途失败 → 全部撤销，返回 `applied: []` + `rolled_back: true`（不静默成功、也不留「改了一半」）。
+- **单条 vs 整批**：`log_id` 只恢复那一条；级联删除（如删章节连带删的分镜）各有自己的日志，要「整个操作一起还原」必须用那次的 `batch_id`。
+- **`since_ts` 不反转回滚日志**：窗口内 `action='rollback'` 的日志被 SQL 排除——否则「撤销 T 之后的东西」会顺手把此前的回滚反转成重做。要重做请显式回滚那条 `rollback` 日志。
 - **禁止删项目**：`entity=project && action=create` 的回滚**直接拒绝**（否则等于删项目），返回提示「请在界面手动删除项目」。
 - 回滚自身也写一条 `action='rollback'` 日志，并给原日志打 `reverted_by` —— 每一次撤销都可审计、可重做。
 - **只恢复 DB 行，不删磁盘媒体文件**（避免误删）；章节删除回滚不恢复 `posters/*.jpg`（已知限制，见 §七）。
@@ -110,7 +112,7 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 
 | 方法 | 路径 | 变更 |
 |------|------|------|
-| `PATCH` | `/api/projects/:id/shots/:sid` | 除 6 个 `*_ids` 外，接受分镜正文字段：`chapter/idx/scene_name/camera/visual/dialogue/narration/sub_shots/duration/references/resolution/aspect_ratio/video_prompt/seed/parent_shot_id`（**不接受** `status/error/video_path/video_prompt_used`，防伪造生成结果） |
+| `PATCH` | `/api/projects/:id/shots/:sid` | 除 6 个 `*_ids` 外，接受分镜正文字段：`chapter/idx/scene_name/camera/visual/dialogue/narration/sub_shots/duration/seed/references/resolution/aspect_ratio/video_prompt`（**不接受** `status/error/video_path/video_prompt_used`，防伪造生成结果）。写入前过一遍业务校验：`duration` 1~15 秒、`dialogue` ≤ duration×5.5 字、单镜说话人 ≤2、`resolution`/`aspect_ratio` 走枚举 |
 | `PATCH` | `/api/projects/:id/chapters/:cid` | 新增 `script` 字段 |
 | `POST` | `/api/projects/:id/chapters` | `script` 可选 |
 | 全部内容写路由 | 项目/章节/分镜/资产/参考图 | 统一包 `writeContext(...)`，写日志 |
@@ -120,10 +122,12 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - **不提供任何删除项目的 API**（现有 `DELETE /api/projects/:id` 仅供前端界面使用，不进 skill；回滚也拒绝删项目）。
 - **不提供任何生成接口的封装**：skill 禁止调用 `/run`、`/stages`、`/stop`、`/shots/:sid/regenerate`、`/chapters/:cid/regenerate`、`/assets/:aid/generate|design-voice|change-outfit|change-age`、`/music`、`/music/apply`、`/export`。本技能的存在意义就是「把文本写进去」，生成始终由用户在界面触发。
 - 不允许外部写 `status/error/video_path/video_prompt_used/prompt_id` 等流水线产物字段（`pickShotFields` 直接 400，防伪造「已生成」）。
+- 项目正在跑任务（`activeJobOf`）时，**删除类写入一律 409**：`DELETE …/chapters/:cid`、`DELETE …/shots/:sid`、`PUT …/chapters/:cid/storyboard`。
 
 ## 五、harness Skill 设计
 
-- 仓库内：`skills/ic-writer/SKILL.md`（版本化、可 diff）。
+- 仓库内：`harness-skills/ic-writer/SKILL.md`（版本化、可 diff）。
+- **为什么不放 `skills/`**：`skills/` 会被 `scanSkills()` 注册进**应用内** Agent 的技能目录，教会它用 HTTP 调自己的 API 没有意义（它本来就有领域工具），纯属噪音；所以技能源放在不被扫描的 `harness-skills/`，由安装脚本同步给外部 harness。
 - 安装：`node scripts/install-writer-skill.mjs` → 复制到 `~/.agents/skills/ic-writer/`（opencode 自动发现；新技能需重启会话）。
 - 内容要点：
   1. 前置：`IC_BASE_URL`（默认 `http://127.0.0.1:4600`）+ `GET /api/health` 探活；
@@ -138,7 +142,7 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 | 期 | 内容 |
 |----|------|
 | P0 | `chapters.script` 迁移；`change_logs` 表 + `Projects.remove` 级联；`lib/core/changelog.js`（记录/查询/回滚引擎）；db.js 五表埋点；新增/扩展路由；`writeContext` 接入 |
-| P1 | `skills/ic-writer/SKILL.md` + 安装脚本；根 `SKILL.md` 增补「外部写入 API」章节；安装到 `~/.agents/skills/` |
+| P1 | `harness-skills/ic-writer/SKILL.md` + 安装脚本；根 `SKILL.md` 增补「外部写入 API」章节；安装到 `~/.agents/skills/` |
 | P2（本轮不做） | 可选写入 token（`IC_WRITE_TOKEN`）、`expect_hash` 乐观锁、日志保留上限、前端 UI 展示剧本/日志页 |
 
 ## 七、已知限制与不做的事
@@ -146,6 +150,9 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 回滚只复原 DB 行，**不删除已生成的图片/视频/音频文件**（避免误删用户素材）；如需彻底清理请手动删文件。
 - 回滚章节删除**不恢复**其 `posters/*.jpg` 首帧缓存（下次生成会重建）。
 - 单条回滚是「按快照覆盖」，若之后有新增字段变更会被 `force` 一并覆盖 —— 默认拒绝（漂移保护）已兜底。
+- **单条 `log_id` 回滚不连带恢复级联子项**：删章节带回分镜，但只回滚章节那条日志时，分镜要各自按它们的日志（或直接用同批 `batch_id`）恢复。
+- **章节标题改为「同项目内唯一」**：既有库里若有历史重名章节，不会被自动改名/合并（需要人工处理），但此后任何新写入的重名都会被 400 拒绝。
+- **运行中的项目拒绝删除类写入**（删章节 / 删分镜 / 整章替换分镜）→ 409：任务持有这些行，删掉只会让它的回写静默落空。内容类 PATCH 不拦（代价是任务可能用旧数据出片，属可接受）。
 - 不改动任何生成流水线语义（`script` 仅新增、不被流水线隐式消费）。
 
 ## 八、验收
@@ -160,4 +167,22 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 → 删除项目 → 期望 change_logs 清空
 ```
 
-`node --check` 全通过、`node --test tests/` 全绿。
+`node --check` 全通过、`node --test "tests/*.test.mjs"` 全绿（Node ≥22 的 glob 形式；写成 `node --test tests/` 在 Node 24 下会 MODULE_NOT_FOUND）。
+
+## 九、审计修复记录（2026-10-15，dev7 复审后）
+
+对 P0/P1 落地代码逐文件复审（含业务逻辑与流水线交互），修掉以下问题：
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| 高 | `PUT …/storyboard` 在 `replace:false` 时镜号从 1 重新编号，与既有分镜撞号（`assemble_video` 排序不确定） | 追加模式从该章现有最大 `idx` 往后接；同一批内重复 `idx` 直接 400 |
+| 高 | 「分镜归属 = 章节标题」但标题不唯一：重名章共用分镜、删一章连带删另一章的镜头 | `Chapters.create/update` 强制同项目标题唯一（trim 后比较），路由翻成 400 |
+| 高 | 外部写入绕过应用自身的分镜业务约束（时长/台词速度/说话人数/分辨率枚举） | 校验下沉到 `lib/core/shot-write.js`（`pickShotFields` + `validateShotContent`），两条 shot 路由与整章写入全部接入；Agent 侧常量改为引用同一份 |
+| 高 | `since_ts` 回滚会把此前的回滚一并反转（= 悄悄重做） | `since_ts` 分支加 `AND action <> 'rollback'` |
+| 高 | 批量写入/回滚无事务：中途失败留半吊子状态，且承诺的「报告已应用条数」并未实现 | `db.tx()`（含嵌套深度判断）包住整章写入、回滚循环、章节改名级联、章节/资产/项目删除；回滚失败整体撤销并如实返回 `applied: []` |
+| 中 | `ic-writer` 被 `scanSkills()` 注册成应用内 Agent 的技能（噪音） | 技能源移到 `harness-skills/`，安装脚本与文档同步 |
+| 中 | 内容写入与「运行中的任务」无协调，删掉运行中任务持有的行只会静默落空 | 删除类写入（删章节/删分镜/整章替换）在 `activeJobOf` 时返回 409；技能里加了「先看 `status` 再写」 |
+| 中 | 部分内容写路径未包 `writeContext` → 日志 `source='internal'`、`batch_id=''`，无法整批定位 | 章节「重新生成分镜」的 `beforeRun`、`music` 路由的资产写入补上写上下文 |
+| 中 | `Shots.create` 自动镜号是项目级 `MAX(idx)+1`，与「每章独立镜号空间」的约定不一致 | 改为按章取 `MAX(idx)+1` |
+| 低 | `parent_shot_id` 在可写白名单里但全仓库无人读取（无效字段） | 从白名单移除（列保留，不影响老数据） |
+| 低 | §3.1/§3.3/§八 的表述与实现不一致 | 本文档已按实现改正 |

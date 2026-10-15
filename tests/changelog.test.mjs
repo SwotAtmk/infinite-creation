@@ -516,3 +516,41 @@ test('章节引用统一支持标题或 id（generate_chapter_videos / assemble_
   await assert.rejects(() => runTool(ctx, 'assemble_video', { chapter: '第9章' }), /章节不存在/);
   Projects.remove(p.id);
 });
+
+test('停止：当前分镜复位为待生成，不再留在「失败」', async () => {
+  const p = mkProject('停止复位项目');
+  const mkImg = (rel) => {
+    const abs = path.join(projectDir(p.id), rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, 'x');
+    return rel;
+  };
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png') });
+  const s = Shots.create(p.id, { chapter: '第1章', visual: '画面' });
+  Shots.update(s.id, { video_prompt: '已完成的提示词', character_ids: [ch.id] });
+  const ctx = createToolRuntime({ projectId: p.id });
+  // 参考图能上传，但提交任务时 ComfyUI 不可达：让失败发生在「渲染的 try 内」（不起真进程）
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/upload/')) return new Response(JSON.stringify({ name: 'x.png', subfolder: '', type: 'input' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    throw new Error('模拟 ComfyUI 不可达');
+  };
+  // 渲染一开始就置位停止标记（模拟用户在第 1 镜渲染途中点停止）
+  let aborted = false;
+  ctx.isAborted = () => aborted;
+  ctx.report = (x) => { if (x.phase === '分镜视频' && /^生成 /.test(x.detail || '')) aborted = true; };
+  const calls = [];
+  const orig = Shots.update;
+  Shots.update = (id, f) => { calls.push({ id, f }); return orig.call(Shots, id, f); };
+  let out;
+  try {
+    out = JSON.parse(await runTool(ctx, 'generate_chapter_videos', { chapter: '第1章' }));
+  } finally { Shots.update = orig; globalThis.fetch = origFetch; }
+  assert.equal(out.aborted, true);
+  // 前提：渲染失败路径确实先把当前镜记成了 failed（否则这条测试没有验证到复位）
+  assert.ok(calls.some((c) => c.id === s.id && c.f.status === 'failed'), '前提：渲染中先把当前镜记成 failed');
+  assert.equal(Shots.get(s.id).status, 'pending', '停止后必须复位，方便直接重跑');
+  assert.equal(Shots.get(s.id).error, '');
+  Projects.remove(p.id);
+});

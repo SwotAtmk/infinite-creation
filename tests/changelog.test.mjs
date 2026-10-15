@@ -568,3 +568,10 @@ test('save_context：key 值域与 schema/路由一致；continuity 文件损坏
   assert.ok(Array.isArray(arr) && arr.length === 1 && arr[0].content === '第一条');
   Projects.remove(p.id);
 });
+
+test('generate_assets_batch：only 值域与 schema 一致（写错不能假装成功）', async () => {
+  const p = mkProject('批量素材项目');
+  const ctx = createToolRuntime({ projectId: p.id });
+  await assert.rejects(() => runTool(ctx, 'generate_assets_batch', { only: ['video'] }), /only 只能是 image \/ tts/);
+  Projects.remove(p.id);
+});

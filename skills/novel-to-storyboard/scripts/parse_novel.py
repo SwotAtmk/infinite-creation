@@ -52,7 +52,7 @@ SCENE_HEADERS = re.compile(
     r"^[\s]*"
     r"("
     r"(?:INT\.|EXT\.|内景|外景|内:|外:|场景:|场景\s*\d+|第\s*\d+\s*[场幕节]|"
-    r"镜头\s*\d+|shot\s*\d+|scene\s*\d+)"
+    r"镜头\s*\d+|shot\s*\d+|scene\s*\d+|【场景)"
     r".*"
     r")$",
     re.IGNORECASE | re.MULTILINE

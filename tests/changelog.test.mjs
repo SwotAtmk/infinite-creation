@@ -711,3 +711,33 @@ test('activeJobOf：queued（排队中）也算活动任务，防重与 409 守�
   Projects.remove(p.id);
   Projects.remove(other.id);
 });
+
+test('回滚「章节新建」：级联删的分镜逐条留 delete 日志，重做能把章节与分镜一起恢复', () => {
+  const p = mkProject('章节回滚级联项目');
+  const ch = withWriteContext('POST /api/projects/:id/chapters', () => Chapters.create(p.id, { title: '待撤章节' }));
+  const s1 = withWriteContext('PUT /api/projects/:id/chapters/:cid/storyboard', () => Shots.create(p.id, { chapter: '待撤章节', idx: 1, visual: 'A' }));
+  const s2 = withWriteContext('PUT /api/projects/:id/chapters/:cid/storyboard', () => Shots.create(p.id, { chapter: '待撤章节', idx: 2, visual: 'B' }));
+  const chCreate = listChanges(p.id, { entity: 'chapter', action: 'create', limit: 500 }).find((l) => l.entity_id === ch.id);
+  assert.ok(chCreate?.batch_id, '章节 create 日志应有批次');
+  // 撤销章节新建 → 级联删该章 2 条分镜
+  const r = rollbackLogs({ projectId: p.id, batchId: chCreate.batch_id });
+  assert.equal(r.blocked, false);
+  assert.equal(r.applied.length, 1);
+  assert.equal(r.applied[0].chapter_shots_deleted, 2, '级联删条数应上报');
+  assert.equal(Chapters.get(ch.id), null, '章节已删');
+  assert.equal(Shots.list(p.id).length, 0, '分镜已随章节级联删除');
+  // 级联删必须留痕（否则审计看不到、重做也恢复不了）
+  const cascaded = listChanges(p.id, { entity: 'shot', action: 'delete', limit: 500 }).filter((l) => l.meta?.cascade === 'chapter-rollback');
+  assert.deepEqual(cascaded.map((l) => l.entity_id).sort(), [s1.id, s2.id].sort(), '两条分镜各有一条 delete 日志');
+  assert.ok(cascaded.every((l) => l.before?.id && l.batch_id === cascaded[0].batch_id), '日志带原始行快照、同属本次回滚批次');
+  // 重做：回滚这次回滚（按它自己的批次）→ 章节与分镜都要回来
+  const redo = rollbackLogs({ projectId: p.id, batchId: cascaded[0].batch_id });
+  assert.equal(redo.blocked, false, '重做不应被漂移保护挡住');
+  const back = Chapters.get(ch.id);
+  assert.ok(back && back.title === '待撤章节', '章节恢复');
+  const shots = Shots.list(p.id).sort((a, b) => a.idx - b.idx);
+  assert.deepEqual(shots.map((s) => s.id), [s1.id, s2.id].sort((a, b) => (a === s1.id ? -1 : 1)), '两条分镜都恢复');
+  assert.deepEqual(shots.map((s) => s.idx), [1, 2]);
+  assert.ok(shots.every((s) => s.chapter === '待撤章节' && s.visual === 'A' || s.visual === 'B'), '内容与归属原样恢复');
+  Projects.remove(p.id);
+});

@@ -132,7 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 安装：`node scripts/install-writer-skill.mjs` → 复制到 `~/.agents/skills/ic-writer/`（opencode 自动发现；新技能需重启会话）。
 - 内容要点：
   1. 前置：`IC_BASE_URL`（默认 `http://127.0.0.1:4600`）+ `GET /api/health` 探活；
-  2. **铁律**：不得删除项目；先读后写（GET → 写 → 回读校验）；长文本必须走 JSON 文件（`--data-binary @file.json`）而非命令行内联；分镜按章节整体写；
+  2. **铁律**：不得删除项目；**只能走 HTTP API 读写**（禁止直连 `data/ic.db` 或手改 `data/`、`config.json`——绕过去就没有变更日志，不可回滚且 `source`/`batch_id` 记不上）；先读后写（GET → 写 → 回读校验）；长文本必须走 JSON 文件（`--data-binary @file.json`）而非命令行内联；分镜按章节整体写；
   3. 端点速查表（方法 / 路径 / body 示例 / 返回）；
   4. 「剧本 → 分镜」的字段约定（对齐 `story-pipeline-cn` 的长镜头聚合）；
   5. 回滚用法（列日志 → 单条 / 整批回滚）；

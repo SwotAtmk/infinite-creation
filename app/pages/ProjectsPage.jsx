@@ -4,6 +4,7 @@ import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spin
 import { api } from '../api-client.js';
 import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor } from './shared';
 import ReferencePicker from './ReferencePicker';
+import LoadingOverlay from './LoadingOverlay';
 import { useToast } from '../toast';
 
 // ============ 项目列表 ============
@@ -12,10 +13,12 @@ export default function ProjectsPage({ onOpen }) {
   const [projects, setProjects] = useState([]);
   // 首次加载标记：数据回来之前不要显示「暂无项目」，否则用户会误以为项目丢了
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: '', novel: '', idea: '', style: '' });
+  const [form, setForm] = useState({ name: '', novel: '', style: '' });
   const [customStyle, setCustomStyle] = useState('');
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
+  // 创建项目进行中：显示全屏加载层提示等待并阻断重复点击
+  const [busy, setBusy] = useState(null);
   const load = useCallback(() => api.get('/api/projects')
     .then(setProjects)
     .catch((e) => toast.error(e.message))
@@ -40,6 +43,7 @@ export default function ProjectsPage({ onOpen }) {
   }
 
   async function create() {
+    setBusy('正在创建项目…');
     try {
       const style = resolveStyle(form.style, customStyle);
       const p = await api.post('/api/projects', { ...form, style });
@@ -49,6 +53,7 @@ export default function ProjectsPage({ onOpen }) {
       }
       onOpen(p.id);
     } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
   async function del(id) {
     if (!(await toast.confirm('删除该项目及其所有素材？', { danger: true }))) return;
@@ -77,11 +82,10 @@ export default function ProjectsPage({ onOpen }) {
               <Input size="sm" placeholder="请填写自定义风格" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} className="w-60" />
             )}
           </div>
-          <Textarea size="sm" placeholder="粘贴小说原文（可留空，用下方一句话想法）" value={form.novel} onChange={(e) => setForm({ ...form, novel: e.target.value })} />
-          <Input size="sm" placeholder="或：一句话故事想法" value={form.idea} onChange={(e) => setForm({ ...form, idea: e.target.value })} />
+          <Textarea size="sm" placeholder="粘贴小说原文或一句话描述故事" value={form.novel} onChange={(e) => setForm({ ...form, novel: e.target.value })} />
           {vision && <ReferencePicker items={refs} onChange={setRefs} />}
           <div>
-            <Button color="primary" isDisabled={!form.name} onPress={create}>创建并打开</Button>
+            <Button color="primary" isDisabled={!form.name || !form.novel.trim()} onPress={create}>创建并打开</Button>
           </div>
         </CardBody>
       </Card>
@@ -108,6 +112,7 @@ export default function ProjectsPage({ onOpen }) {
           {!loading && !projects.length && <p className="muted">暂无项目</p>}
         </CardBody>
       </Card>
+      <LoadingOverlay show={!!busy} text={busy} />
     </div>
   );
 }

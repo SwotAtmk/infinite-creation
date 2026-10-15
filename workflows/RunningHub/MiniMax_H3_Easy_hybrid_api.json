@@ -1,0 +1,309 @@
+{
+  "1": {
+    "inputs": {
+      "fl2va_model": "minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors",
+      "ref2va_model": "minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors",
+      "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "video_vae": "minimax_h3_video_vae_int8_convrot.safetensors",
+      "audio_vae": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "MiniMaxH3EasyLoader",
+    "_meta": {
+      "title": "MiniMax H3 Easy 加载器"
+    }
+  },
+  "2": {
+    "inputs": {
+      "mode": "reference",
+      "prompt": "__MINIMAX_H3_REF_2__ is the character design of Gu Xinyao. __MINIMAX_H3_REF_3__ is the interior of the plain wooden carriage. __MINIMAX_H3_REF_4__ is the misty city gate environment. __MINIMAX_H3_REF_1__ is Gu Xinyao's voice timbre. Style: Chinese ancient-style 2D animation (guoman), cel-shaded with soft gradients, clean line art, cold grey-blue dawn palette, soft volumetric light and vapor.0.0-4.0s: Close-up inside the dim carriage: Gu Xinyao (__MINIMAX_H3_REF_2__) presses one hand flat over her heart, lowers her eyes and mouths a silent promise, solemn and gentle; static camera; hushed carriage interior tone with a faint horse snort outside.4.0-7.0s: Memory insert: a semi-transparent ghostly girl with exactly the same face as Gu Xinyao but hollow empty eyes, a bloodless pale complexion, loose unbound black hair and ragged grey-blue coarse clothes stands in the drifting white fog and looks back over her shoulder, then dissolves into wisps of smoke and fades out; the camera pulls back slowly; no speech, only a faint airy shimmer.7.0-11.0s: Cut back to a medium close-up of Gu Xinyao alone in the dim carriage, her eyelashes trembling once and her chest rising and falling; static camera.Dialogue and voice: Gu Xinyao's inner monologue in her own voice timbre from __MINIMAX_H3_REF_4__, low and steady, lips closed: <d>[Chinese] 你放心，你的苦，我一件件讨回，安心去吧。</d> then <d>[Chinese] 心死，就是这样了。</d>Consistency: keep Gu Xinyao's face and costume identical to __MINIMAX_H3_REF_1__, and make the ghostly girl read clearly as the same person, rendered only as translucent figure and vapor, never as any written or graphic overlay. No text, no subtitles, no watermark, no logo in frame.",
+      "resolution": "480P",
+      "aspect_ratio": "16:9",
+      "width": 1344,
+      "height": 1344,
+      "seconds": 11,
+      "advanced": true,
+      "fps": 24,
+      "keyframe_role": "first",
+      "ref_image_size": "match",
+      "reference_mention_mode": "index",
+      "prompt_optimizer": false,
+      "prompt_optimizer_api_format": "openai",
+      "prompt_optimizer_api_url": "",
+      "prompt_optimizer_api_key": "",
+      "prompt_optimizer_model": "",
+      "prompt_optimizer_language": "en",
+      "prompt_optimizer_scene_guide": "none",
+      "prompt_optimizer_read_media": false,
+      "prompt_optimizer_optimize_on_run": false,
+      "h3_bundle": [
+        "1",
+        0
+      ],
+      "media_1": [
+        "43",
+        0
+      ],
+      "media_type_1": "audio",
+      "media_2": [
+        "40",
+        0
+      ],
+      "media_type_2": "image",
+      "media_3": [
+        "41",
+        0
+      ],
+      "media_type_3": "image",
+      "media_4": [
+        "42",
+        0
+      ],
+      "media_type_4": "image",
+      "prompt_optimizer_resources": "[{\"type\":\"audio\",\"tag\":\"<Audio 1>\",\"name\":\"09a5ce93020ed4d9968e3d70cd5272939e16d919adf9e3c328ac45f8a2ee8e26.wav\",\"asset\":{\"filename\":\"09a5ce93020ed4d9968e3d70cd5272939e16d919adf9e3c328ac45f8a2ee8e26.wav\",\"subfolder\":\"\",\"storage\":\"input\"}},{\"type\":\"image\",\"tag\":\"<Picture 1>\",\"name\":\"1592b225f73be5c533b31e4110db2112d770a7fa731af4fc64cabae6bda3f441.png\",\"asset\":{\"filename\":\"1592b225f73be5c533b31e4110db2112d770a7fa731af4fc64cabae6bda3f441.png\",\"subfolder\":\"\",\"storage\":\"input\"}},{\"type\":\"image\",\"tag\":\"<Picture 2>\",\"name\":\"69f42a336c404e8f0f965e8218205272f844f11077306319d561a2676fc6c3e9.png\",\"asset\":{\"filename\":\"69f42a336c404e8f0f965e8218205272f844f11077306319d561a2676fc6c3e9.png\",\"subfolder\":\"\",\"storage\":\"input\"}},{\"type\":\"image\",\"tag\":\"<Picture 3>\",\"name\":\"d7cf3d9857184e6502c47541a1c04d5b7a5470958d2dacaf1d5ca4e56a1f9d54.png\",\"asset\":{\"filename\":\"d7cf3d9857184e6502c47541a1c04d5b7a5470958d2dacaf1d5ca4e56a1f9d54.png\",\"subfolder\":\"\",\"storage\":\"input\"}}]",
+      "prompt_optimizer_marker": "{}",
+      "prompt_optimizer_prompt_connected": false
+    },
+    "class_type": "MiniMaxH3Easy",
+    "_meta": {
+      "title": "MiniMax H3 Easy"
+    }
+  },
+  "4": {
+    "inputs": {
+      "model": [
+        "24",
+        0
+      ],
+      "conditioning": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "Basic Guider"
+    }
+  },
+  "5": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 12,
+      "denoise": 1,
+      "model": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "BasicScheduler"
+    }
+  },
+  "6": {
+    "inputs": {
+      "noise_seed": 904663810741664
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "7": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "8": {
+    "inputs": {
+      "noise": [
+        "6",
+        0
+      ],
+      "guider": [
+        "4",
+        0
+      ],
+      "sampler": [
+        "7",
+        0
+      ],
+      "sigmas": [
+        "5",
+        0
+      ],
+      "latent_image": [
+        "13",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "9": {
+    "inputs": {
+      "samples": [
+        "8",
+        0
+      ],
+      "vae": [
+        "13",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "10": {
+    "inputs": {
+      "samples": [
+        "8",
+        1
+      ],
+      "vae": [
+        "13",
+        3
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE Decode Audio"
+    }
+  },
+  "11": {
+    "inputs": {
+      "fps": [
+        "13",
+        4
+      ],
+      "bit_depth": 8,
+      "color_space": "sRGB",
+      "codec": "none",
+      "images": [
+        "9",
+        0
+      ],
+      "audio": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "Create Video"
+    }
+  },
+  "12": {
+    "inputs": {
+      "filename_prefix": "video/MiniMaxH3_Easy",
+      "format": "auto",
+      "format.codec": "auto",
+      "codec": "auto",
+      "fw_video_preview": "",
+      "video": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  },
+  "13": {
+    "inputs": {
+      "h3_context": [
+        "2",
+        1
+      ]
+    },
+    "class_type": "MiniMaxH3EasyOutput",
+    "_meta": {
+      "title": "MiniMax H3 Easy 输出"
+    }
+  },
+  "18": {
+    "inputs": {
+      "model": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+    "_meta": {
+      "title": "MiniMax H3 Memory Efficient Sage Attention Patch"
+    }
+  },
+  "24": {
+    "inputs": {
+      "lora_name": "minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors",
+      "strength_model": 1,
+      "model": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Load LoRA"
+    }
+  },
+  "37": {
+    "inputs": {
+      "lora_name": "MysticXXX_MMH3-V4.safetensors",
+      "strength_model": 0.5,
+      "model": [
+        "18",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Load LoRA"
+    }
+  },
+  "40": {
+    "inputs": {
+      "image": "1592b225f73be5c533b31e4110db2112d770a7fa731af4fc64cabae6bda3f441.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "41": {
+    "inputs": {
+      "image": "69f42a336c404e8f0f965e8218205272f844f11077306319d561a2676fc6c3e9.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "42": {
+    "inputs": {
+      "image": "d7cf3d9857184e6502c47541a1c04d5b7a5470958d2dacaf1d5ca4e56a1f9d54.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "43": {
+    "inputs": {
+      "audio": "09a5ce93020ed4d9968e3d70cd5272939e16d919adf9e3c328ac45f8a2ee8e26.wav",
+      "audioUI": ""
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "Load Audio"
+    }
+  }
+}

@@ -4,7 +4,7 @@ export const CATEGORIES = [
   ['character', '人物'], ['scene', '场景'], ['prop', '道具'], ['costume', '服装'],
   ['voice', '语音'], ['music', '音乐'], ['sfx', '音效'], ['video', '视频'], ['other', '其他'],
 ];
-export const VIDEO_RESOLUTIONS = [['360P', '360P'], ['480P', '480P'], ['720P', '720P'], ['1080P', '1080P'], ['custom', '自定义宽高']];
+export const VIDEO_RESOLUTIONS = [['360P', '360P'], ['480P', '480P'], ['720P', '720P'], ['768P', '768P'], ['custom', '自定义宽高']];
 export const VIDEO_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '9:16', '16:9', '21:9'];
 export const STYLE_PRESETS = ['真人写实', '动漫', '国漫', '日系动漫风', '卡通', 'Q版卡通风', '国风玄幻'];
 export const STYLE_CUSTOM = '自定义风格';

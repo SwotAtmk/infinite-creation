@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Button, Input, Select, SelectItem, Textarea, Card, CardBody, Tabs, Tab, Chip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from '@heroui/react';
+import { Button, Input, Select, SelectItem, Textarea, Card, CardBody, Tabs, Tab, Chip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
 import { CATEGORIES, fileUrl, selectKeys, pickKey, statusColor } from './shared';
 import { useToast } from '../toast';
@@ -9,8 +9,10 @@ import { useToast } from '../toast';
 export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
   const toast = useToast();
   const [assets, setAssets] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [cat, setCat] = useState('');
   const [form, setForm] = useState({ category: 'character', name: '', description: '' });
+  const [createOpen, setCreateOpen] = useState(false);
   const [edit, setEdit] = useState(null);
   const [voice, setVoice] = useState(null);
   const [uploadTarget, setUploadTarget] = useState(null);
@@ -19,7 +21,7 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
   const [ages, setAges] = useState({});
   const fileRef = useRef(null);
   const load = useCallback(() => api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch((e) => toast.error(e.message)), [projectId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [load]);
   const shownAssets = cat ? assets.filter((a) => a.category === cat) : assets;
   const costumesOfChar = (charId) => assets.filter((a) => a.category === 'costume' && a.parent_id === charId);
   const agesOfChar = (charId) => assets.filter((a) => a.category === 'age' && a.parent_id === charId);
@@ -76,7 +78,12 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
   }
 
   async function create() {
-    try { await api.post('/api/projects/' + projectId + '/assets', form); setForm({ ...form, name: '', description: '' }); load(); } catch (e) { toast.error(e.message); }
+    try {
+      await api.post('/api/projects/' + projectId + '/assets', form);
+      setForm({ ...form, name: '', description: '' });
+      setCreateOpen(false);
+      load();
+    } catch (e) { toast.error(e.message); }
   }
   async function del(a) {
     if (!(await toast.confirm('删除资产「' + a.name + '」？此操作不可逆。', { danger: true }))) return;
@@ -116,29 +123,28 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
     try { await api.patch('/api/projects/' + projectId + '/assets/' + edit.id, { name: edit.name, description: edit.description, prompt: edit.prompt }); toast.success('已保存'); setEdit(null); load(); } catch (e) { toast.error(e.message); }
   }
 
+  if (loading) {
+    return (
+      <Card>
+        <CardBody className="flex-row items-center justify-center gap-2.5 py-10">
+          <Spinner size="sm" />
+          <span className="muted">素材库数据加载中…</span>
+        </CardBody>
+      </Card>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
         <CardBody className="gap-3">
-          <h2 className="text-lg font-semibold m-0">新建资产</h2>
-          <div className="row">
-            <Select size="sm" className="w-32" aria-label="资产分类" selectedKeys={selectKeys(form.category)} onSelectionChange={(k) => setForm({ ...form, category: pickKey(k) })}>
-              {CATEGORIES.map(([k, l]) => <SelectItem key={k}>{l}</SelectItem>)}
-            </Select>
-            <Input size="sm" className="w-40" placeholder="名称" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <Input size="sm" className="w-72" placeholder="描述（可选，Agent 会自动补全）" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            <Button size="sm" color="primary" isDisabled={!form.name} onPress={create}>添加</Button>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <Button size="sm" color="primary" onPress={() => setCreateOpen(true)}>＋ 新建资产</Button>
+            <Tabs aria-label="资产分类" size="sm" variant="light" selectedKey={cat || 'all'} onSelectionChange={(k) => setCat(k === 'all' ? '' : String(k))}>
+              <Tab key="all" title="全部" />
+              {CATEGORIES.map(([k, l]) => <Tab key={k} title={l} />)}
+            </Tabs>
           </div>
-          <p className="muted">素材库为全项目共用、跨章节复用；角色/场景/道具图可由 Agent 生成，也可点「生成图」单独补图。</p>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardBody className="gap-3">
-          <Tabs aria-label="资产分类" size="sm" variant="light" selectedKey={cat || 'all'} onSelectionChange={(k) => setCat(k === 'all' ? '' : String(k))}>
-            <Tab key="all" title="全部" />
-            {CATEGORIES.map(([k, l]) => <Tab key={k} title={l} />)}
-          </Tabs>
           <div className="grid">
             {shownAssets.map((a) => (
               <div key={a.id}>
@@ -216,6 +222,31 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
       </Card>
 
       <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f && uploadTarget) doUpload(uploadTarget, f); e.target.value = ''; setUploadTarget(null); }} />
+
+      {/* 新建资产弹窗 */}
+      <Modal isOpen={createOpen} backdrop="blur" onClose={() => setCreateOpen(false)}>
+        <ModalContent>
+          {() => (
+            <>
+              <ModalHeader className="pb-2"><h2 className="m-0 text-lg font-semibold">新建资产</h2></ModalHeader>
+              <ModalBody>
+                <div className="flex flex-col gap-4">
+                  <Select size="sm" label="资产分类" selectedKeys={selectKeys(form.category)} onSelectionChange={(k) => setForm({ ...form, category: pickKey(k) })}>
+                    {CATEGORIES.map(([k, l]) => <SelectItem key={k}>{l}</SelectItem>)}
+                  </Select>
+                  <Input size="sm" label="名称" placeholder="名称" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  <Input size="sm" label="描述（可选，Agent 会自动补全）" placeholder="描述（可选，Agent 会自动补全）" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                </div>
+                <p className="muted" style={{ marginTop: 12 }}>素材库为全项目共用、跨章节复用；角色/场景/道具图可由 Agent 生成，也可点「生成图」单独补图。</p>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="flat" onPress={() => setCreateOpen(false)}>取消</Button>
+                <Button color="primary" isDisabled={!form.name} onPress={create}>添加</Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
 
       {/* 预览大图 */}
       <Modal isOpen={!!preview} size="3xl" backdrop="blur" onClose={() => setPreview(null)}>

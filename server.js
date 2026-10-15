@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import next from 'next';
 import { WebSocketServer } from 'ws';
-import { DATA_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger, startupCleanup } from './lib/core/index.js';
+import { DATA_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger, startupCleanup, maskComfyBaseUrl } from './lib/core/index.js';
 import { scanSkills } from './lib/agent/index.js';
 import { setBroadcaster } from './lib/ws.js';
 
@@ -16,6 +16,12 @@ const handle = app.getRequestHandler();
 // 启动时注册默认工作流 + 扫描技能
 ensureDirs();
 startupCleanup();
+// 清理已被改名/删除的陈旧工作流记录：upsert 按 name 匹配，改名后会留下孤儿行（下拉出现重复选项），
+// 先按当前 DEFAULT_SPECS 的名称集合剔除不在其中的记录，再注册，保证列表与规格一致。
+const validWorkflowNames = new Set(DEFAULT_SPECS.map((s) => s.name));
+for (const w of Workflows.list()) {
+  if (!validWorkflowNames.has(w.name)) Workflows.remove(w.id);
+}
 for (const spec of DEFAULT_SPECS) {
   Workflows.upsert({ name: spec.name, kind: spec.kind, sourceFile: spec.sourceFile, spec, status: 'active' });
 }
@@ -81,11 +87,28 @@ app.prepare().then(() => {
     handle(req, res);
   });
 
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({ noServer: true });
   setBroadcaster((obj) => {
     const msg = JSON.stringify(obj);
     for (const c of wss.clients) {
       if (c.readyState === 1) c.send(msg);
+    }
+  });
+
+  // WebSocket 升级路由：/ws 交给业务广播，/_next/* 交给 Next.js 的 HMR 热更新。
+  // 之前 wss 用 path:'/ws' 会把 /_next/webpack-hmr 的升级请求以 400 拒绝并销毁连接，
+  // 导致浏览器报 “WebSocket connection to .../_next/webpack-hmr failed”。
+  const upgradeHandler = app.getUpgradeHandler();
+  server.on('upgrade', (req, socket, head) => {
+    const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/ws') {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    } else if (url.pathname.startsWith('/_next/')) {
+      upgradeHandler(req, socket, head);
+    } else {
+      socket.destroy();
     }
   });
 
@@ -103,7 +126,7 @@ app.prepare().then(() => {
   server.listen(port, host, () => {
     const shown = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
     console.log('infinite-creation 已启动: http://' + shown + ':' + port + (dev ? '（开发模式）' : ''));
-    console.log('  ComfyUI: ' + cfg.comfyui.baseUrl);
+    console.log('  ComfyUI: ' + maskComfyBaseUrl(cfg));
     console.log('  LLM:     ' + cfg.llm.baseUrl + ' (' + cfg.llm.model + ')');
   });
 });

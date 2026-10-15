@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Jobs, loadConfig, interrupt, projectDir } from '@/lib/core/index.js';
+import { Jobs, loadConfig, interruptTask, projectDir } from '@/lib/core/index.js';
 import { stopJob } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ export async function DELETE(_req, { params }) {
   const running = job.status === 'running';
   const active = running || job.status === 'queued';
   if (active) stopJob(jobId);
-  if (running) { try { const cfg = loadConfig(); if (cfg?.comfyui?.baseUrl) await interrupt(cfg.comfyui.baseUrl); } catch {} }
+  if (running) { try { const cfg = loadConfig(); await interruptTask(cfg); } catch {} }
   // 清掉任务级日志文件
   try { fs.unlinkSync(path.join(projectDir(id), 'logs', jobId + '.log')); } catch {}
   if (job.logPath) { try { fs.unlinkSync(job.logPath); } catch {} }

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardBody, Button, Input, Checkbox, RadioGroup, Radio, Select, SelectItem, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
 import { useToast } from '../toast';
-import { HW_PRESETS, HW_DEFAULT_FREE, hardwareMode, isPresetWorkflows } from '../../lib/shared/index.js';
+import { HW_PRESETS, HW_DEFAULT_FREE, hardwareMode, isPresetWorkflows, comfyBaseUrl, RUNNINGHUB_TIERS } from '../../lib/shared/index.js';
 import { selectKeys, pickKey } from './shared';
 import SkillsTab from './SkillsTab';
 import WorkflowsTab from './WorkflowsTab';
@@ -13,20 +13,25 @@ export default function SettingsPage({ onBack }) {
   const toast = useToast();
   const [cfg, setCfg] = useState(null);
   const [test, setTest] = useState('');
+  const [llmTest, setLlmTest] = useState('');
   const [comfyInfo, setComfyInfo] = useState(null);
   const [workflows, setWorkflows] = useState([]);
   useEffect(() => {
-    api.get('/api/config').then((c) => { setCfg(c); detectComfy(c.comfyui.baseUrl); }).catch((e) => toast.error(e.message));
+    api.get('/api/config').then((c) => { setCfg(c); detectComfy(c.comfyui); }).catch((e) => toast.error(e.message));
     api.get('/api/workflows').then(setWorkflows).catch(() => {});
   }, []);
-  async function detectComfy(baseUrl) {
-    try { setComfyInfo(await api.post('/api/comfyui/test', { baseUrl })); } catch { setComfyInfo({ ok: false, error: '连接失败' }); }
+  async function detectComfy(comfyui) {
+    try { setComfyInfo(await api.post('/api/comfyui/test', { comfyui })); } catch { setComfyInfo({ ok: false, error: '连接失败' }); }
   }
   async function save() {
     try { setCfg(await api.put('/api/config', cfg)); toast.success('已保存'); } catch (e) { toast.error(e.message); }
   }
   async function testComfy() {
-    try { const r = await api.post('/api/comfyui/test', { baseUrl: cfg.comfyui.baseUrl }); setComfyInfo(r); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }
+    try { const r = await api.post('/api/comfyui/test', { comfyui: cfg.comfyui }); setComfyInfo(r); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }
+  }
+  async function testLlm() {
+    setLlmTest('测试中…');
+    try { const r = await api.post('/api/llm/test', { llm: cfg.llm }); setLlmTest(r.ok ? ('连接成功 · ' + r.model) : ('连接失败：' + r.error)); } catch (e) { setLlmTest('失败：' + e.message); }
   }
   if (!cfg) {
     return (
@@ -39,6 +44,7 @@ export default function SettingsPage({ onBack }) {
     );
   }
   const hwMode = hardwareMode(cfg);
+  const isRunningHub = (cfg.comfyui.provider || 'native') === 'runninghub';
   // 切换硬件模式：工作流列表与「生成维护」默认值立即跟着变，无需先保存；
   // 用户手改过的 workflows / freeAfterEvery（不等于任一模式预设/默认值）保持不动。
   function switchMode(mode) {
@@ -60,18 +66,63 @@ export default function SettingsPage({ onBack }) {
         </div>
 
         <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>ComfyUI 服务</h3>
-        <div className="row">
-          <Input size="sm" className="flex-1" value={cfg.comfyui.baseUrl} onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, baseUrl: e.target.value } })} />
-          <Button size="sm" onPress={testComfy}>测试连接</Button>
-          {test && <span className="muted">{test}</span>}
-        </div>
+        <RadioGroup aria-label="ComfyUI 接口类型" orientation="horizontal" value={cfg.comfyui.provider || 'native'} onValueChange={(v) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, provider: v } })}>
+          <Radio value="native">原生ComfyUI接口</Radio>
+          <Radio value="runninghub">云端RunningHub接口</Radio>
+        </RadioGroup>
+
+        {(cfg.comfyui.provider || 'native') === 'native' && (
+          <div className="row">
+            <Input size="sm" className="flex-1" value={cfg.comfyui.baseUrl} onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, baseUrl: e.target.value } })} />
+            <Button size="sm" onPress={testComfy}>测试连接</Button>
+            {test && <span className="muted">{test}</span>}
+          </div>
+        )}
+
+        {(cfg.comfyui.provider || 'native') === 'runninghub' && (
+          <>
+            <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+              <span style={{ flex: 'none' }}>Api-key</span>
+              <Input size="sm" type="password" className="flex-1" placeholder="请输入 RunningHub Api-key" value={cfg.comfyui.apiKey || ''} onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, apiKey: e.target.value } })} />
+              <Button size="sm" onPress={() => window.open('https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer&inviteCode=6to0etcb', '_blank', 'noopener,noreferrer')}>查询Api-key</Button>
+            </div>
+            <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+              <span style={{ flex: 'none' }}>版本</span>
+              <Select size="sm" className="w-64" aria-label="RunningHub 版本" selectedKeys={selectKeys(cfg.comfyui.tier || 'standard')} onSelectionChange={(k) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, tier: pickKey(k) } })}>
+                {RUNNINGHUB_TIERS.map((t) => <SelectItem key={t.id}>{t.label}</SelectItem>)}
+              </Select>
+            </div>
+            <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+              <span style={{ flex: 'none' }}>任务并发数量【bate】</span>
+              <Input size="sm" className="w-24" type="number" min={1} max={20} value={String(cfg.generation.runninghubConcurrency ?? 1)} onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, runninghubConcurrency: Math.max(1, Math.min(20, Math.round(Number(e.target.value) || 1))) } })} />
+              <span className="muted">并发任务数（默认 1）</span>
+            </div>
+            <p className="muted" style={{ marginTop: 4 }}>云端 RunningHub 支持并发执行，可同时提交多个生成任务以提高效率；并发过高可能触发云端限流或排队。</p>
+            <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+              <Button size="sm" onPress={testComfy}>测试连接</Button>
+              {test && <span className="muted">{test}</span>}
+            </div>
+            <p className="muted" style={{ marginTop: 4 }}>最终服务 URL：{comfyBaseUrl(cfg)}</p>
+          </>
+        )}
 
         <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>LLM（Agent 大脑，OpenAI 兼容）</h3>
-        <div className="row">
-          <Input size="sm" className="flex-2 min-w-0" placeholder="Base URL（需 /v1 结尾）" value={cfg.llm.baseUrl} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, baseUrl: e.target.value } })} />
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 'none' }}>Base URL</span>
+          <Input size="sm" className="flex-1 min-w-0" placeholder="需 /v1 结尾" value={cfg.llm.baseUrl} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, baseUrl: e.target.value } })} />
+        </div>
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 'none' }}>模型</span>
           <Input size="sm" className="flex-1 min-w-0" placeholder="模型" value={cfg.llm.model} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, model: e.target.value } })} />
         </div>
-        <Input size="sm" className="mt-2" placeholder="API Key" type="password" value={cfg.llm.apiKey} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, apiKey: e.target.value } })} />
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 'none' }}>API Key</span>
+          <Input size="sm" className="flex-1" placeholder="API Key" type="password" value={cfg.llm.apiKey} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, apiKey: e.target.value } })} />
+        </div>
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <Button size="sm" onPress={testLlm}>测试连接</Button>
+          {llmTest && <span className="muted">{llmTest}</span>}
+        </div>
         <Checkbox size="sm" isSelected={!!cfg.llm.vision} onValueChange={(v) => setCfg({ ...cfg, llm: { ...cfg.llm, vision: v } })}>
           支持图片输入（多模态/视觉模型）
         </Checkbox>
@@ -100,6 +151,8 @@ export default function SettingsPage({ onBack }) {
           <b>何时调：</b>任务报「LLM 改写提示词不可用（LLM 输出被截断（达到长度上限））」时，优先调大此值。
         </p>
 
+        {!isRunningHub && (
+          <>
         <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>硬件适配</h3>
         <RadioGroup aria-label="硬件适配" orientation="horizontal" value={hwMode} onValueChange={switchMode}>
           <Radio value="nvidia">英伟达（原版工作流）</Radio>
@@ -154,6 +207,8 @@ export default function SettingsPage({ onBack }) {
             {comfyInfo && comfyInfo.ok && !comfyInfo.dynamicVram && (cfg.generation.freeAfterEvery ?? 0) > 0 && (
               <p className="muted" style={{ marginTop: 4 }}>⚠ 检测到当前 ComfyUI 未启用 Dynamic VRAM（--disable-dynamic-vram），连续生成不会产生该退化，建议关闭此功能（把 N 设为 0）。</p>
             )}
+          </>
+        )}
           </>
         )}
         <div className="mt-2">

@@ -3,8 +3,12 @@
 
 ![](images/banner.jpg)
 
+
+中文 | [English](README_EN.md)
+
 ## 项目简介
- **小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频**
+- 免费开源本地Agent全自动视频生成的开源项目✨，不用演员、配音、导演和剪辑师就能本地一键生成超长视频。可以做小说生成视频、漫剧广告、故事类讲解视频，让你所想到的故事变成亿帧画面。
+- 小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频
 
 ## 生成样例
 - 《妈妈的时间》
@@ -15,10 +19,13 @@
 [更多样例](docs/run_demo.md)
 
 ## 项目计划
-- [进行中……] 把文生图、图生图工作流进行整合使用最新Qwen-Image2.1的文生图+图生图工作流
-- [计划中] 前端页面整理及美化
+- [计划中] Docker部署、桌面端App打包构建
+- [计划中] 工作流接入视频超分，让生成的视频更加清晰
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
-- [计划中] 接入在线RunningHub-ComfyUI工作流生成，会员MiniMax-H3夜间免费运行
+- [进行中……] 添加Agent安全审批策略，防止Agent越权操作，删除项目或执行危险命令
+- [✅] 接入在线RunningHub-ComfyUI工作流生成，会员MiniMax-H3夜间免费运行
+- [✅] 把项目装进Skill技能，支持Agent一键调用
+- [✅] 把文生图、图生图工作流进行整合使用最新Qwen-Image2.1的文生图+图生图工作流
 - [✅] 接入Qwen-Image-2.1文生图+图生图工作流
 - [✅] 支持提交参考素材，及Agent整理参考素材
 - [✅] 优化本地MiniMax H3人物语音电流声或者语音不清晰的问题
@@ -115,8 +122,22 @@ infinite-creation/
 - 打开Trae、豆包、CodeX等工具，打开豆包使用“工作模式”，并输入提示词
 
 ```text
-帮我克隆这个项目https://github.com/SwotAtmk/infinite-creation.git到本地（这里填写要安装的项目目录），并且在本地运行这个项目
+帮我克隆这个项目https://github.com/SwotAtmk/infinite-creation.git到本地（这里填写要安装的项目目录），
+并且在本地部署启动这个项目。
 ```
+
+- **国内使用：**
+```text
+帮我克隆这个项目https://gitcode.com/SwotAtmk/infinite-creation.git到本地（这里填写要安装的项目目录），
+并且在本地部署启动这个项目。
+```
+
+**把项目安装为Skill技能**
+```text
+请根据 https://gitcode.com/SwotAtmk/infinite-creation/releases/download/v1.0.0/install-skill.md，
+从 https://gitcode.com/SwotAtmk/infinite-creation 安装 infinite-creation。
+```
+
 
 **前置要求**
 
@@ -175,6 +196,23 @@ pnpm run build && pnpm start
 在使用此Agent项目工具之前，建议你先使用ComfyUI手动跑一遍所有工作流（即：跑通comfyui_original_workflows/目录下的所有工作流）之后使用Agent项目工具就能进行全自动生成。
 
 > 语音：MiniMax H3 依据「参考音色样本（flac 等，放 assets/voice/）+ 提示词对白」自行合成台词，无需单独 TTS。
+
+### 接入云端算力 - 接入RunningHub原生ComfyUI接口
+
+- 如果本地电脑配置比较低无法运行的话，可以选择使用云端算力免费试用
+
+**领取RunningHub免费云端算力试用**
+```text
+打开链接：[https://www.runninghub.cn?inviteCode=6to0etcb](https://www.runninghub.cn?inviteCode=6to0etcb) 
+现在注册还能领500RH币，可以免费生成不少图片和视频哦！
+```
+- 浏览器打开 [https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer](https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer) 获取RunningHub Api-Key
+![r2.png](images/r2.png)
+
+- 配置RunningHub Api-Key
+![r1.png](images/r1.png)
+
+- 我的RunningHub工作流主页：[https://www.runninghub.cn/user-center/2013421139631808514/webapp?inviteCode=6to0etcb](https://www.runninghub.cn/user-center/2013421139631808514/webapp?inviteCode=6to0etcb)
 
 ## 使用流程
 
@@ -242,6 +280,18 @@ pnpm test   # node --test tests/unit.test.mjs
 
 ## 致谢
 - 感谢开发者 [happymy](https://github.com/happymy) 为此项目提供了AMD+GGUF适配的解决方案以及解决项目中存在的部分bug
+- 感谢开发者 [binonxia](https://github.com/binonxia) 发现并修复了项目中的bug
+
+
+## Star 历史
+
+<a href="https://www.star-history.com/?repos=swotatmk%2Finfinite-creation&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=swotatmk/infinite-creation&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=swotatmk/infinite-creation&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=swotatmk/infinite-creation&type=date&legend=bottom-right" />
+ </picture>
+</a>
 
 ## 开源协议
 

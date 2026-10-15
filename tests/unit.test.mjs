@@ -10,13 +10,14 @@ import {
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks,
-  freeComfy, checkComfyUI, generate, resolveHardwareConfig, HW_PRESETS,
+  freeComfy, checkComfyUI, generate, queuePrompt, getHistory, interrupt, downloadOutput, getObjectInfo, resolveHardwareConfig, HW_PRESETS, loadConfig,
+  toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, comfyBaseUrl, maskComfyBaseUrl } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
-import { runExclusiveVideo } from '../lib/agent/job-runner.js';
+import { runExclusiveVideo, concurrencyLimit } from '../lib/agent/job-runner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -218,6 +219,104 @@ test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前�
   assert.equal(isPresetWorkflows({ ...SHARED_HW_PRESETS.nvidia, t2i: 'my_custom_t2i' }), false, '手改过 → 不随模式切换');
   assert.equal(isPresetWorkflows({ t2i: 'krea2_hyperreal_t2i' }), false, '缺键 → 不算预设');
   assert.equal(isPresetWorkflows(null), false);
+});
+
+test('comfyBaseUrl: native 返回原地址，runninghub 返回固定域名', () => {
+  assert.equal(comfyBaseUrl({ comfyui: { provider: 'native', baseUrl: 'http://127.0.0.1:8188' } }), 'http://127.0.0.1:8188');
+  assert.equal(comfyBaseUrl({ comfyui: { provider: 'runninghub', apiKey: 'abc123', tier: 'standard' } }), 'https://www.runninghub.cn');
+  assert.equal(comfyBaseUrl({ comfyui: { provider: 'runninghub', apiKey: 'abc123', tier: 'plus' } }), 'https://www.runninghub.cn');
+  assert.equal(comfyBaseUrl({ comfyui: { provider: 'runninghub', apiKey: '', tier: 'standard' } }), 'https://www.runninghub.cn');
+  assert.equal(comfyBaseUrl(null), 'http://127.0.0.1:8188');
+});
+
+test('maskComfyBaseUrl: RunningHub 脱敏 apiKey，native 原样返回', () => {
+  const key = 'd6198825ebff49b2994bb8c5d7ee3d66';
+  assert.equal(maskComfyBaseUrl({ comfyui: { provider: 'runninghub', apiKey: key, tier: 'standard' } }), 'https://www.runninghub.cn（apiKey: d619****3d66）');
+  assert.equal(maskComfyBaseUrl({ comfyui: { provider: 'native', baseUrl: 'http://127.0.0.1:8188' } }), 'http://127.0.0.1:8188');
+});
+
+test('concurrencyLimit: runninghub 用 runninghubConcurrency，native 用 videoConcurrency', () => {
+  assert.equal(concurrencyLimit({ comfyui: { provider: 'runninghub' }, generation: { runninghubConcurrency: 5 } }), 5);
+  assert.equal(concurrencyLimit({ comfyui: { provider: 'runninghub' }, generation: {} }), 1);
+  assert.equal(concurrencyLimit({ comfyui: { provider: 'native' }, generation: { videoConcurrency: 2 } }), 2);
+  assert.equal(concurrencyLimit({ generation: { videoConcurrency: 1 } }), 1);
+});
+
+test('toOutputItem: fileType → kind 映射，filename 取 fileUrl 末段', () => {
+  assert.equal(toOutputItem({ fileUrl: 'https://x.y/a.png', fileType: 'png' }).kind, 'images');
+  assert.equal(toOutputItem({ fileUrl: 'https://x.y/b.mp4', fileType: 'mp4' }).kind, 'videos');
+  assert.equal(toOutputItem({ fileUrl: 'https://x.y/c.wav', fileType: 'wav' }).kind, 'audio');
+  assert.equal(toOutputItem({ fileUrl: 'https://x.y/sub/d.png', fileType: 'png' }).filename, 'd.png');
+  assert.equal(toOutputItem({ fileUrl: 'https://x.y/d.png', fileType: 'png' }).fileUrl, 'https://x.y/d.png');
+});
+
+test('runninghubSubmit: 提交体含 workflowId=1 + workflow JSON 串 + apiKey', async () => {
+  const calls = [];
+  const orig = global.fetch;
+  global.fetch = async (url, opts) => {
+    calls.push({ url: String(url), body: JSON.parse(opts.body) });
+    return { ok: true, json: async () => ({ code: 0, msg: 'success', data: { taskId: 't1', taskStatus: 'QUEUED' } }) };
+  };
+  try {
+    const cfg = { comfyui: { provider: 'runninghub', apiKey: 'key123', tier: 'standard' } };
+    const { taskId } = await runninghubSubmit(cfg, '{"1":{}}', 'cid1');
+    assert.equal(taskId, 't1');
+    const body = calls[0].body;
+    assert.equal(body.workflowId, 1);
+    assert.equal(body.workflow, '{"1":{}}');
+    assert.equal(body.apiKey, 'key123');
+    assert.equal(body.randomSeed, true);
+    assert.equal(body.clientId, 'cid1');
+    assert.ok(!('instanceType' in body), 'standard 不应传 instanceType');
+  } finally {
+    global.fetch = orig;
+  }
+});
+
+test('RunningHub baseUrl 下所有 ComfyUI 接口都保留 /proxy/<key> 前缀（修复 /view 401）', async () => {
+  const base = 'https://www.runninghub.cn/proxy/mykey';
+  const urls = [];
+  const orig = global.fetch;
+  global.fetch = async (url) => {
+    urls.push(String(url));
+    return { ok: true, json: async () => ({}), text: async () => '', arrayBuffer: async () => new ArrayBuffer(0) };
+  };
+  try {
+    await checkComfyUI(base);
+    await getObjectInfo(base);
+    await queuePrompt(base, { '1': { class_type: 'X', inputs: {} } }, 'cid');
+    await getHistory(base, 'p1');
+    await interrupt(base);
+    await freeComfy(base);
+    await downloadOutput(base, { filename: 'a.png', subfolder: '', type: 'output' });
+  } finally {
+    global.fetch = orig;
+  }
+  assert.ok(urls.length >= 7, '应至少发起 7 个接口请求，实际 ' + urls.length);
+  for (const u of urls) {
+    assert.ok(u.startsWith(base + '/'), '接口 URL 应保留 apiKey 前缀，实际：' + u);
+  }
+});
+
+test('getSpecForKind: runninghub 固定使用配套 API 工作流（忽略 hardware.mode）', () => {
+  const cfg = { comfyui: { provider: 'runninghub' }, hardware: { mode: 'amd' } };
+  assert.equal(getSpecForKind(cfg, 't2i').id, 'runninghub_krea2_t2i');
+  assert.equal(getSpecForKind(cfg, 'i2i').id, 'runninghub_qwen_image_edit_2511_i2i');
+  assert.equal(getSpecForKind(cfg, 'r2v').id, 'runninghub_minimax_h3_r2v');
+  assert.equal(getSpecForKind(cfg, 'tts').id, 'runninghub_qwen3_tts_voice_design');
+});
+
+test('buildWorkflow: RunningHub 工作流（子目录 + 带空格文件名）可加载并正确映射', () => {
+  const t2i = buildWorkflow(getDefaultSpecById('runninghub_krea2_t2i'), { positive_prompt: '测试提示词', width: 1024, height: 1024, seed: 1 });
+  assert.equal(t2i['102'].inputs.text, '测试提示词');
+  assert.equal(t2i['100'].inputs.width, 1024);
+  assert.equal(t2i['96'].inputs.seed, 1);
+  const i2i = buildWorkflow(getDefaultSpecById('runninghub_qwen_image_edit_2511_i2i'), { positive_prompt: '编辑', image: 'ref.png', seed: 2 });
+  assert.equal(i2i['218'].inputs.prompt, '编辑');
+  assert.equal(i2i['41'].inputs.image, 'ref.png');
+  const tts = buildWorkflow(getDefaultSpecById('runninghub_qwen3_tts_voice_design'), { text: '台词', voice_description: '少女音' });
+  assert.equal(tts['74'].inputs.value, '台词');
+  assert.equal(tts['75'].inputs.value, '少女音');
 });
 
 test('preflight: 不拦「同批/vision」这类服务状态判定，只做就绪检查（服务没起就报错退出）', async () => {
@@ -548,6 +647,8 @@ test('checkComfyUI: dynamicVram 探测（--disable-dynamic-vram 关闭，否则�
 const truncMsg = () => ({ type: 'assistant', message: { content: [{ type: 'text', text: '\n\n[Response truncated — reached length limit or upstream stalled. Ask the model to continue.]' }] } });
 const toolMsg = () => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'generateImage', input: {} }] } });
 const plainMsg = () => ({ type: 'assistant', message: { content: [{ type: 'text', text: '正常输出' }] } });
+const toolResultMsg = () => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'done' }] } });
+const multiToolMsg = () => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'report', input: {} }, { type: 'tool_use', name: 'generate_chapter_videos', input: {} }] } });
 
 test('isTruncatedText: 识别 openclaude 截断标记', () => {
   assert.equal(isTruncatedText('[Response truncated — reached length limit or upstream stalled. Ask the model to continue.]'), true);
@@ -558,16 +659,17 @@ test('isTruncatedText: 识别 openclaude 截断标记', () => {
 });
 
 test('classifyAgentMsg: 截断/工具/正常文本分类', () => {
-  assert.deepEqual(classifyAgentMsg(truncMsg()), { hasToolUse: false, hasTrunc: true, hasPlainText: false });
-  assert.deepEqual(classifyAgentMsg(toolMsg()), { hasToolUse: true, hasTrunc: false, hasPlainText: false });
-  assert.deepEqual(classifyAgentMsg(plainMsg()), { hasToolUse: false, hasTrunc: false, hasPlainText: true });
-  assert.deepEqual(classifyAgentMsg({ type: 'result', result: 'x' }), { hasToolUse: false, hasTrunc: false, hasPlainText: false });
-  assert.deepEqual(classifyAgentMsg(null), { hasToolUse: false, hasTrunc: false, hasPlainText: false });
+  assert.deepEqual(classifyAgentMsg(truncMsg()), { hasToolUse: false, hasTrunc: true, hasPlainText: false, toolUseCount: 0, toolResultCount: 0 });
+  assert.deepEqual(classifyAgentMsg(toolMsg()), { hasToolUse: true, hasTrunc: false, hasPlainText: false, toolUseCount: 1, toolResultCount: 0 });
+  assert.deepEqual(classifyAgentMsg(plainMsg()), { hasToolUse: false, hasTrunc: false, hasPlainText: true, toolUseCount: 0, toolResultCount: 0 });
+  assert.deepEqual(classifyAgentMsg(toolResultMsg()), { hasToolUse: false, hasTrunc: false, hasPlainText: false, toolUseCount: 0, toolResultCount: 1 });
+  assert.deepEqual(classifyAgentMsg({ type: 'result', result: 'x' }), { hasToolUse: false, hasTrunc: false, hasPlainText: false, toolUseCount: 0, toolResultCount: 0 });
+  assert.deepEqual(classifyAgentMsg(null), { hasToolUse: false, hasTrunc: false, hasPlainText: false, toolUseCount: 0, toolResultCount: 0 });
 });
 
 test('watchdogStep: 连续纯截断 3 次熔断', () => {
   const t0 = 1_000_000;
-  let st = { lastAt: t0, sawToolUse: false, truncStreak: 0 };
+  let st = { lastAt: t0, pendingTools: 0, truncStreak: 0 };
   // 第 1、2 次截断：不熔断，streak 递增
   st = watchdogStep(st, truncMsg(), t0 + 1000).next;
   assert.equal(st.truncStreak, 1);
@@ -580,7 +682,7 @@ test('watchdogStep: 连续纯截断 3 次熔断', () => {
 });
 
 test('watchdogStep: 中间有工具调用/正常文本则重置截断计数', () => {
-  let st = { lastAt: 0, sawToolUse: false, truncStreak: 0 };
+  let st = { lastAt: 0, pendingTools: 0, truncStreak: 0 };
   st = watchdogStep(st, truncMsg(), 1000).next;
   assert.equal(st.truncStreak, 1);
   // 工具调用 = 实质进展，streak 归零
@@ -595,7 +697,7 @@ test('watchdogStep: 中间有工具调用/正常文本则重置截断计数', ()
 
 test('watchdogStep: 停滞超时熔断（非工具窗口）', () => {
   const now = 5_000_000;
-  let st = { lastAt: now - AGENT_WATCHDOG.STALL_MS - 1000, sawToolUse: false, truncStreak: 0 };
+  let st = { lastAt: now - AGENT_WATCHDOG.STALL_MS - 1000, pendingTools: 0, truncStreak: 0 };
   const r = watchdogStep(st, plainMsg(), now);
   assert.ok(r.halted, '间隔超过 STALL_MS 且非工具窗口应判停滞');
   assert.match(r.halted, /停滞/);
@@ -603,16 +705,33 @@ test('watchdogStep: 停滞超时熔断（非工具窗口）', () => {
 
 test('watchdogStallCheck: 工具执行窗口豁免，非工具窗口超时判定', () => {
   const now = 5_000_000;
-  // 上一条是工具调用 → 不判停滞（渲染可能很久）
-  assert.equal(watchdogStallCheck({ lastAt: now - 3600_000, sawToolUse: true, truncStreak: 0 }, now), null);
+  // 有待执行工具 → 不判停滞（渲染可能很久）
+  assert.equal(watchdogStallCheck({ lastAt: now - 3600_000, pendingTools: 1, truncStreak: 0 }, now), null);
   // 非工具窗口超时 → 判停滞
-  assert.ok(watchdogStallCheck({ lastAt: now - AGENT_WATCHDOG.STALL_MS - 1, sawToolUse: false, truncStreak: 0 }, now));
+  assert.ok(watchdogStallCheck({ lastAt: now - AGENT_WATCHDOG.STALL_MS - 1, pendingTools: 0, truncStreak: 0 }, now));
   // 非工具窗口未超时 → 不判停滞
-  assert.equal(watchdogStallCheck({ lastAt: now - 1000, sawToolUse: false, truncStreak: 0 }, now), null);
+  assert.equal(watchdogStallCheck({ lastAt: now - 1000, pendingTools: 0, truncStreak: 0 }, now), null);
+});
+
+test('watchdogStep: 同一轮多个工具时，慢工具运行期间不误判停滞', () => {
+  const t0 = 1_000_000;
+  let st = { lastAt: t0, pendingTools: 0, truncStreak: 0 };
+  // 一条 assistant 消息同时带 report + generate_chapter_videos 两个 tool_use
+  st = watchdogStep(st, multiToolMsg(), t0).next;
+  assert.equal(st.pendingTools, 2);
+  // report（快工具）先返回，只剩 generate_chapter_videos 仍在渲染
+  st = watchdogStep(st, toolResultMsg(), t0 + 1000).next;
+  assert.equal(st.pendingTools, 1);
+  // 慢工具渲染超过 STALL_MS，仍应豁免（pendingTools>0）
+  const t1 = t0 + 1000 + AGENT_WATCHDOG.STALL_MS + 60_000;
+  assert.equal(watchdogStallCheck(st, t1), null, '仍有工具在运行，不应判停滞');
+  // 慢工具也返回后，pendingTools 归零
+  st = watchdogStep(st, toolResultMsg(), t1).next;
+  assert.equal(st.pendingTools, 0);
 });
 
 test('watchdogStep: 截断后可恢复（截断→工具→截断→截断不熔断）', () => {
-  let st = { lastAt: 0, sawToolUse: false, truncStreak: 0 };
+  let st = { lastAt: 0, pendingTools: 0, truncStreak: 0 };
   st = watchdogStep(st, truncMsg(), 1000).next;   // streak 1
   st = watchdogStep(st, toolMsg(), 2000).next;    // 归零
   st = watchdogStep(st, truncMsg(), 3000).next;   // streak 1
@@ -644,10 +763,14 @@ test('generate: 主动查询——任务从 ComfyUI 队列消失则主动失败�
 });
 
 test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时→主动放弃', async () => {
-  // 占住唯一视频槽位，让后续任务进入排队分支
-  let releaseBlock;
-  const blocked = new Promise((r) => { releaseBlock = r; });
-  const holder = runExclusiveVideo(() => blocked);
+  // 占满全部渲染槽位（本地默认 1，云端 RunningHub 按 runninghubConcurrency），让后续任务进入排队分支
+  const limit = concurrencyLimit(loadConfig());
+  const holders = [];
+  const releaseFns = [];
+  for (let i = 0; i < limit; i++) {
+    const blocked = new Promise((r) => { releaseFns.push(r); });
+    holders.push(runExclusiveVideo(() => blocked));
+  }
   // 闸门状态必须挂 globalThis：模块级变量在 Next dev 下每个 route 各一份 → 会真并发
   assert.ok(globalThis.__infiniteCreationVideoGate, '槽位与队列应挂在 globalThis 上共享');
 
@@ -666,8 +789,8 @@ test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时�
   assert.ok(Date.now() - t0 >= 25, '应确实等待了排队超时');
 
   // 释放占位任务，清理槽位
-  releaseBlock();
-  await holder.catch(() => {});
+  releaseFns.forEach((release) => release());
+  await Promise.all(holders.map((h) => h.catch(() => {})));
 });
 
 test('runExclusiveVideo: 不看服务状态——没有任务在跑时立即执行，且不做任何服务探测', async () => {

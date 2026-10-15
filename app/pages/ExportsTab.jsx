@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Card, CardBody, Button } from '@heroui/react';
+import { Card, CardBody, Button, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
 import { useToast } from '../toast';
 
@@ -8,8 +8,9 @@ import { useToast } from '../toast';
 export default function ExportsTab({ projectId }) {
   const toast = useToast();
   const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
   const load = useCallback(() => api.get('/api/projects/' + projectId + '/exports').then((r) => setFiles(r.files || [])).catch((e) => toast.error(e.message)), [projectId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [load]);
 
   function fmtBytes(n) {
     if (!n && n !== 0) return '';
@@ -26,6 +27,17 @@ export default function ExportsTab({ projectId }) {
     document.body.appendChild(a);
     a.click();
     a.remove();
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardBody className="flex-row items-center justify-center gap-2.5 py-10">
+          <Spinner size="sm" />
+          <span className="muted">成片数据加载中…</span>
+        </CardBody>
+      </Card>
+    );
   }
 
   return (

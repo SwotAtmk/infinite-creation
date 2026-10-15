@@ -1,0 +1,76 @@
+{
+  "2": {
+    "inputs": {
+      "模型名称": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+      "运行设备": "cuda",
+      "精度": "fp16"
+    },
+    "class_type": "Qwen3TTSModelLoader",
+    "_meta": {
+      "title": "Qwen3 TTS 模型加载"
+    }
+  },
+  "47": {
+    "inputs": {
+      "filename_prefix": "audio/ComfyUI",
+      "audioUI": "",
+      "audio": [
+        "77",
+        0
+      ]
+    },
+    "class_type": "SaveAudio",
+    "_meta": {
+      "title": "Save Audio (FLAC) (DEPRECATED)"
+    }
+  },
+  "74": {
+    "inputs": {
+      "value": "你好呀，我是沈舒妍。喜欢蕾丝花边和蓬松的裙摆，总爱在洒满阳光的房间里慢慢度过温柔的日常。很高兴认识你。"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text (Multiline)"
+    }
+  },
+  "75": {
+    "inputs": {
+      "value": "16-18软甜清润的少女音，甜而不腻，温柔里透着精致的大小姐质感。"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text (Multiline)"
+    }
+  },
+  "77": {
+    "inputs": {
+      "文本": [
+        "74",
+        0
+      ],
+      "提示词": [
+        "75",
+        0
+      ],
+      "语言": "自动",
+      "自动卸载模型": false,
+      "最大生成Token数": 2048,
+      "seed": 875919724977829,
+      "语速": 1,
+      "批量模式": false,
+      "top_p": 0.8,
+      "top_k": 50,
+      "temperature": 0.8000000000000002,
+      "repetition_penalty": 1.1,
+      "启用高级采样配置": false,
+      "模型": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "Qwen3TTSVoiceDesign",
+    "_meta": {
+      "title": "Qwen3 TTS 声音设计"
+    }
+  }
+}

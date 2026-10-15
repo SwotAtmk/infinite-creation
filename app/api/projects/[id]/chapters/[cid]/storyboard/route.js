@@ -35,9 +35,10 @@ export async function PUT(req, { params }) {
   for (let i = 0; i < list.length; i++) {
     const { patch, errors } = pickShotFields(list[i]);
     if (errors.length) return NextResponse.json({ error: 'shots[' + i + ']：' + errors.join('；') }, { status: 400 });
+    // 章节由 URL 决定：body 里带的 chapter 一律覆盖，再校验（避免 body 传空 chapter 被误拒）
+    patch.chapter = chapter.title;
     const contentErrors = validateShotContent(patch, {});
     if (contentErrors.length) return NextResponse.json({ error: 'shots[' + i + ']：' + contentErrors.join('；') }, { status: 400 });
-    patch.chapter = chapter.title;
     if (patch.idx == null) patch.idx = base + i + 1;
     if (usedIdx.has(patch.idx)) {
       return NextResponse.json({ error: 'shots[' + i + ']：idx ' + patch.idx + ' 与 shots[' + usedIdx.get(patch.idx) + '] 重复——同一章内镜号必须唯一' }, { status: 400 });

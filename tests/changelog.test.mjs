@@ -687,3 +687,12 @@ test('idxTakenBy：按章判章内镜号占用（排除自身、非数字不拦�
   assert.equal(idxTakenBy(shots, c1.title, 'x'), null, '非数字不拦（由 pickShotFields 报 400）');
   Projects.remove(p.id);
 });
+
+test('validateShotContent：显式空 chapter 被拒（否则分镜从章节视图与统计里消失）', () => {
+  assert.deepEqual(validateShotContent({ chapter: '第1章', visual: 'x' }, {}), []);
+  assert.deepEqual(validateShotContent({ visual: 'x' }, {}), [], '省略 chapter 不在内容校验里报错（归属由调用方决定）');
+  for (const v of ['', '   ']) {
+    const errs = validateShotContent({ chapter: v, visual: 'x' }, {});
+    assert.ok(errs.some((e) => e.includes('chapter 不能为空')), JSON.stringify(errs));
+  }
+});

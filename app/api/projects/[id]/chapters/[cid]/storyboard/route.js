@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Shots, Chapters, Projects, pickShotFields, validateShotContent, withWriteContext, tx } from '@/lib/core/index.js';
+import { Shots, Chapters, Projects, pickShotFields, idxTakenBy, validateShotContent, withWriteContext, tx } from '@/lib/core/index.js';
 import { activeJobOf } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +26,8 @@ export async function PUT(req, { params }) {
 
   // replace:false 是「追加」：镜号要从该章现有最大 idx 往后接。否则新镜头从 1 重新编号，
   // 与旧镜头撞号——idx 是章内镜号，撞号会让 assemble_video 的排序结果不确定。
-  const base = replace ? 0 : Shots.list(id).filter((s) => s.chapter === chapter.title).reduce((m, s) => Math.max(m, Number(s.idx) || 0), 0);
+  const existing = replace ? [] : Shots.list(id).filter((s) => s.chapter === chapter.title);
+  const base = existing.reduce((m, s) => Math.max(m, Number(s.idx) || 0), 0);
 
   // 先整体校验再落库：任一条非法就整批拒绝，不留下写了一半的章节
   const picked = [];
@@ -40,6 +41,10 @@ export async function PUT(req, { params }) {
     if (patch.idx == null) patch.idx = base + i + 1;
     if (usedIdx.has(patch.idx)) {
       return NextResponse.json({ error: 'shots[' + i + ']：idx ' + patch.idx + ' 与 shots[' + usedIdx.get(patch.idx) + '] 重复——同一章内镜号必须唯一' }, { status: 400 });
+    }
+    // 追加模式下还要与「库里已有镜头」比：usedIdx 只看本批，跨批撞号会让成片顺序不确定
+    if (idxTakenBy(existing, chapter.title, patch.idx)) {
+      return NextResponse.json({ error: 'shots[' + i + ']：idx ' + patch.idx + ' 已被本章已有分镜占用——同一章内镜号必须唯一；追加时省略 idx 会自动接在章内最大镜号之后' }, { status: 400 });
     }
     usedIdx.set(patch.idx, i);
     picked.push(patch);

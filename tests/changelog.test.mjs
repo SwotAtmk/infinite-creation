@@ -17,7 +17,7 @@ const shared = await import('../lib/shared/index.js');
 const { createToolRuntime, runTool } = await import('../lib/agent/tools.js');
 const {
   Projects, Chapters, Shots, Assets, listChanges, countChanges, rollbackLogs,
-  withWriteContext, rawGet, pickShotFields, pickChapterFields, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
+  withWriteContext, rawGet, pickShotFields, pickChapterFields, idxTakenBy, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
 } = core;
 
 const findLog = (pid, pred) => listChanges(pid, { limit: 500 }).find(pred);
@@ -668,5 +668,22 @@ test('章节写入白名单：只认 title/novel/script，seq/status/music_* 当
   Chapters.update(ch.id, pickChapterFields({ script: '剧本正文' }).patch);
   assert.equal(Chapters.get(ch.id).script, '剧本正文');
   assert.equal(Chapters.get(ch.id).seq, seqBefore);
+  Projects.remove(p.id);
+});
+
+test('idxTakenBy：按章判章内镜号占用（排除自身、非数字不拦、跨章互不影响）', () => {
+  const p = mkProject('镜号占用项目');
+  const c1 = Chapters.list(p.id)[0];
+  const c2 = Chapters.create(p.id, { title: '第2章' });
+  const a = withWriteContext('POST /api/projects/:id/shots', () => Shots.create(p.id, { chapter: c1.title, idx: 1, visual: 'A' }));
+  const b = withWriteContext('POST /api/projects/:id/shots', () => Shots.create(p.id, { chapter: c1.title, idx: 2, visual: 'B' }));
+  const c = withWriteContext('POST /api/projects/:id/shots', () => Shots.create(p.id, { chapter: c2.title, idx: 1, visual: 'C' }));
+  const shots = Shots.list(p.id);
+  assert.equal(idxTakenBy(shots, c1.title, 1)?.id, a.id, '同章同号算占用');
+  assert.equal(idxTakenBy(shots, c1.title, '2')?.id, b.id, '字符串镜号按数字比');
+  assert.equal(idxTakenBy(shots, c1.title, 3), null, '空闲镜号不算占用');
+  assert.equal(idxTakenBy(shots, c1.title, 1, a.id), null, '排除自身（PATCH 保持原 idx 不该 400）');
+  assert.equal(idxTakenBy(shots, c2.title, 1)?.id, c.id, '别的章同号互不影响');
+  assert.equal(idxTakenBy(shots, c1.title, 'x'), null, '非数字不拦（由 pickShotFields 报 400）');
   Projects.remove(p.id);
 });

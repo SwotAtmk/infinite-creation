@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Shots, Chapters, Projects, pickShotFields, validateShotContent, withWriteContext } from '@/lib/core/index.js';
+import { Shots, Chapters, Projects, pickShotFields, idxTakenBy, validateShotContent, withWriteContext } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +29,12 @@ export async function POST(req, { params }) {
     return NextResponse.json({ error: '章节不存在：' + chapter }, { status: 400 });
   }
   patch.chapter = chapter;
+
+  // idx 是章内唯一键：显式给 idx 时也不能与本章已有分镜撞号（撞号会让成片顺序不确定）
+  if (patch.idx !== undefined) {
+    const dup = idxTakenBy(Shots.list(id), chapter, patch.idx);
+    if (dup) return NextResponse.json({ error: 'idx ' + patch.idx + ' 已被本章分镜占用——同一章内镜号必须唯一；省略 idx 可自动接在章内最大镜号之后' }, { status: 400 });
+  }
 
   return withWriteContext('POST /api/projects/:id/shots', async () => {
     const s = Shots.create(id, patch);

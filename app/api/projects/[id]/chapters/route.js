@@ -61,17 +61,19 @@ export async function POST(req, { params }) {
   });
 }
 
-// 拖拽排序：按传入 id 顺序重排章节 seq（seq 从 1 起，与 create 的 maxSeq+1 一致）
+// 拖拽排序：按传入 id 顺序重排章节 seq（领域校验在 lib/core 的 Chapters.reorder 里，
+// 这里只负责把 BAD_CHAPTER_ORDER 翻成 400）
 export async function PATCH(req, { params }) {
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   const ids = Array.isArray(body.ids) ? body.ids : [];
-  if (!ids.length) return NextResponse.json({ error: '缺少 ids' }, { status: 400 });
-  const valid = new Set(Chapters.list(id).map((c) => c.id));
-  if (ids.some((cid) => !valid.has(cid))) return NextResponse.json({ error: '章节不存在' }, { status: 400 });
   // 一次排序 = 一个批次：整批回滚即可还原排序前的 seq
   return withWriteContext('PATCH /api/projects/:id/chapters', async () => {
-    ids.forEach((cid, i) => Chapters.update(cid, { seq: i + 1 }));
-    return NextResponse.json({ ok: true });
+    try {
+      return NextResponse.json(Chapters.reorder(id, ids));
+    } catch (e) {
+      if (e && e.code === 'BAD_CHAPTER_ORDER') return NextResponse.json({ error: e.message }, { status: 400 });
+      throw e;
+    }
   });
 }

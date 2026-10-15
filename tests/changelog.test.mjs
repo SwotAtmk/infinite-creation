@@ -575,3 +575,20 @@ test('generate_assets_batch：only 值域与 schema 一致（写错不能假装�
   await assert.rejects(() => runTool(ctx, 'generate_assets_batch', { only: ['video'] }), /only 只能是 image \/ tts/);
   Projects.remove(p.id);
 });
+
+test('Chapters.reorder：必须给出完整 id 集合，否则 seq 撞号', () => {
+  const p = mkProject('章节排序项目');
+  const a = Chapters.list(p.id)[0].id;
+  const b = Chapters.create(p.id, { title: '第2章' }).id;
+  const c = Chapters.create(p.id, { title: '第3章' }).id;
+  // seq 是叙事顺序的唯一键：只给一部分会让没上榜的章节保留旧 seq
+  assert.throws(() => Chapters.reorder(p.id, [c]), /排序需要包含全部章节/);
+  assert.throws(() => Chapters.reorder(p.id, [a, a, b]), /重复/);
+  assert.throws(() => Chapters.reorder(p.id, [a, 'nope', b]), /章节不存在/);
+  assert.throws(() => Chapters.reorder(p.id, []), /缺少 ids/);
+  // 合法排序：整批重排
+  assert.equal(Chapters.reorder(p.id, [c, a, b]).count, 3);
+  assert.deepEqual(Chapters.list(p.id).map((x) => x.title), ['第3章', '第1章', '第2章']);
+  assert.deepEqual(Chapters.list(p.id).map((x) => x.seq), [1, 2, 3]);
+  Projects.remove(p.id);
+});

@@ -1,11 +1,14 @@
 // 共享常量与工具函数（无 React 依赖）
+import { VIDEO_ASPECT_RATIOS, VIDEO_RESOLUTION_CUSTOM, VIDEO_RESOLUTION_OPTIONS } from '../../lib/shared/index.js';
 
 export const CATEGORIES = [
   ['character', '人物'], ['scene', '场景'], ['prop', '道具'], ['costume', '服装'],
   ['voice', '语音'], ['music', '音乐'], ['sfx', '音效'], ['video', '视频'], ['other', '其他'],
 ];
-export const VIDEO_RESOLUTIONS = [['360P', '360P'], ['480P', '480P'], ['720P', '720P'], ['768P', '768P'], ['custom', '自定义宽高']];
-export const VIDEO_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '9:16', '16:9', '21:9'];
+// 分辨率 / 宽高比的取值域统一来自 lib/shared（工作流映射表与写入校验共用同一份），
+// 这里只做「值 → 显示名」的展示层映射，避免下拉与映射表各写一份而彼此漂移。
+export const VIDEO_RESOLUTIONS = VIDEO_RESOLUTION_OPTIONS.map((v) => [v, v === VIDEO_RESOLUTION_CUSTOM ? '自定义宽高' : v]);
+export const VIDEO_RATIOS = VIDEO_ASPECT_RATIOS;
 export const STYLE_PRESETS = ['真人写实', '动漫', '国漫', '日系动漫风', '卡通', 'Q版卡通风', '国风玄幻'];
 export const STYLE_CUSTOM = '自定义风格';
 export const STYLE_OPTIONS = [...STYLE_PRESETS, STYLE_CUSTOM];

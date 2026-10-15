@@ -391,3 +391,17 @@ test('章节进度摘要：分镜「生成中」是 generating（历史 running 
   assert.deepEqual(chapterStats(p.id, '第1章'), { total: 1, done: 1, status: 'done' });
   Projects.remove(p.id);
 });
+
+test('叙事顺序：章节标题重复时分镜不翻倍（按标题取最小 seq）', () => {
+  const p = mkProject('章名重复项目');
+  const s1 = Shots.create(p.id, { chapter: '第1章', visual: 'a' });
+  Chapters.create(p.id, { title: '第2章' });
+  const s2 = Shots.create(p.id, { chapter: '第2章', visual: 'b' });
+  // 模拟历史脏数据：直接塞一个与「第1章」同名的章节（Chapters.create 现在会拒绝重名）
+  const t = Date.now();
+  core.getDb().prepare('INSERT INTO chapters (id,project_id,title,novel,script,seq,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run('dup-' + p.id, p.id, '第1章', '', '', 9, 'pending', t, t);
+  const order = Shots.listInNarrativeOrder(p.id).map((x) => x.id);
+  assert.deepEqual(order, [s1.id, s2.id], '同名章节不得让同一条分镜在成片里出现两次');
+  Projects.remove(p.id);
+});

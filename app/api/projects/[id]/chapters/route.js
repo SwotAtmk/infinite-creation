@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
-import { Chapters, Shots, Projects, extractFrame, resolveProjectPath } from '@/lib/core/index.js';
+import { Chapters, Shots, Projects, extractFrame, resolveProjectPath, withWriteContext } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,8 +49,10 @@ export async function POST(req, { params }) {
   const body = await req.json().catch(() => ({}));
   // id 未校验就 create，会留下挂在不存在项目下的孤儿章节行（DB 垃圾）；与 /run、/stages 一致先确认项目存在
   if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
-  const c = Chapters.create(id, body || {});
-  return NextResponse.json(c);
+  return withWriteContext('POST /api/projects/:id/chapters', async () => {
+    const c = Chapters.create(id, body || {});
+    return NextResponse.json(c);
+  });
 }
 
 // 拖拽排序：按传入 id 顺序重排章节 seq（seq 从 1 起，与 create 的 maxSeq+1 一致）
@@ -61,6 +63,9 @@ export async function PATCH(req, { params }) {
   if (!ids.length) return NextResponse.json({ error: '缺少 ids' }, { status: 400 });
   const valid = new Set(Chapters.list(id).map((c) => c.id));
   if (ids.some((cid) => !valid.has(cid))) return NextResponse.json({ error: '章节不存在' }, { status: 400 });
-  ids.forEach((cid, i) => Chapters.update(cid, { seq: i + 1 }));
-  return NextResponse.json({ ok: true });
+  // 一次排序 = 一个批次：整批回滚即可还原排序前的 seq
+  return withWriteContext('PATCH /api/projects/:id/chapters', async () => {
+    ids.forEach((cid, i) => Chapters.update(cid, { seq: i + 1 }));
+    return NextResponse.json({ ok: true });
+  });
 }

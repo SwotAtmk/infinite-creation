@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Projects, ReferenceImages, Assets, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger } from '@/lib/core/index.js';
+import { Projects, ReferenceImages, Assets, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger, withWriteContext } from '@/lib/core/index.js';
 import { runInlineJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
 import { PROJECT_ASSET_SUBDIRS } from '@/lib/shared/index.js';
@@ -96,19 +96,23 @@ export async function POST(req, { params }) {
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, buf);
 
-  let asset = null;
-  if (mode === 'library') {
-    asset = Assets.create(id, { category: assetCategory, name: baseName, description: finalDescription });
-    Assets.update(asset.id, { image_path: rel, source: 'uploaded', status: 'done' });
-  }
-  const reference = ReferenceImages.create(id, {
-    chapter_id,
-    asset_id: asset ? asset.id : '',
-    name: baseName,
-    image_path: rel,
-    mode,
-    category: assetCategory,
-    description: finalDescription,
+  // 素材/参考图两条 DB 写入放进同一写上下文：整批可回滚（文件不随回滚删除，见 changelog 说明）
+  const { asset, reference } = await withWriteContext('POST /api/projects/:id/references', async () => {
+    let asset = null;
+    if (mode === 'library') {
+      asset = Assets.create(id, { category: assetCategory, name: baseName, description: finalDescription });
+      Assets.update(asset.id, { image_path: rel, source: 'uploaded', status: 'done' });
+    }
+    const reference = ReferenceImages.create(id, {
+      chapter_id,
+      asset_id: asset ? asset.id : '',
+      name: baseName,
+      image_path: rel,
+      mode,
+      category: assetCategory,
+      description: finalDescription,
+    });
+    return { asset, reference };
   });
   return NextResponse.json({ reference, asset });
 }

@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Assets, Projects } from '@/lib/core/index.js';
+import { Assets, Projects, withWriteContext } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,5 +17,5 @@ export async function POST(req, { params }) {
   if (!name) return NextResponse.json({ error: '缺少 name' }, { status: 400 });
   // 同 chapters POST：先确认项目存在，避免写出挂在不存在项目下的孤儿素材行
   if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
-  return NextResponse.json(Assets.create(id, { category, name, description }));
+  return withWriteContext('POST /api/projects/:id/assets', async () => NextResponse.json(Assets.create(id, { category, name, description })));
 }

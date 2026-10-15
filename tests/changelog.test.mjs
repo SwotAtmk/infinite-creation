@@ -501,3 +501,18 @@ test('自动换装：同章第二次换装事件不被首次结果误判为「�
   assert.match(outfit.detail, /2 套/, '第二次事件不能被首次自动绑定的服装当成「显式引用」而跳过');
   Projects.remove(p.id);
 });
+
+test('章节引用统一支持标题或 id（generate_chapter_videos / assemble_video）', async () => {
+  const p = mkProject('章节引用项目');
+  const c2 = Chapters.create(p.id, { title: '第2章' });
+  // 第2章放一条「已出片且提示词未改过」的分镜：不需要重渲染，用来观察章节解析结果
+  const s = Shots.create(p.id, { chapter: '第2章', visual: '画面' });
+  Shots.update(s.id, { status: 'done', video_path: 'shots/v.mp4', video_prompt: 'p', video_prompt_used: 'p' });
+  const ctx = createToolRuntime({ projectId: p.id });
+  const r = JSON.parse(await runTool(ctx, 'generate_chapter_videos', { chapter: c2.id }));
+  assert.equal(r.total, 1, '传章节 id 必须解析到该章（否则会静默返回「本章没有分镜」）');
+  assert.equal(r.generated, 0);
+  await assert.rejects(() => runTool(ctx, 'generate_chapter_videos', { chapter: '第9章' }), /章节不存在/);
+  await assert.rejects(() => runTool(ctx, 'assemble_video', { chapter: '第9章' }), /章节不存在/);
+  Projects.remove(p.id);
+});

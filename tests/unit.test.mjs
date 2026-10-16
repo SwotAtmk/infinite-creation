@@ -14,7 +14,7 @@ import {
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
@@ -457,6 +457,24 @@ test('短名串扰：音色归属与分镜面板都走 nameMatches（源码守�
   const shots = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ShotsTab.jsx'), 'utf8');
   assert.ok(/nameMatches\(sp, c\.name\)/.test(shots), 'ShotsTab 的说话角色判定必须与后端同口径');
   assert.ok(!/includes\(c\.name\)/.test(shots), 'ShotsTab 不应再用 includes 双向包含匹配');
+});
+
+test('textMentions: 短名不被同场更长角色名吞掉（换装/年龄变体归属）', () => {
+  const names = ['小明', '明'];
+  assert.equal(textMentions('小明换上新衣', '小明', names), true);
+  assert.equal(textMentions('小明换上新衣', '明', names), false);   // 唯一一次「明」是「小明」的一部分
+  assert.equal(textMentions('明换上新衣', '明', names), true);      // 单独出现，确实提到
+  assert.equal(textMentions('小明与明都换了衣裳', '明', names), true); // 有一处没被覆盖
+  assert.equal(textMentions('换上新衣', '明', names), false);
+  assert.equal(textMentions('明：好的', '明', ['小明']), true);
+  assert.equal(textMentions('', '明', names), false);
+  assert.equal(textMentions('小明换上新衣', '', names), false);
+});
+
+test('短名串扰：换装/年龄归属都走 textMentions（源码守卫）', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'tools.js'), 'utf8');
+  assert.ok(!/charIds\.length === 1 \|\| text\.includes\(char\.name\)/.test(src), 'tools.js 不应再用 text.includes(char.name) 判角色归属');
+  assert.equal((src.match(/textMentions\(text, char\.name, charNames\)/g) || []).length, 2, '换装与年龄两条归属路径都必须用 textMentions');
 });
 
 test('extractJson: 带围栏与噪音', () => {

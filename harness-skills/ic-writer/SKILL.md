@@ -78,7 +78,7 @@ node -e "const fs=require('fs');fetch('http://127.0.0.1:4600/api/projects/PID/ch
 | GET | `/api/health` | — | 探活 |
 | GET | `/api/projects` | — | 项目列表（id/name/status/计数） |
 | POST | `/api/projects` | `{name, idea?, style?, novel?, video_resolution?, video_aspect_ratio?, target_duration?}` | **新建项目**；自动创建「第1章」并承载 `novel` |
-| GET / PATCH | `/api/projects/:id` | PATCH 可改 `name/idea/style/novel/video_*/target_duration/enable_bgm/context` | 项目属性 |
+| GET / PATCH | `/api/projects/:id` | PATCH 只认 `name/novel/idea/style/video_resolution/video_aspect_ratio/video_width/video_height/target_duration/enable_bgm`，其余字段（含 `status`、`context`）一律 400 | 项目属性。`status` 是流水线状态、`context` 走下面的 `PUT …/context`（同时落盘），都不从这里写 |
 | PUT | `/api/projects/:id/context` | `{key:'bible'\|'style'\|'continuity', content}` 或 `{bible?, style?, continuity?}` | 人物圣经/风格/连续性（同时落盘 `context/*.md`） |
 | GET | `/api/projects/:id/chapters` | — | 章节列表（含 `script`、分镜计数、生成状态） |
 | POST | `/api/projects/:id/chapters` | `{title?, novel?, script?}` | **新增章节**（小说原文按章写） |

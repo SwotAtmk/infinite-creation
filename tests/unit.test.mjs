@@ -10,7 +10,8 @@ import {
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks,
-  freeComfy, checkComfyUI, generate, queuePrompt, getHistory, interrupt, downloadOutput, getObjectInfo, resolveHardwareConfig, HW_PRESETS, loadConfig,
+  freeComfy, checkComfyUI, generate, queuePrompt, getHistory, interrupt, deleteQueued, downloadOutput, getObjectInfo, resolveHardwareConfig, HW_PRESETS, loadConfig,
+  runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
 import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl } from '../lib/shared/index.js';
@@ -998,4 +999,73 @@ test('guardToolCall: 路径穿越仍按路径类参数拦截（与正文无关�
   assert.equal(guardToolCall('edit_asset_image', { file_path: '\\\\server\\share\\x' }).blocked, true);
   // 路径穿越只在路径类参数上判：普通文本里出现 ../ 不算（例如正文提及相对路径）
   assert.equal(guardToolCall('set_storyboard', { shots: [{ visual: '她从 ../ 的岔路口走来' }] }).blocked, false);
+});
+
+// ==================== 第 6 轮审计：停止语义 ====================
+// generate 会开 WebSocket 订阅 ComfyUI 事件；单测里没有 ComfyUI，用哑实现顶掉（只用它的 close/onmessage）。
+class DummyWS { constructor() {} close() {} set onmessage(_) {} }
+
+test('generate：已停止时不再提交任务（提交出去的项目 /interrupt 管不到，会被 ComfyUI 挨个执行）', async () => {
+  const calls = [];
+  const origFetch = globalThis.fetch, origWS = globalThis.WebSocket;
+  globalThis.WebSocket = DummyWS;
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url: String(url), method: opts?.method || 'GET', body: String(opts?.body || '') });
+    return new Response('{"prompt_id":"pid-pre"}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(() => generate('http://127.0.0.1:9', {}, { isAborted: () => true }), /任务已停止/);
+    assert.equal(calls.filter((c) => c.url.includes('/prompt')).length, 0, '已停止就不该再 POST /prompt');
+  } finally {
+    globalThis.fetch = origFetch;
+    globalThis.WebSocket = origWS;
+  }
+});
+
+test('generate：运行中被停止 → 既打断当前项，也删掉自己还没执行的队列项', async () => {
+  const calls = [];
+  const origFetch = globalThis.fetch, origWS = globalThis.WebSocket;
+  globalThis.WebSocket = DummyWS;
+  let aborted = false;
+  globalThis.fetch = async (url, opts) => {
+    const u = String(url);
+    calls.push({ url: u, method: opts?.method || 'GET', body: String(opts?.body || '') });
+    if (u.includes('/prompt')) return new Response('{"prompt_id":"pid-run"}', { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.endsWith('/queue') && (opts?.method || 'GET') === 'GET') return new Response('{"queue_running":[],"queue_pending":[]}', { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    // 提交成功那一刻就置位停止标记：走「提交后立即检查 → abort()」这条路
+    await assert.rejects(
+      () => generate('http://127.0.0.1:9', {}, { isAborted: () => aborted, onSubmitted: () => { aborted = true; }, pollMs: 5 }),
+      /任务已停止/,
+    );
+    assert.ok(calls.some((c) => c.url.endsWith('/interrupt')), '必须打断正在执行的那一张');
+    const del = calls.find((c) => c.url.endsWith('/queue') && c.method === 'POST');
+    assert.ok(del, '/interrupt 只打断当前项，排队项必须按 prompt_id 删掉');
+    assert.match(del.body, /pid-run/);
+  } finally {
+    globalThis.fetch = origFetch;
+    globalThis.WebSocket = origWS;
+  }
+});
+
+test('deleteQueued：空 id 不发请求；有 id 才 POST /queue {"delete":[...]}（ComfyUI server.py post_queue）', async () => {
+  const calls = [];
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url: String(url), method: opts?.method || 'GET', body: String(opts?.body || '') });
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await deleteQueued('http://127.0.0.1:9', []);
+    assert.equal(calls.length, 0, '没有 id 时不该打 ComfyUI');
+    await deleteQueued('http://127.0.0.1:9', ['a', '', null, 'b']);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'POST');
+    assert.match(calls[0].url, /\/queue$/);
+    assert.deepEqual(JSON.parse(calls[0].body), { delete: ['a', 'b'] });
+  } finally {
+    globalThis.fetch = origFetch;
+  }
 });

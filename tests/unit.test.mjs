@@ -455,6 +455,12 @@ test('参考图白名单：前端选择器与后端校验共用一份（含无 M
   assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
 });
 
+test('server：/ws 的客户端畸形帧不能让整个进程退出（源码守卫）', () => {
+  const s = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/ws\.on\('error'/.test(s), "ws 必须挂 'error' 监听：畸形帧会让 ws emit('error')，无人接管时抛 uncaughtException、进程直接退出");
+  assert.ok(/socket\.on\('error'/.test(s), "升级握手中途断开的 raw socket 'error' 也要兜住（ECONNRESET）");
+});
+
 test('界面小修：分镜空态按筛选结果、章节游标记 id、参考图上传按条摘除（源码守卫）', () => {
   const shots = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ShotsTab.jsx'), 'utf8');
   assert.ok(/!shown\.length && <p/.test(shots), '分镜空态必须按筛选后的 shown 判断');

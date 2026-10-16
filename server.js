@@ -118,6 +118,9 @@ app.prepare().then(() => {
   // 导致浏览器报 “WebSocket connection to .../_next/webpack-hmr failed”。
   const upgradeHandler = app.getUpgradeHandler();
   server.on('upgrade', (req, socket, head) => {
+    // 客户端在升级握手中途断开（ECONNRESET）会让 raw socket 触发 'error'：没有监听器时
+    // EventEmitter 直接抛出，同样杀进程。这里先兜住，业务错误由下面的 ws 监听器负责。
+    socket.on('error', () => {});
     // 同上：畸形 URL（如 `//`）会在 new URL 抛异常，而这里是 upgrade 事件回调，
     // 抛出去同样无人接管、直接杀进程。升级请求容错更简单：直接断开。
     let url;
@@ -129,6 +132,12 @@ app.prepare().then(() => {
     }
     if (url.pathname === '/ws') {
       wss.handleUpgrade(req, socket, head, (ws) => {
+        // ws 的 'error' 必须有监听器：客户端发一个畸形帧（未掩码 / 非法 opcode / 非法 UTF-8 /
+        // 超 maxPayload）就会触发它，而这里是「无订阅者的 emit」——全仓没有 wss.on('connection')，
+        // ws 对象上没有任何业务监听器，'error' 抛出即 uncaughtException。
+        // 实测（生产模式 `npm start`，无 Next 的全局兜底）：一个未掩码帧就能让整个进程退出，
+        // 正在跑的任务全丢、jobs 永远停在 running。dev 下只是被 Next 的兜底接住、日志里留一行。
+        ws.on('error', (e) => logger.warn('WebSocket 客户端异常，已断开该连接：' + ((e && e.message) || e)));
         wss.emit('connection', ws, req);
       });
     } else if (url.pathname.startsWith('/_next/')) {

@@ -792,3 +792,14 @@ test('回滚：不存在的 log_id/batch_id 报错，不假装「回滚成功」
   Projects.remove(p.id);
   Projects.remove(other.id);
 });
+
+// ==================== 第 3 轮审计：写入契约 ====================
+test('素材分类：值域外的分类必须拒绝（否则界面与批量生成都扫不到这一行）', () => {
+  const p = mkProject('素材分类项目');
+  assert.throws(() => Assets.create(p.id, { category: '不存在的分类', name: 'x' }), /素材分类不存在/);
+  assert.equal(Assets.list(p.id).length, 0);
+  const a = Assets.create(p.id, { category: 'other', name: 'x' });
+  assert.equal(a.category, 'other');
+  Projects.remove(p.id);
+});
+

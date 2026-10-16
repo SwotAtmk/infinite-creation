@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import { ReferenceImages, Assets, resolveProjectPath, withWriteContext } from '@/lib/core/index.js';
+import { ASSET_CATEGORY_IDS } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,8 @@ export async function PATCH(req, { params }) {
 
   const mode = body.mode === 'library' ? 'library' : body.mode === 'reference' ? 'reference' : ref.mode;
   const category = body.category !== undefined ? String(body.category || 'other') : ref.category;
+  // 分类值域（素材库按 category 过滤；切到素材库时会用它建资产）
+  if (!ASSET_CATEGORY_IDS.includes(category)) return NextResponse.json({ error: '素材分类不存在：' + category }, { status: 400 });
   const description = body.description !== undefined ? String(body.description || '') : ref.description;
 
   return withWriteContext('PATCH /api/projects/:id/references/:rid', async () => {

@@ -1083,6 +1083,27 @@ test('素材分类：值域外的分类必须拒绝（否则界面与批量生�
   Projects.remove(p.id);
 });
 
+test('服装/年龄变体：写入端必须带 parent_id（无父变体在生成时被静默忽略）', () => {
+  const p = mkProject('变体父项目');
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  // 无父变体一律拒收：旧行为是写进库（素材库里看得见、分镜能引用、生成时被 refs.js 忽略）
+  assert.throws(() => Assets.create(p.id, { category: 'costume', name: '城里旧衣' }), /必须绑定角色/);
+  assert.throws(() => Assets.create(p.id, { category: 'age', name: '小时候' }), /必须绑定角色/);
+  assert.equal(Assets.list(p.id).filter((x) => x.category === 'costume' || x.category === 'age').length, 0);
+  // 带父变体正常落库，且 parent_id 真的写进去（路由与换装/年龄工具都按它映射角色）
+  const c = Assets.create(p.id, { category: 'costume', name: '城里旧衣', parent_id: ch.id });
+  assert.equal(c.parent_id, ch.id);
+  assert.equal(Assets.update(c.id, { name: '进城旧衣' }).name, '进城旧衣');
+  // 改分类也不能造出无父变体（PATCH …/assets/:aid 的 category 可编辑）
+  assert.throws(() => Assets.update(ch.id, { category: 'costume' }), /必须绑定角色/);
+  assert.equal(Assets.get(ch.id).category, 'character');
+  // 清空 parent_id 同样被拒
+  assert.throws(() => Assets.update(c.id, { parent_id: '' }), /必须绑定角色/);
+  // 非变体分类不受影响（回归：character/scene 等不带 parent_id 依旧可写）
+  assert.equal(Assets.update(ch.id, { category: 'scene' }).category, 'scene');
+  Projects.remove(p.id);
+});
+
 test('参考素材上传：走渲染后端分派层（RunningHub 下必须传到云端并用平台 fileName）', async () => {
   const p = mkProject('参考素材后端分派项目');
   const abs = path.join(projectDir(p.id), 'assets/character/x.png');

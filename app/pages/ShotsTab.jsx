@@ -318,6 +318,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
           mode={materialPicker.mode}
           replaceAssetId={materialPicker.replaceAssetId}
           assignedIds={asArr((shots.find((s) => s.id === materialPicker.shotId) || {})[MATERIAL_FIELD[materialPicker.category]])}
+          charIds={asArr((shots.find((s) => s.id === materialPicker.shotId) || {}).character_ids)}
           onPick={applyMaterial}
           onCancel={() => setMaterialPicker(null)}
         />

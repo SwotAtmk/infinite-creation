@@ -14,7 +14,7 @@ import {
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
@@ -431,6 +431,24 @@ test('dialogueSpeakerNames: 解析说话人 + 约束常量', () => {
   assert.deepEqual(dialogueSpeakerNames('小明:现在是3:30了'), ['小明']);
   assert.equal(MAX_SPEAKERS_PER_SHOT, 2);
   assert.equal(MAX_AUDIO_REFS, 3);
+});
+
+test('isVariantAssetCategory: 只有服装/年龄算「挂在角色下的变体」', () => {
+  assert.equal(isVariantAssetCategory('costume'), true);
+  assert.equal(isVariantAssetCategory('age'), true);
+  assert.deepEqual(VARIANT_ASSET_CATEGORIES, ['costume', 'age']);
+  // 其他分类都不是变体（不该被要求 parent_id）
+  for (const c of ['character', 'scene', 'prop', 'voice', 'music', 'sfx', 'video', 'other']) {
+    assert.equal(isVariantAssetCategory(c), false, c + ' 不应被当成变体');
+    assert.ok(VARIANT_ASSET_CATEGORIES.includes(c) === false);
+  }
+});
+
+test('assets POST：服装/年龄变体强制 parent_id 且必须指向角色（源码守卫）', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'assets', 'route.js'), 'utf8');
+  assert.ok(/isVariantAssetCategory\(category\)/.test(src), '写入端必须按分类判定变体');
+  assert.ok(/parent\.category !== 'character'/.test(src), 'parent_id 必须校验指向角色素材');
+  assert.ok(/parent_id: parentId/.test(src), 'parent_id 必须真的落库（原来被丢弃）');
 });
 
 test('nameMatches: 规范化后精确相等（短名不被同场更长角色名误命中）', () => {

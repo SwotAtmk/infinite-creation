@@ -418,3 +418,56 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 一处如实记录**未驱动浏览器**：弹窗/游标/toast 这类界面行为用「源码守卫 + HEAD 版反证 + 页面编译 200」锁定，没有用真实浏览器点按验证（本机只有 dev server，无 E2E 浏览器驱动）。
 
 
+
+## 十七、第九～十轮：把「内容键 / 归属键两端口径不一致」与「写入端静默无效」两类收口（2026-10-16，dev7）
+
+前八轮把外部写入 API、生成链路、停止语义、界面假成功过完。第九、十轮换两个角度：（a）**同一份数据在「写入端」与「消费端」口径不一致**——写进去的值在消费时被忽略或误用（内容键、归属键、产物字段）；（b）**写入端静默无效**——harness / LLM 工具 / 界面三方都能写的内容，写进去之后生成时被静默忽略，写入方读回去却以为生效了。
+
+### 第九轮修掉的（16 个原子提交）
+
+| 提交 | 级别 | 问题 | 修复 |
+|------|------|------|------|
+| `fb13089` | 高 | `/ws` 的客户端畸形帧（非 UTF-8 / 非 JSON）会在 `WebSocketServer` 上抛 `error`，而 `server.js` 没有监听它 → **未捕获 error 直接让整个进程退出**，把 dev 实例和正在跑的任务一起带走 | 给服务端与每条连接加 `error` 监听，只关掉那条坏连接（`malformed-probe` 守着） |
+| `d5e1ccb` | 中 | `/files` 的 Range 解析把后缀范围 `bytes=-N` 当成 `start=-N` → 返回**开头** N 字节而不是末尾 N 字节（播放器/下载器校验文件尾部时拿到错数据、静默出坏片） | 后缀范围单独按 `size - N` 处理，并收敛非法区间 |
+| `7563b04` | 高 | 参考图上传/编辑路径能建出**无父变体**（服装/年龄）：db 层守卫抛的 `BAD_VARIANT_PARENT` 在路由里没翻 400 → 500；且上传路径在抛错前**已把文件落盘**（半截写入） | 前置校验分类（变体必须带 `parent_id` 且指向本项目角色）+ 把守卫码翻 400 + 校验放在落盘之前 |
+| `5a76c43` | 中 | `textMentions`：canonical 名带身份后缀（如「林默（少年）」）时短名仍被判成「被提到」，换装/年龄归属套到错角色上 | 归属判定同时收原名与规范化名 |
+| `3d4c956` | 低 | `isReferenceImageName('.png')`：只有扩展名、没有主名的名字被当图片放行 | 要求主名非空 |
+| `fb494c8` | 中 | 运行日志页：完整日志随 `jobs` 数组引用被反复重取（每次轮询重取全部日志），过期的响应还会覆盖新状态 | 按 job 缓存已取过的完整日志 + 丢弃过期响应 |
+| `2fd4a3b` | 中 | 设置页配置拉取失败时永久停在「配置加载中…」（没有任何错误出口） | 显示失败原因，成功时清空 |
+| `8f21311` | 高 | `resolveHardwareConfig`：配置段被写成非对象（字符串 / 数组 / 数字）时把非对象原样返回 → 设置页白屏、全站 500 | 五段配置「非对象一律退回默认」 |
+| `d33f54b` | 中 | `skill-engine.scanSkills` 不清理陈旧行：删掉 `skills/<dir>` 后技能表里仍留着这条（界面列着、点开加载不出内容） | 扫描时清理已消失目录的行 |
+| `1a00179` | 中 | 回滚「章节新建」时按 `log.before.title` 级联删分镜 → 章节**改过名**后级联漏删，留下孤儿分镜 | 级联删用**当前行**的 title |
+| `f3c29a4` | 中 | 分镜素材选择器列出了全部服装/年龄变体（可跨角色绑定，生成时按 `parent_id` 找不到本镜角色 → 静默不用） | 选择器只列、只绑「本镜角色」的变体 |
+| `84e2480` | 高 | 工具 schema 的 `create_asset` / `generate_asset_from_reference` 没暴露 `parent_id` → 模型想建变体只能写出无父变体，撞 db 层 `BAD_VARIANT_PARENT`，且那是**模型看不懂的 DB 错误**、无法补救 | schema 补 `parent_id`，新增 `resolveAssetParent`（变体必须指向本项目角色），工具侧给出可读指引 |
+| `ad4aea2` | 低 | 界面素材分类下拉漏了 `age`（与 `ASSET_CATEGORIES` 漂移） | 从 `ASSET_CATEGORIES` 单源派生 |
+| `c5e0b11` | 中 | 自定义分辨率的宽高没有区间校验：`width=5` / `height=99999` 能落库，直到提交工作流才炸 | 区间校验**下沉到 db 层**（`BAD_PROJECT_DIM`）：`0 = 未设置`仍可写，非 0 必须 64~4096 |
+| `33e3a8e` | 中 | 非变体分类带了 `parent_id`：写上去只会被 `Assets.remove` 当子变体级联删（删角色时道具一起没）、被 `usageOf` 计成 children（删除确认里冒出假「子变体」） | db 层 `BAD_ASSET_PARENT` + assets POST/PATCH、references、Agent 工具四入口一致拦（`update` 只判本次主动写 `parent_id`） |
+| `ffb7b00` | 中 | `refs.js` 对白说话人匹配不上本镜角色时**静默丢音色**（用户只看到「这一镜没有声音」） | 不改判定（拆逗号会误伤台词正文），只把静默变可观测：`logger.warn` + 返回 `unmatchedSpeakers`，由 `generateShotVideo` 上报运行日志 |
+
+### 第十轮修掉的（3 个原子提交）
+
+| 提交 | 级别 | 问题 | 修复 |
+|------|------|------|------|
+| `fb6bc25` | 中 | **改分类离开变体分类**不清 `parent_id`：服装改成「道具」后父指针留在行上 → 这条已不是变体的素材被 `Assets.remove` 当子变体级联删、被 `usageOf` 计成 children | `Assets.update` 在**本次主动写** `category` 且离开变体分类时清空 `parent_id`（只判主动写的字段，存量脏数据不连累「改个名字」这类无关编辑；变体之间互改保留父；非变体→变体仍受「必须有父」拦截） |
+| `ea10e67` | 高 | **删项目不停本项目活动任务**：任务行随 `Projects.remove` 一起删掉，而进程里那条任务不会停（停止注册表按 jobId 在内存里）→ 它继续出图/出片，把 chapters/shots/assets 行插回一个「已经不存在的项目」——项目页与任务列表都没了，用户既看不到也停不掉，只剩占显存、孤儿行，还会把项目目录重建出来 | 先 `stopJob`（`running` **与** `queued`，排队中的立即出队，否则还会被调度起来跑），执行中的再主动 `interruptTask` 一次（与 `/stop`、`/cancel`、删除单个任务**同一口径**），最后 `Projects.remove` + 删目录，并回报 `stopped` 列表 |
+| `a07ec71` | 中 | **分镜 `*_ids` 绑定写入端不校验**：悬空 id（素材被删后界面每次保存又整条写回、用户没有任何入口删掉它）、错类 id（场景塞进 `character_ids`）、跨项目 id 原样落库，生成时被 `refs.js` 静默忽略（少一份参考图/音色），harness 读回去却像绑上了 | db 写入层（`Shots.create`/`update` 共用一处 `normalizeShotRefs`）按「本项目素材 + 字段对应分类」（新增 `SHOT_REF_FIELD_CATEGORIES`，`audio_ids` 复用 `AUDIO_ASSET_CATEGORIES`）归一化，丢弃的 id 打 `logger.warn`。**丢而不抛**：界面保存写的是整条数组，行里一旦有悬空 id（历史的/回滚回来的/删素材造成的），严格拒绝会让那一镜之后再也绑不上任何素材；只处理本次主动写的字段，回滚走原生 SQL 不受影响 |
+
+### 本轮核对过、判定「不改」的项
+
+- **`seed` 是「可写内容字段」与「渲染产物」两重身份**（取证脚本 `ic-r10-seed-evidence.mjs` 三条实测）：① 只改 `seed` 的 `PATCH` **不产生变更日志**（`VOLATILE.shot` 含 `seed`）→ 那个批次回滚撤不掉这次写入；② 同批连带改了内容字段时**有**日志，但回滚只还原内容字段、`seed` 被当产物保留（`buildRestoreRow`）；③ 渲染路径（`agent:` 工具）刷 `seed/status/video_path` 不记日志——这正是 `VOLATILE` 存在的理由。而渲染前 `tools.js` 会 `Shots.update(… seed: randomSeed() …)` **无条件重写**：写在白名单里的 `seed` 对出片没有任何影响。**判定：属产品决策，本轮不改**。要一致只有两条路：把 `seed` 从写入白名单里去掉（与 Skill 文档「分镜可写字段」冲突，需用户确认），或把它从 `VOLATILE` 拆出（渲染每次都会多一条整行日志，且要区分「外部写」与「渲染写」两套语义）。留待用户定。
+- **列表类 GET 对不存在的项目返回 200 + 空集合**（`/assets`、`/shots`、`/chapters`、`/context`、`/references`、`/jobs`），详情类与项目级读接口 404。全库一致（不是 `context` 独有），且外部写入方写之前都会被写接口的 404 拦住 → 不改。
+- **`Assets.remove` 不清理分镜里的悬空绑定**（删角色后 shots 仍留着那个 id）：消费侧（`refs.js`、界面、生成）本来就把查不到的 id 当「没绑」，写入侧现已归一化（`a07ec71`）→ 不再额外在删除端改别的表（否则删一个素材会连带写一批 shot 行；回滚也要跟着成批恢复）。
+- **`refs.js` 的 `hasImage` 只看人物/场景/道具的**原图**，不看服装/年龄变体的图**：要触发误报得同时满足「角色没有 `image_path`」且「它的变体有图」，而变体是图生图产物（必须拿角色图作参考才生成得出来）→ 实际上不可达，不改（避免为不可达状态改判定）。
+- **素材名可以是纯空白**（`POST /assets` 只查 `!name`）：素材名不是业务键（分镜按 id 绑定、章节才按标题归属），空白名只影响观感 → 不改。
+- 沿用前面几轮的判定（不再重复理由）：`PUT /api/config` 覆盖语义、`shots/zip` 空集 500、`mergeVideos` 的 volume、`music/apply` 路由层不校验 `music_id`、章节/分镜 PATCH 无 `activeJobOf`、`comfyui/test`+`llm/test` 的 SSRF 面、`DELETE /references/:rid` 连带删关联素材、`withRetry` 死代码、`abortFlags` 只增不减、`installSkillsFromZip` 不回滚、JSON 请求体无显式上限、`GET /files/*` 不限体积、回滚不删磁盘媒体、`/export` 与整片合并不响应停止、`withWriteContext` 不是数据库事务（因此只在能前置校验的地方前置校验）。
+- 仍然成立的一条**有意为之**：不在写入端强制「变体的父角色必须在本镜」，只在前端选择器收敛可选范围（`f3c29a4`）。
+
+### 第九～十轮验证口径
+
+- 单测：`node --test "tests/*.test.mjs"` **176/176**（第八轮 155 → 第九轮 +18 → 第十轮 +3）。新增用例覆盖：`Assets.update` 离开变体分类清父（含变体互改保父、非变体→变体仍拦、只改名字不动存量）、项目删除的「先停任务再删」（源码守卫：`stopJob` 必须早于 `Projects.remove`、`running|queued` 都要停、执行中要 `interruptTask`、响应带 `stopped`）、分镜绑定归一化（错类/不存在/跨项目丢弃、只改别的字段不动存量、`usageOf` 的 `audio_ids` 引用改用真实语音素材）。
+- 反向验证（撤掉修复即翻红）：`Assets.update` 的 `m.parent_id = ''` 改成 `void 0` → 新用例失败；把归一化的早退条件反转 → 新用例失败；路由里 `stopJob(j.id)` 换成 `void 0` → 源码守卫失败。三条均还原后 176/176。
+- 实机探针（dev 实例、端口 4600）：新增 `ic-r10-delstop-probe.mjs` **11/11**（用 `node:sqlite` 往真实 `data/ic.db` 插 1 条 `running` + 1 条 `queued` + 1 条 `done` 假任务 → `DELETE /projects/:id` 回报停掉前两条、不含 `done`；项目 404、jobs 行清零、项目目录删除）；新增 `ic-r10-bind-probe.mjs` **11/11**（整章写 storyboard：错类/不存在/跨项目 id 不进库，`audio_ids` 只留语音；`PATCH` 整条数组含悬空 id → 200 且只剩有效 id；只改 `camera` 不动存量绑定；临时项目清理）；`ic-r8-parent-probe` 扩到 **31/31**（新增「改分类离开变体 → 父指针清空，且删角色不再级联删掉这条已改成道具的素材」）。
+- 回归（全部重跑，全绿）：`ic-audit-e2e` **88/0**、`ic-refguard-e2e` **15/0**、`ic-r4-probe` **6/0**、`ic-r4-probe2` **6/0**、`ic-malformed-probe` **5/0**、`ic-r6-llm-probe` **5/0**、`ic-r7-upload-probe` **20/0**、`ic-r7-skills-probe` **5/0**、`ic-range-probe` **失败 0 项**、`ic-r9-skills-probe` **7/0**、`ic-r9-rollback-probe` **11/0**。第十轮改完 `lib/core/db.js` 后**重启过一次 dev 实例**（`server.js` 自身也 import `lib/core`，避免进程里留着旧副本）。
+- 一处如实记录：探针造的「活动任务」是直接播的 DB 行（不真跑渲染），因此 `interruptTask` 在本机没有监听 8188 时是连接被拒 + 被 `try/catch` 吞掉——「删项目会停掉活动任务」的**判定链**由探针验证，`interruptTask` 的**效果**沿用 `/stop`/`/cancel` 已有的实机结论。
+
+

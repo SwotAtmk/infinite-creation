@@ -62,9 +62,24 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   const removedJobIdsRef = useRef(new Set());
   const [chapters, setChapters] = useState([]);
   const [cursor, setCursor] = useState(0);
+  // 项目加载失败（id 不存在 / 项目被别的标签页删掉）：此前没有 catch，Promise.all 的拒绝无人处理，
+  // 界面永远停在「项目加载中…」，连「返回」按钮都没有。
+  const [loadError, setLoadError] = useState('');
+  // 在途请求序号：WS 每条消息、2.5s 轮询、初始加载会同时在飞，先发后到的旧响应会把新状态盖回去
+  // （典型现象：任务已 done，界面又被旧响应改回 running）。
+  const loadSeqRef = useRef(0);
 
   const loadProject = useCallback(async () => {
-    const [p, j, c] = await Promise.all([api.get('/api/projects/' + id), api.get('/api/projects/' + id + '/jobs'), api.get('/api/projects/' + id + '/chapters')]);
+    const seq = ++loadSeqRef.current;
+    let p, j, c;
+    try {
+      [p, j, c] = await Promise.all([api.get('/api/projects/' + id), api.get('/api/projects/' + id + '/jobs'), api.get('/api/projects/' + id + '/chapters')]);
+    } catch (e) {
+      if (seq === loadSeqRef.current) setLoadError(e.message || '加载失败');
+      return;
+    }
+    if (seq !== loadSeqRef.current) return; // 有更新的请求在飞，丢弃本次（旧）结果
+    setLoadError('');
     setProject(p); setJobs(j); setChapters(c); setCursor((x) => (x < 0 ? 0 : Math.min(x, Math.max(c.length - 1, 0))));
     // 出现新任务就把任务列表展开，让用户提交后立刻看到（无论它瞬间完成/失败）
     if (firstJobsLoadRef.current) firstJobsLoadRef.current = false;
@@ -159,8 +174,17 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
     return (
       <Card>
         <CardBody className="flex-row items-center justify-center gap-2.5 py-10">
-          <Spinner size="sm" />
-          <span className="muted">项目加载中…</span>
+          {loadError ? (
+            <>
+              <span className="muted">项目加载失败：{loadError}</span>
+              <Button size="sm" variant="flat" onPress={onBack}>← 返回列表</Button>
+            </>
+          ) : (
+            <>
+              <Spinner size="sm" />
+              <span className="muted">项目加载中…</span>
+            </>
+          )}
         </CardBody>
       </Card>
     );

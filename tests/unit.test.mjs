@@ -1505,3 +1505,9 @@ test('资产图阶段：批量出图排在换装/年龄兜底之前（兜底是�
   assert.ok(batch < prov, '必须先批量出图，再跑换装/年龄兜底');
 });
 
+test('任务列表：运行中的行内任务（llm/export）不渲染「删除」（后端明确 409，按钮必然报错）', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ProjectView.jsx'), 'utf8');
+  const delLine = src.split('\n').find((l) => l.includes('>删除</Button>'));
+  assert.ok(delLine, '找不到任务列表的删除按钮');
+  assert.match(delLine, /CANCELLABLE/, '删除按钮必须排除「后端拒绝删除的运行中行内任务」');
+});

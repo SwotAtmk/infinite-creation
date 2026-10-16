@@ -256,7 +256,10 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
                       </div>
                       <div className="row" style={{ gap: 4, flexShrink: 0 }}>
                         {isActive && CANCELLABLE.has(j.type) && <Button size="sm" variant="light" onPress={() => cancelJob(j.id)}>取消</Button>}
-                        <Button size="sm" variant="light" color="danger" onPress={() => removeJob(j.id)}>删除</Button>
+                        {/* 行内任务（llm 参考图分析 / export 按章导出）在请求内同步执行：后端 DELETE 明确回
+                            409（停不掉，删了记录只会留下看不见的孤儿）。这里就不渲染「删除」按钮，
+                            别给用户一个必然报错的入口。 */}
+                        {!(j.status === 'running' && !CANCELLABLE.has(j.type)) && <Button size="sm" variant="light" color="danger" onPress={() => removeJob(j.id)}>删除</Button>}
                       </div>
                     </div>
                   );

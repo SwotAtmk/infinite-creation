@@ -139,10 +139,10 @@ infinite-creation/
 并且在本地部署启动这个项目。
 ```
 
-**把项目安装为Skill技能**
+**使用Agent自动安装**
 ```text
 请根据 https://gitcode.com/SwotAtmk/infinite-creation/releases/download/v1.0.0/install-skill.md，
-从 https://gitcode.com/SwotAtmk/infinite-creation 安装 infinite-creation。
+从GitHub（国外）或者GitCode（国内）上安装SwotAtmk/infinite-creation 安装 infinite-creation 技能，并根据技能描述启动这个项目。
 ```
 
 

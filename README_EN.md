@@ -139,10 +139,10 @@ Help me clone this project https://github.com/SwotAtmk/infinite-creation.git
 locally (fill in the target install directory here), and run it locally.
 ```
 
-- **国内使用：**
+- **Agent auto startup**
 ```text
-帮我克隆这个项目https://gitcode.com/SwotAtmk/infinite-creation.git到本地（这里填写要安装的项目目录），
-并且在本地部署运行这个项目
+Please refer to https://gitcode.com/SwotAtmk/infinite-creation/releases/download/v1.0.0/install-skill.md for installation instructions,
+Install the infinite-creation skill from GitHub (overseas) or GitCode (domestic), then start the project according to the skill description.
 ```
 
 **Prerequisites**

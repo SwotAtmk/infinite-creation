@@ -548,8 +548,10 @@ test('停止：当前分镜复位为待生成，不再留在「失败」', async
     out = JSON.parse(await runTool(ctx, 'generate_chapter_videos', { chapter: '第1章' }));
   } finally { Shots.update = orig; globalThis.fetch = origFetch; }
   assert.equal(out.aborted, true);
-  // 前提：渲染失败路径确实先把当前镜记成了 failed（否则这条测试没有验证到复位）
-  assert.ok(calls.some((c) => c.id === s.id && c.f.status === 'failed'), '前提：渲染中先把当前镜记成 failed');
+  // 取消不是失败：渲染的 catch 自己就必须按「停止」收尾（此前写成 failed + error='已取消'，
+  // 用户点一下「停止」就会在分镜上看到一条失败记录）
+  assert.equal(calls.some((c) => c.id === s.id && c.f.status === 'failed'), false, '停止不该把分镜记成 failed');
+  assert.ok(calls.some((c) => c.id === s.id && c.f.status === 'pending'), '前提：渲染的 catch 按取消复位为 pending');
   assert.equal(Shots.get(s.id).status, 'pending', '停止后必须复位，方便直接重跑');
   assert.equal(Shots.get(s.id).error, '');
   Projects.remove(p.id);
@@ -731,6 +733,16 @@ test('阶段任务：运行中被停止必须记 cancelled，不能让前端弹�
   // 必然走「阶段循环开头的 isAborted 检查 → 正常 resolve」这条路（正是原先被记成 done 的那条）。
   stopJob(job.id);
   assert.equal(await waitJob(job.id), 'cancelled', '被停止的阶段任务记 done 会让前端弹「✅ 任务完成」，而后面几章根本没跑');
+  Projects.remove(p.id);
+});
+
+test('章节视频任务：运行中被停止记 cancelled（工具是正常返回的，不能让前端弹「任务完成」）', async () => {
+  const { startChapterVideoJob, stopJob } = await import('../lib/agent/job-runner.js');
+  const p = mkProject('章节视频停止项目');
+  // 空章节：generate_chapter_videos 会「正常返回」（不抛错），正是原先被记成 done 的那条路
+  const job = startChapterVideoJob({ projectId: p.id, chapter: '第1章' });
+  stopJob(job.id);
+  assert.equal(await waitJob(job.id), 'cancelled', '工具正常返回 + 停止标记 = cancelled');
   Projects.remove(p.id);
 });
 

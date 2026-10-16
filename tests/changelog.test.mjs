@@ -792,6 +792,36 @@ test('回滚「章节新建」：级联删的分镜逐条留 delete 日志，重
   Projects.remove(p.id);
 });
 
+test('回滚「章节新建」：章节改名后级联删仍要按**当前**标题找到分镜（不留孤儿分镜）', () => {
+  // 分镜按「章节标题」归属，而标题可以被改（章节 PATCH 会把该章分镜的 chapter 一起改名）。
+  // 旧实现用日志快照 log.after.title（旧名）去找 → 改名后一条也匹配不到：
+  // 章节删掉了、分镜留在库里成了孤儿（界面上再也看不到、也删不掉）。
+  const p = mkProject('章节回滚改名项目');
+  const ch = withWriteContext('POST /api/projects/:id/chapters', () => Chapters.create(p.id, { title: '原名章节' }));
+  const s1 = withWriteContext('PUT /api/projects/:id/chapters/:cid/storyboard', () => Shots.create(p.id, { chapter: '原名章节', idx: 1, visual: 'A' }));
+  const chCreate = listChanges(p.id, { entity: 'chapter', action: 'create', limit: 500 }).find((l) => l.entity_id === ch.id);
+  // 改名 + 联动分镜归属（与章节 PATCH 路由同口径：DB 层不做级联）
+  Chapters.update(ch.id, { title: '改名后章节' });
+  Shots.update(s1.id, { chapter: '改名后章节' });
+  assert.equal(Shots.get(s1.id).chapter, '改名后章节');
+
+  // 章节行已被改过 → 回滚创建日志需要 force（跳过漂移保护）
+  const r = rollbackLogs({ projectId: p.id, logId: chCreate.id, force: true });
+  assert.equal(r.blocked, false);
+  assert.equal(Chapters.get(ch.id), null, '章节已删');
+  assert.equal(r.applied[0].chapter_shots_deleted, 1, '改名后的分镜也要被级联删掉');
+  assert.equal(Shots.list(p.id).length, 0, '不留孤儿分镜');
+  const cascaded = listChanges(p.id, { entity: 'shot', action: 'delete', limit: 500 }).filter((l) => l.meta?.cascade === 'chapter-rollback');
+  assert.deepEqual(cascaded.map((l) => l.entity_id), [s1.id], '级联删留痕');
+  assert.equal(cascaded[0].meta.chapter, '改名后章节', '留痕里记的是当前标题');
+  // 重做：回滚这次回滚 → 章节与分镜一起回来
+  const redo = rollbackLogs({ projectId: p.id, batchId: cascaded[0].batch_id });
+  assert.equal(redo.blocked, false);
+  assert.ok(Chapters.get(ch.id), '章节恢复');
+  assert.equal(Shots.get(s1.id)?.chapter, '改名后章节', '分镜恢复且归属不变');
+  Projects.remove(p.id);
+});
+
 test('force 回滚「行已不存在」的日志：仍留审计记录并打上 reverted_by', () => {
   const p = mkProject('审计兜底项目');
   const s = withWriteContext('POST /api/projects/:id/shots', () => Shots.create(p.id, { chapter: '第1章', idx: 1, visual: 'A' }));

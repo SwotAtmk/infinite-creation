@@ -601,17 +601,21 @@ test('阶段表：4 项且 each带 need/ck', () => {
   assert.equal(STAGE_MAP.tts.ck, null, '音色阶段 CK 均可（实测 CK 下 TTS 无问题）');
 });
 
-test('ckBroken: 关 CK 一律不坏；开 CK 按 comfy-kitchen 版本判', () => {
+test('ckBroken: 关 CK 一律不坏；开 CK 按 comfy-kitchen 版本判（≥0.2.36 才是坏版本）', () => {
   assert.equal(ckBroken({ ckAttention: false, ckKitchen: '0.2.36' }), false);
   assert.equal(ckBroken({ ckAttention: false, ckKitchen: '9.9.9' }), false);
   assert.equal(ckBroken(null), false);
-  // 已知坏区间
+  // 坏版本下限 = 0.2.36：报告 §6 的版本定位显示 #207/#208 在 0.2.35 之后才落地、随 0.2.36 打包
   assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.36' }), true);
-  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.35' }), true);
-  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.1.99' }), true);
-  // 修好的版本自动放行（上游修好后改 CK_BAD_MAX 即可，其余代码不用动）
-  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.37' }), false);
-  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '1.0.0' }), false);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.36.1' }), true, '同版本号带后缀也算命中');
+  // 0.2.35 及更早走的是 #207 之前的旧 mask 路径，不受影响 —— 拦住它们是误伤（会白丢 2.7x 速度）
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.35' }), false);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.1.99' }), false);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.34' }), false);
+  // 上游至今没有修复版本 → 比 0.2.36 新的一律保守判坏（宁可拦住，也别默默出一批废图）；
+  // 上游修好后要提高下限，或改成「下限 + 最后一个坏版本」的区间。
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.37' }), true);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '1.0.0' }), true);
   // 读不到版本 -> 保守判坏
   assert.equal(ckBroken({ ckAttention: true, ckKitchen: '' }), true);
 });

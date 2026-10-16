@@ -526,6 +526,20 @@ test('installSkillsFromZip: 拒绝 zip-slip 越界路径', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('installSkillsFromZip: 拒绝全点/尾点分量（Windows 路径归一化会把它们当 .. 解析）', () => {
+  const dir = tmpSkillsDir();
+  // Win32 会剥掉每个路径分量结尾的点与空格：'...' / '.. ' 这类分量会被文件系统当成 '..'，
+  // 拼出的路径就跳出了目标目录。只拦「精确等于 ..」是不够的。
+  for (const evil of ['a/.../evil/SKILL.md', 'a/.. /evil/SKILL.md', '... /SKILL.md']) {
+    const zip = new AdmZip();
+    zip.addFile('SKILL.md', Buffer.from('---\nname: evil\ndescription: E\n---\n# E', 'utf8'));
+    zip.getEntries()[0].entryName = evil;
+    assert.throws(() => installSkillsFromZip(zip.toBuffer(), { targetDir: dir }), /不安全路径/, evil);
+  }
+  assert.ok(!fs.existsSync(path.join(path.dirname(dir), 'evil')));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('installSkillsFromZip: 无 SKILL.md 时抛错', () => {
   const dir = tmpSkillsDir();
   const buf = zipOf({ 'readme.txt': 'hello' });

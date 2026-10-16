@@ -345,3 +345,37 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 沿用前面几轮的判定（不再重复理由）：`withRetry` 死代码、`abortFlags` 只增不减、`PUT /api/config` 整体覆盖语义、`installSkillsFromZip` 中途失败不回滚、`shots/zip` 空集 500、`mergeVideos` 的 volume、`music/apply` 路由层不校验 `music_id`、章节/分镜 PATCH 无 `activeJobOf` 守卫、`shots/zip`/`export` 缺 `Projects.get`、`comfyui/test`+`llm/test` 的 SSRF 面、`openclaude-agent` 写 `process.env`、`startStageJob` 里 `Jobs.create` 早于 `createToolRuntime`、`ffmpeg` 强制音轨、素材空名、`Chapters.create` 不做存储归一化、`pendingByStage` 的 tts 计数、`custom` 空宽高 → 1024×576、同名资产 `byName` 取最新、`DELETE /references/:rid` 连带删关联素材。
 
 第六轮验证口径：`node --test "tests/*.test.mjs"` **138/138**（本轮新增 8 项：停止后不再提交、中止时按 `prompt_id` 清队列、`deleteQueued` 请求形态、`runFfmpeg` 中止杀子进程、换装/年龄兜底循环停止后零提交、章节视频任务记 `cancelled`、音乐重生成停止保留旧音频、`set_storyboard` 时长与元素校验；改写「停止复位」1 项以对齐新口径）。反向验证：整批撤掉源码修复 → 单测文件因 `deleteQueued` 未导出直接加载失败、3 项 changelog 新测试逐条失败；逐条撤（提交前检查／中止清队列／兜底循环检查／ffmpeg 中止通道）→ 对应测试各自失败，其中 `runFfmpeg` 一项在旧代码下**跑满 17.9s 才结束**，正是「停止后合并照跑」的现场。实机：`ic-audit-e2e` **88/88**、`ic-refguard-e2e` **15/15**、第四轮两条探针 **各 6/6**、畸形请求探针 **5/5**，新增 LLM 门槛探针 **5/5**（无 `apiKey` 的本地端点可测通、地址按 `llmEndpoint` 补 `/v1`、未填 Base URL 报 Base URL、连不上给出可读原因）。
+
+## 十五、第七轮：把写接口之外的剩余面过完，重点是「同一件事两处口径不一致」
+
+第六轮之后还没系统过过的面：全部生成类路由（`assets/[aid]/generate|design-voice|change-outfit|change-age|upload`、`shots/[sid]/regenerate`、`chapters/[cid]/regenerate`、`music/apply`、`shots/zip`、`exports`）、`lib/core` 的 `ffmpeg`/`prompts`/`logger`/`config`，以及界面上传素材的那条链路。结论：生成类路由本身都是薄封装（校验在 `job-runner` 的启动器与工具里，第六轮已审），本轮的实质问题集中在两类 —— **同一个判定在两处不一致**（OpenAI base 的 `/v1`、素材的媒体判定）与**读进内存前没有上限**。
+
+### 修掉的（5 处，5 个原子提交）
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| 高 | `openclaude-agent.js` 的 `providerEnv` 把 `cfg.llm.baseUrl` 原样给 `OPENAI_BASE_URL`，不走 `/v1` 归一化；而 openclaude 的 OpenAI SDK 只在 base 后面拼 `/chat/completions`（`vendor/openclaude/dist/sdk.mjs:234670`）。base 写成 `http://127.0.0.1:11434`（Ollama/LM Studio 的常见写法，界面也允许省略 `/v1`）时：预检打 `/v1/models` 通过、`llmChat` 打 `/v1/chat/completions` 通过，唯独整条 Agent 流水线打 `/chat/completions` → 404 —— 「测试连接全绿、一跑就全失败」，且报错只有 404 | 新增 `openaiCompatBaseUrl()`（`lib/core/llm.js`，紧挨 `llmEndpoint`、复用同一套 `/v1` 规则，成为单一事实来源）并改用它；`baseUrl` 为空仍退回 `https://api.openai.com/v1`。`providerEnv` 不导出（一导出就会拉起 vendor SDK），改用源码守卫用例钉住这一行 |
+| 中 | `resolveHardware()` 直接往 `merged.generation` 写属性：`config.json` 被手改成 `"generation": null`（或 `"x"` / `5`）时 `deepMerge` 会原样保留该值，紧接着赋值抛 `TypeError: Cannot set properties of null`。而 `loadConfig()` 每个请求都要跑 → 所有路由 500、`PUT /api/config` 也 500，应用基本不可用，日志里只有一句 `TypeError` | 非对象（含数组）时退回 `DEFAULTS.generation`，再按模式补 `freeAfterEvery` |
+| 中 | 素材上传的媒体判定只看 `category`（上传框不限类型，`AssetsTab` 没有 `accept` 过滤）：角色/场景/道具上传 `.gif` → 判成视频写 `video_path`。后果两重：素材卡用 `<video>` 渲染 `video_path`，浏览器根本放不出 gif（一张打不开的黑框）；且 `image_path` 仍为空，拿它当参考图时会被 `refs` 直接跳过。而 `references` 上传路由一直把 gif 当图片，两处口径相反。另外 `other` 分类上传 `.mp3` → 判成图片写 `image_path`（音频挂在图片字段上） | 判定收敛到 `lib/shared` 的 `uploadMediaKind()`：分类优先（`voice/music/sfx` 音频、`video` 视频）+ 扩展名兜底（`.mp3` 等兜音频、`.mp4` 等兜视频、gif 归图片），路由与单测共用一份 |
+| 中 | 素材上传路由**没有体积上限**：`Buffer.from(await req.arrayBuffer())` 把整个请求体读进内存。上传框不限类型，选错一个 3GB 的视频文件就让 Node OOM 退出（正在跑的任务一起丢）；`server.host` 常配 `0.0.0.0`，局域网内任意客户端同样能触发。`references` 路由早就有 10MB 上限，这条漏了 | 按媒体类型分档（图片 20MB / 音频 100MB / 视频 500MB）：先按 `Content-Length` 早退（连正文都不读），读完再按实际长度兜一道（分块上传没有该头），超限回 413 并写明该档上限 |
+| 中 | `/api/skills/upload` 是同一类问题：整个请求体读进内存后交给 `installSkillsFromZip`（解压也在内存里），同样没有上限 | `SKILL_ZIP_MAX_BYTES = 20MB`，同样两道判断 + 413；所有校验（zip 可解析、路径安全、含 `SKILL.md`）本就在写文件之前，超限路径更早返回，不会污染 `skills/` |
+
+### 本轮核对过、判定「不改」的项
+
+- **`scanSkills` 的 `version: manifest.version || ''` 恒为空**：`manifest` 只被写成 `{metaYaml:true}`（没解析 `meta.yaml` 里的 `version:`），而 `version` 没有任何消费方（`SkillsTab` 只显示名称/来源/描述）。为一个没人读的字段去解析 YAML 不划算。不改。
+- **`runInlineJob` 的 catch 恒记 `failed`**（与「取消不是失败」口径不同）：这类 inline 任务（整片导出、参考图视觉命名）**本身不响应停止**，停止标记置位时它们仍会跑完。改成按 `isAborted` 记 `cancelled` 反而是谎报「做完的活被取消了」；现在如实记 `done`/`failed`。真正该改的是让它们能停，而这两条路径在第六轮已判定「保持同步等待」（界面也不给它们停止按钮）。不改。
+- **`refs.js` 的「参考图上限 9 张」在全部上传完之后才抛**：多传的图已经落盘（磁盘孤儿文件按既有「失败留孤儿文件」口径处理），但超额请求整体失败、不会写出错误的参考集。不改。
+- **`audioTruncated` 在 `rel` 为空时也会置位**：只多挂一个「文本被截断」的提示标记，不影响音频本身。不改。
+- **`comfyui.js` 的超时分支不 `/interrupt`、不清队列**：连接假死时服务端任务状态本就不确定，这里只负责如实报错（第六轮已把文案分清）；能主动 interrupt 的前提是服务可用，而超时后大概率不可用。不改。
+- **`music/route.js` 的 POST 返回更新前的 asset 对象**：只影响这一次响应里的展示字段，列表刷新后即为最新，改动面大于收益。不改。
+- **`runninghub.js:137` 直接用全局 `crypto.randomUUID()`**（其他处从 `node:crypto` 显式 import）：本机 Node 24 全局可用、行为一致，仅风格不统一。不改。
+- 仍未收紧的已知面（记录在案）：JSON 请求体（`req.json()`）没有显式上限；`GET /files/*` 只做路径穿越防护、不限体积。两者都建议靠反代与 `server.host` 收敛暴露面。
+- 沿用前面几轮的判定（不再重复理由）：`withRetry` 死代码、`abortFlags` 只增不减、`PUT /api/config` 整体覆盖语义、`installSkillsFromZip` 中途失败不回滚、`shots/zip` 空集 500、`mergeVideos` 的 volume、`music/apply` 路由层不校验 `music_id`、章节/分镜 PATCH 无 `activeJobOf` 守卫、`comfyui/test`+`llm/test` 的 SSRF 面、`openclaude-agent` 写 `process.env`、`ffmpeg` 强制音轨、素材空名、`Chapters.create` 不做存储归一化、`pendingByStage` 的 tts 计数、`custom` 空宽高 → 1024×576、同名资产 `byName` 取最新、`DELETE /references/:rid` 连带删关联素材、`update_shot` 改台词不清 `video_prompt_used`、`upsertMusicAsset` 同名复用、兜底提示词写进 `video_prompt`、整片合并与 `/export` 不响应停止。
+
+第七轮验证口径：`node --test "tests/*.test.mjs"` **144/144**（本轮新增 6 项：`openaiCompatBaseUrl` 取值、`providerEnv` 接线源码守卫、非对象 `generation` 不崩、`uploadMediaKind` 判定、`UPLOAD_MAX_BYTES` 三档、`SKILL_ZIP_MAX_BYTES`）。反向验证走两路：
+
+- **单测路**（`ic-r7-reverse.mjs`：逐条撤修复 → 跑对应用例 → 还原后再确认通过）：5 条全部「撤掉即失败、还原即通过」，其中包括撤掉 `providerEnv` 的接线那一行（源码守卫用例失败）。
+- **实机路**（撤掉修复后跑探针，用真实响应取证）：撤掉素材上限 → 21MB 图片从 413 变 200、文件真的落盘；把 gif 放回视频扩展名 → gif 落进 `video_path`；去掉音频扩展名兜底 → `other` 分类的 mp3 落进 `image_path`；撤掉技能包上限 → 21MB 正文被完整读进内存后才由 zip 解析器报错。
+- **新探针**：素材上传 **20/20**（含分块无 `Content-Length` 的 21MB → 413、25MB 音频不被图片档误拦、`voice` 素材仍双写 `voice_ref`+`audio_path`）、技能包上传 **5/5**。回归：`ic-audit-e2e` **88/88**、`ic-refguard-e2e` **15/15**、第四轮两条探针 **各 6/6**、畸形请求探针 **5/5**、LLM 门槛探针 **5/5**。
+- 一处**未能实机覆盖**并如实记录：`providerEnv` 到 openclaude 的接线无法端到端跑（需要真实 LLM 跑完整条 Agent 流水线），故用源码守卫 + `openaiCompatBaseUrl` 值断言 + vendor SDK 的拼装证据（`sdk.mjs:234670`）三者共同锁定。
+

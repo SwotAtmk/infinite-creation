@@ -207,6 +207,18 @@ test('pickShotFields：白名单外的字段一律报错，产物字段不可写
 
   const wrongType = pickShotFields({ duration: 'abc', character_ids: 'a' });
   assert.equal(wrongType.errors.length, 2);
+
+  // seed 是渲染参数/产物：generateShotVideo 每次渲染都现取随机种子写回，渲染链路从不读 shots.seed，
+  // 它又在 changelog 的 VOLATILE.shot 里（不进日志、回滚也恢复不了）。收下它 = 「接口答应得下、
+  // 实际静默无效」，与 status/video_path 同口径拒收。断言精确到错误文案：只数条数会被
+  // 「数字字段走兜底分支被按 duration 区间校验」这种错报蒙混过去（本轮真踩过）。
+  const seed = pickShotFields({ seed: 123456, visual: 'v' });
+  assert.deepEqual(seed.errors, ['不接受字段 seed'], 'seed 不可写（渲染自己回写，外部写进去下次渲染就被覆盖）');
+  assert.equal(seed.patch.seed, undefined, '被拒的字段不能进 patch');
+  assert.equal(seed.patch.visual, 'v', '同一请求里的合法字段仍要写入');
+  // 白名单里的数字字段必须各自显式判名，不能被兜底分支按 duration 区间校验
+  assert.deepEqual(pickShotFields({ duration: 6 }).errors, []);
+  assert.deepEqual(pickShotFields({ idx: 1, duration: 15 }).errors, []);
 });
 
 // —— 以下为审计修复的回归：业务校验 / 标题唯一 / 事务 / since_ts 语义 / 章内镜号 ——

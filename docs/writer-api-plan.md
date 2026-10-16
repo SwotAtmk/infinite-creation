@@ -530,3 +530,35 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 十二、十三两轮均无代码改动 → `dev7` HEAD 停在第十一轮的 `f6e5cc0`（本轮共 2 个提交），仍无 upstream、未推送。
 
 
+
+## 二十、收尾决定（2026-10-16，dev7）
+
+三件挂起的事由审计方定案如下。
+
+### 1. `seed` 从外部可写白名单移除（`7217488`，**改了代码**）
+
+`seed` 是渲染参数/产物，不是内容：
+
+- `generateShotVideo`（tools.js）每次渲染都现取一个随机种子写回行上；
+- 整条渲染链路**从不读** `shots.seed` 当输入——唯一带 `seed` 形参的 `runI2iEdit`，四个调用方没有一个传它；
+- 它又在 `changelog` 的 `VOLATILE.shot` 里（渲染回写不刷日志），所以外部写进来的值既不进变更日志、回滚也恢复不了。
+
+结论：外部写 `seed` 下一次渲染就被覆盖 —— 「接口答应得下、实际静默无效」，与 `status` / `video_path` 同口径拒收。要点：
+
+- `SHOT_NUMBER_FIELDS` 去掉 `seed`，删掉它的专用归一化分支；三条外部写入路径（`POST /shots`、`PATCH /shots/:sid`、`PUT /storyboard`）统一 400「不接受字段 seed」。
+- 内置 Agent 不受影响：`set_storyboard` / `update_shot` 的 schema 里从来没有 `seed`，它们也不走 `pickShotFields`（该白名单只服务外部写入 API）；界面只展示 seed、不可编辑。
+- 顺手修掉一处**错报**：数字字段循环末尾原本是「兜底分支」，任何白名单里的数字字段走到最后都会被按 `duration` 的区间校验 —— 把 seed 放回白名单做反向验证时，`seed=123456` 报的是「duration 必须在 1~15 秒之间」。现在 `duration` 显式判名（日后往 `SHOT_NUMBER_FIELDS` 加字段要补显式分支）。
+- **若日后要「钉住种子复现」，那是功能变更**：先让渲染读它（非 0 沿用），再把它从 `VOLATILE` 拆出来（否则钉了也不会被日志/回滚看见）。
+- 文档同步：`ic-writer` 技能的「分镜可写字段」清单去掉 `seed`，并把 `seed` 并入「产物字段不可写」（技能在 `~/.agents/skills/ic-writer/SKILL.md`，不在本仓库、不随提交走）。
+
+验证：单测 **178/178**（断言精确到错误文案——只数条数会被上面那种错报蒙混过去）；反向验证「seed 放回白名单 → 该用例翻红，还原 → 全绿」；实机探针 `ic-seed-reject-probe.mjs` **13/13**（三条写入路径带 seed 均 400 且文案精确、同一条分镜写合法字段仍 200 且落库、`seed` 保持 0 既没被清空也没被伪造、整章重写被拒后原分镜还在）。
+
+### 2. `ic-mkjob.mjs` 保留
+
+它不是孤儿：`ic-audit-e2e.mjs` 依赖它造「运行中/排队中」任务，第 10、11 轮的探针也沿用同一手法（直写 `data/ic.db` 的 jobs 表，不触发任何生成）。它属于探针工具链，留在 `Temp/opencode`，不进仓库。
+
+### 3. `dev7` 暂不推送
+
+`origin` 是你的 fork（`happymy/infinite-creation`），`upstream` 是上游（`SwotAtmk/infinite-creation`）。本轮没有 PR/评审对象，分支也还没收敛成可交付状态，推送只是多一次公开副作用。要推时说一声，执行 `git push -u origin dev7`（本会话不自行推送）。
+
+

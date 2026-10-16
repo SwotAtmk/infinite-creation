@@ -151,9 +151,9 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 回滚只复原 DB 行，**不删除已生成的图片/视频/音频文件**（避免误删用户素材）；如需彻底清理请手动删文件。
 - 回滚章节删除**不恢复**其 `posters/*.jpg` 首帧缓存（下次生成会重建）。
 - 单条回滚是「按快照覆盖」，若之后有新增字段变更会被 `force` 一并覆盖 —— 默认拒绝（漂移保护）已兜底。
-- **单条 `log_id` 回滚不连带恢复级联子项**：删章节带回分镜，但只回滚章节那条日志时，分镜要各自按它们的日志（或直接用同批 `batch_id`）恢复。
+- **单条 `log_id` 回滚不连带恢复级联子项**：删章节带回分镜；只回滚章节那条日志时，分镜要各自按它们的日志恢复，或者按「这次回滚自己的 `batch_id`」整批重做（级联删分镜会逐条留 `delete` 日志，落在该回滚批次里）。
 - **章节标题改为「同项目内唯一」**：既有库里若有历史重名章节，不会被自动改名/合并（需要人工处理），但此后任何新写入的重名都会被 400 拒绝。
-- **运行中的项目拒绝删除类写入**（删章节 / 删分镜 / 整章替换分镜）→ 409：任务持有这些行，删掉只会让它的回写静默落空。内容类 PATCH 不拦（代价是任务可能用旧数据出片，属可接受）。
+- **运行中的项目拒绝删除类写入**（删章节 / 删分镜 / 整章替换分镜）→ 409，`running` 与 `queued`（排队等视频槽位）都算运行中：任务持有这些行，删掉只会让它的回写静默落空。内容类 PATCH 不拦（代价是任务可能用旧数据出片，属可接受）。
 - 不改动任何生成流水线语义（`script` 仅新增、不被流水线隐式消费）。
 
 ## 八、验收
@@ -200,3 +200,32 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 因此 `1080P`/`2K`/`4K` 是**合法入参**（`2`/`4` 在 0.1~16 内），留在映射表里、不进下拉是**成本**取舍而非「选了就报错」：2 MP/4 MP 就是 1080p/4K 级出片，AMD 单卡上不现实（作者原下拉本来也止于 `768P`）。
 - 顺带核对到：英伟达原版视频路径的 `MiniMaxH3Easy` 节点在本机 **ComfyUI 里不存在**（核心 `comfy_extras/nodes_minimax_h3.py` 只有 `MiniMaxH3ImageToVideo`/`AddGuide`/`ReferenceToVideo`/`SigmaShift`，第三方包只注册 `MiniMaxH3Director*`），`workflows/MiniMax_H3_Easy_r2v.json` 在本机跑不起来——本机视频只走 GGUF 那条（`minimax_h3_r2v_gguf`），即 `resolution` 只会经上面的 megapixels 映射表。
 - 实例仍然零鉴权：默认只绑 `127.0.0.1`；改成 `0.0.0.0` 等于把「读全文 / 改内容 / 回滚」端点开给整个局域网，技能里已写明只对本机用。
+
+## 十、第二轮审计修复记录（2026-10-16，dev7 复审后）
+
+第二轮专盯「外部写入 API 的字段边界 / 可回滚日志的完整性 / 与流水线状态的协调」，逐条读源码核验后修掉以下问题（每条一个提交，回归测试随修复走）：
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| 高 | 章节 `PATCH …/chapters/:cid` 把请求体直通 `Chapters.update`：可写 `seq`（绕开 `reorder` 的撞号保护 → 成片顺序不确定）、`status`/`music_path`/`music_prompt*`（伪造状态、写流水线产物）；拼错字段（`titel`）被静默忽略却回 200 | 新增 `CHAPTER_STRING_FIELDS` / `pickChapterFields`，只认 `title`/`novel`/`script`，其余当场 400 |
+| 高 | 章内镜号唯一只在「同一次请求」内校验：`POST …/shots` 显式给 `idx`、`PATCH …/shots/:sid` 改 `idx`、`PUT …/storyboard` 带 `replace:false` 追加，都能与库里已有行撞号 | 新增 `idxTakenBy(shots, chapter, idx, excludeId)`，三条写入口共用；冲突 400 并提示「省略 `idx` 自动续号」 |
+| 高 | 「素材库 → 参考」用途切换直接 `Assets.remove(asset_id)`：级联删掉该素材（角色连服装/年龄变体一起没），分镜上的 `character_ids`/`costume_ids` 引用静默失效（参考图少一张、`__MINIMAX_H3_REF_N__` 编号错位） | 切换前用新增的 `Assets.usageOf(id)`（子变体数 + 引用它的分镜）检查，在用即 400 并说明「几个变体会被删 / 被几个分镜引用」 |
+| 高 | 回滚「章节新建」时对分镜做裸 `DELETE`：审计断链（看不到分镜被一起删），且「回滚这次回滚」只恢复章节、分镜永久丢失 | 级联删前逐条 `recordChange(action:'delete', before: 原行)`（`meta.cascade='chapter-rollback'`）；这些日志落在本次回滚批次，重做可把章节与分镜一起恢复 |
+| 中 | `activeJobOf` 只认 `status='running'`：排队中（`queued`）的任务不算活跃，`POST /run`、`POST /stages` 的防重与删章节/删分镜/整章替换的 409 守卫在排队期间全部失效 | 改为 `running \|\| queued`（`job-runner` 内部、`jobs` 路由、`cancel` 路由本来就都算活跃） |
+| 中 | `PATCH …/shots/:sid` 传 `{chapter:""}` 会把分镜变成谁也看不见的孤儿行：章节视图与 `chapterStats` 按标题归属（统计里消失），整片导出却仍会合进去 | `validateShotContent` 拒绝显式空 `chapter`（省略 = 不改归属）；`POST …/shots` 把归属解析挪到内容校验之前，空串仍按文档落第一章 |
+| 中 | `GET …/logs` 的 `total` 无视 `entity`/`action`/`source` 筛选（`countChanges` 不带筛选）：按 `total` 翻页会翻出空页 | 抽出 `changeWhere()`，`listChanges` 与 `countChanges` 同口径；路由把筛选条件传两处 |
+| 中 | 回滚不存在的 `log_id`/`batch_id` 返回 200 空结果 —— 调用方以为「回滚已生效」 | 显式目标查不到即抛 `BAD_TARGET`（路由 400）；`since_ts` 空窗口仍是合法空结果 |
+| 低 | `force` 回滚「行已不存在」的日志时 `recordChange` 拿不到 `project_id` 返回 null：不留审计记录、`reverted_by` 空、之后的全量回滚会把它再撤一次 | `recordChange` 增加 `projectId` 兜底参数，`rollbackLogs` 传 `log.project_id` |
+| 低 | `set_storyboard` 的分镜字段拼错（`sence_name`、`cast`）被静默丢弃，回报却是「分镜已写入」 | 新增 `SHOT_INPUT_KEYS` 嵌套白名单，拼错当场报错并列出可用字段 |
+| 低 | `seed` 不在易变字段里：`generateShotVideo` 每次渲染随机重写 → 每镜刷一条整行 `update` 日志淹掉内容日志，并让「harness 写完 → 应用渲染一轮」后的内容回滚被误判漂移（要 `force`） | `VOLATILE.shot` 加入 `seed` |
+
+### 本轮复核过、判定「不改」的项
+
+- **`set_storyboard` 的 clear + 逐条写入不再包 `tx()`**：所有校验（台词速率、说话人数、章节解析、`idx` 归一）都在 clear 之前整批完成，循环内无可达抛错路径（`Shots.update` 已用 monkey-patch 验过时序），属纯防御性硬化。
+- **`custom` 分辨率 + 宽高为空 → 1024×576**：这正是界面 `placeholder="1024"/"576"` 的兜底语义，有意为之。
+- **同名资产 `byName` 取最新**：`assets` 表无 `(project_id, name)` 唯一约束（只有章节有），重名是既有设计。
+- **`pendingByStage` 的 tts 计数**与 `hGenerateAssetsBatch` 的跳过条件逐字一致（`无 voice_desc 的角色永远待办`是真待办信号）。
+- **`DELETE …/references/:rid` 仍会连带删掉关联素材**：这是用户显式删除参考素材的动作（且参考图文件本就是真 `unlink`），与「下拉框换个用途就悄悄删」不同类；级联语义保留，文档化即可。
+- **产物文件部分失败留孤儿文件**：属生成阶段的清理问题，与本 API 的写入边界无关。
+
+两轮验证口径：`node --test "tests/*.test.mjs"` **113/113**；真实实例端到端脚本 **88/88**（含本轮新增的镜号撞号、空 `chapter`、章节排序完整性等）；另有针对「素材用途切换」守卫的独立端到端 **10/10**。

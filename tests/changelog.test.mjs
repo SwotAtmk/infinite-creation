@@ -276,6 +276,28 @@ test('项目级取值域：video_resolution / video_aspect_ratio 直写被拒（
   Projects.remove(p.id);
 });
 
+test('自定义分辨率宽高：0=未设置，非 0 必须落在 64~4096（旧守卫只查 n<0，width=5 能落库）', () => {
+  // video_resolution=custom 时宽高直接当画布尺寸喂给工作流（tools.js: `Number(project.video_width) || 1024`）：
+  // 写进 5 不会当场报错，却让该项目之后的每一镜在渲染阶段才炸，而设置界面按 1024×576 兜底、看不出问题。
+  for (const [k, v] of [['video_width', 5], ['video_height', 1], ['video_width', 63], ['video_height', 4097], ['video_width', -1]]) {
+    assert.throws(() => Projects.create({ name: '脏宽高' + k + v, [k]: v }), (e) => e.code === 'BAD_PROJECT_DIM', k + '=' + v + ' 应被拒');
+  }
+  const p = mkProject('自定义分辨率');
+  assert.throws(() => Projects.update(p.id, { video_width: 5 }), (e) => e.code === 'BAD_PROJECT_DIM');
+  assert.equal(Projects.get(p.id).video_width, 0, '被拒的写入不许留下半截状态');
+  // 0 = 未设置（走生成端默认）：必须能写，否则「清空自定义宽高」永远做不到
+  assert.equal(Projects.update(p.id, { video_width: 0, video_height: 0 }).video_width, 0);
+  // 边界值可写；像素取整（界面 step=32，但服务端不强制 32 对齐：生成节点侧会再取整）
+  assert.equal(Projects.update(p.id, { video_width: 64, video_height: 4096 }).video_height, 4096);
+  assert.equal(Projects.update(p.id, { video_width: 1024.9 }).video_width, 1024);
+  // 只校验本次要写的键（与枚举同口径）：存量行里的历史脏值不阻塞「改个名字」
+  core.getDb().prepare('UPDATE projects SET video_width = ? WHERE id = ?').run(5, p.id);
+  assert.equal(Projects.update(p.id, { name: '改个名字' }).name, '改个名字');
+  assert.equal(Projects.get(p.id).video_width, 5, '没提这个字段就不动它');
+  assert.equal(Projects.update(p.id, { video_width: 1280 }).video_width, 1280, '显式改正必须能写进去');
+  Projects.remove(p.id);
+});
+
 test('合成顺序：按章节 seq → 章内 idx（多章整片不会交叉）', () => {
   const p = mkProject('多章顺序');
   const c1 = Chapters.list(p.id)[0];                       // 建项目时自动建「第1章」

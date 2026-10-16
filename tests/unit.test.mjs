@@ -593,6 +593,15 @@ test('工具 schema：create_asset / generate_asset_from_reference 暴露 parent
   assert.ok(props('generate_asset_from_reference').parent_id, 'generate_asset_from_reference 必须声明 parent_id');
 });
 
+test('项目路由：自定义宽高区间（BAD_PROJECT_DIM）必须翻 400，不能漏成 500', () => {
+  // 区间校验在 db 层（UI/内置 Agent/外部 harness 三条写入路径共用一份）；
+  // 两条项目路由若不认 BAD_PROJECT_DIM，就会把「入参错误」报成 500，用户拿不到可读原因。
+  for (const segs of [['app', 'api', 'projects', 'route.js'], ['app', 'api', 'projects', '[id]', 'route.js']]) {
+    const src = fs.readFileSync(path.join(__dirname, '..', ...segs), 'utf8');
+    assert.ok(/e\.code === 'BAD_PROJECT_DIM'/.test(src), segs.join('/') + ' 必须把 BAD_PROJECT_DIM 翻成 400');
+  }
+});
+
 test('nameMatches: 规范化后精确相等（短名不被同场更长角色名误命中）', () => {
   assert.equal(nameMatches('小明', '小明'), true);
   // canonical 名带身份后缀 / 舞台提示：对白说话人是「小明」，角色资产名是「小明（少年）」

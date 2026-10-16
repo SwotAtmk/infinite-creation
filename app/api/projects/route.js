@@ -23,8 +23,9 @@ export async function POST(req) {
       ensureProjectDirs(p.id);
       return NextResponse.json(p);
     } catch (e) {
-      // 项目级分辨率 / 宽高比枚举（分镜会继承它出片）：底层抛错，这里翻成 400
+      // 项目级分辨率 / 宽高比枚举、自定义宽高区间（分镜会继承它出片）：底层抛错，这里翻成 400
       if (e && e.code === 'BAD_PROJECT_ENUM') return NextResponse.json({ error: e.message }, { status: 400 });
+      if (e && e.code === 'BAD_PROJECT_DIM') return NextResponse.json({ error: e.message }, { status: 400 });
       throw e;
     }
   });

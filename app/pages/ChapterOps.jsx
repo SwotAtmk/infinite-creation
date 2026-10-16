@@ -7,7 +7,7 @@ import LoadingOverlay from './LoadingOverlay';
 
 // ============ 章节操作面板（「操作」弹窗内容） ============
 // 针对单个章节的生成/重生成/分阶段运行，替代原「生成内容」整页，重排版适配弹窗
-export default function ChapterOps({ projectId, chapter, running, onRun, onStop, onRefresh, onGoLogs }) {
+export default function ChapterOps({ projectId, chapter, running, runningChapter, onRun, onStop, onRefresh, onGoLogs }) {
   const toast = useToast();
   // 分阶段运行：待办数由后端算（不启 LLM），勾选后单独起一批
   const [stageList, setStageList] = useState(null);
@@ -88,9 +88,9 @@ export default function ChapterOps({ projectId, chapter, running, onRun, onStop,
   return (
     <div className="flex flex-col gap-3">
       <div className="row">
-        {running
+        {runningChapter === chapter?.title
           ? <Button size="sm" color="danger" onPress={stopRun}>■ 停止</Button>
-          : <Button size="sm" color="success" isDisabled={!chapter} onPress={startRun}>▶ 生成/继续 {chapter ? chapter.title : ''}</Button>}
+          : <Button size="sm" color="success" isDisabled={!chapter || running} onPress={startRun}>▶ 生成/继续 {chapter ? chapter.title : ''}</Button>}
         {!running && <Button size="sm" variant="flat" isDisabled={!chapter} onPress={() => regenChapter('storyboard')}>↻ 重新生成本章分镜</Button>}
         {!running && <Button size="sm" variant="flat" isDisabled={!chapter} onPress={() => regenChapter('videos')}>↻ 重新生成本章视频</Button>}
       </div>

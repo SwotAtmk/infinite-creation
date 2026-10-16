@@ -1,7 +1,7 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import { Projects } from '@/lib/core/index.js';
-import { startCreateJob, activeJobOf } from '@/lib/agent/index.js';
+import { startCreateJob, startCreateAllJobs, activeJobOf } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
 
 export const dynamic = 'force-dynamic';
@@ -14,8 +14,11 @@ export async function POST(req, { params }) {
   if (activeJobOf(id)) return NextResponse.json({ error: '已有运行中的任务' }, { status: 409 });
   Projects.update(id, { status: 'running' });
   try {
-    const job = startCreateJob({ projectId: id, chapter: body?.chapter, onProgress: (patch) => broadcast(patch) });
-    return NextResponse.json(job);
+    const onProgress = (patch) => broadcast(patch);
+    const jobs = body?.chapter
+      ? [startCreateJob({ projectId: id, chapter: body.chapter, onProgress })]
+      : startCreateAllJobs({ projectId: id, onProgress });
+    return NextResponse.json(jobs);
   } catch (e) {
     // 起任务失败（如项目已被删）：复位项目运行态再回 400，而不是留下一个永远「运行中」的项目。
     Projects.update(id, { status: 'idle' });

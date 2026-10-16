@@ -48,7 +48,7 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   const [project, setProject] = useState(null);
   const [pview, setPview] = useState(initialTab === 'generate' ? 'chapters' : initialTab);
   // tab 切换同步到 URL（page.jsx replaceState 更新，刷新后停留原 tab）
-  const setTab = (t) => { setPview(t); if (onTabChange) onTabChange(t); };
+  const setTab = (t) => { if (t === 'shots') setCursor(-1); setPview(t); if (onTabChange) onTabChange(t); };
   const [events, setEvents] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
@@ -61,11 +61,11 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   // 已被用户删除的任务 id：其运行器的终态 WS 事件不再弹通知（任务记录已删）
   const removedJobIdsRef = useRef(new Set());
   const [chapters, setChapters] = useState([]);
-  const [cursor, setCursor] = useState(0);
+  const [cursor, setCursor] = useState(-1);
 
   const loadProject = useCallback(async () => {
     const [p, j, c] = await Promise.all([api.get('/api/projects/' + id), api.get('/api/projects/' + id + '/jobs'), api.get('/api/projects/' + id + '/chapters')]);
-    setProject(p); setJobs(j); setChapters(c); setCursor((x) => (x < 0 ? 0 : Math.min(x, Math.max(c.length - 1, 0))));
+    setProject(p); setJobs(j); setChapters(c);
     // 出现新任务就把任务列表展开，让用户提交后立刻看到（无论它瞬间完成/失败）
     if (firstJobsLoadRef.current) firstJobsLoadRef.current = false;
     else if (j.some((x) => !seenJobIdsRef.current.has(x.id))) setQueueOpen(true);
@@ -142,6 +142,10 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   const runningCount = activeJobs.filter((j) => j.status === 'running').length;
   const queuedCount = activeJobs.filter((j) => j.status === 'queued').length;
   const finishedJobs = jobs.filter((j) => j.status !== 'running' && j.status !== 'queued');
+  // 当前「正在生成」的章节：取正在运行任务中带 checkpoint.chapter 的那一个
+  const runningChapter = (jobs.find((j) => j.status === 'running' && j.checkpoint && j.checkpoint.chapter) || {}).checkpoint?.chapter || null;
+  // 分镜审查当前选中的章节下标：-1 表示「默认最后一章」
+  const shotCursor = cursor < 0 ? Math.max(chapters.length - 1, 0) : Math.min(cursor, Math.max(chapters.length - 1, 0));
   // 任务列表：活动任务置顶（执行中 → 排队中；排队按提交先后即队列顺序），其后是最近的已结束任务
   const shownJobs = [
     ...activeJobs.sort((a, b) => ((a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1)) || ((a.startedAt || 0) - (b.startedAt || 0))),
@@ -245,17 +249,17 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
       </Tabs>
 
       <div>
-        {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} onRefresh={loadProject} running={running} onRun={run} onStop={stop} onGoLogs={() => setTab('logs')} />}
+        {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} onRefresh={loadProject} running={running} runningChapter={runningChapter} onRun={run} onStop={stop} onGoLogs={() => setTab('logs')} />}
         {pview === 'assets' && <AssetsTab projectId={id} jobs={jobs} onRefresh={loadProject} />}
         {pview === 'shots' && (
           <div className="flex flex-col gap-3">
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
               <span className="muted">章节</span>
-              <Select size="sm" className="w-52" aria-label="选择章节" selectedKeys={selectKeys(String(cursor))} onSelectionChange={(k) => setCursor(Number(pickKey(k)) || 0)}>
+              <Select size="sm" className="w-52" aria-label="选择章节" selectedKeys={selectKeys(String(shotCursor))} onSelectionChange={(k) => setCursor(Number(pickKey(k)) || 0)}>
                 {chapters.map((c, i) => <SelectItem key={String(i)}>{c.title}</SelectItem>)}
               </Select>
             </div>
-            <ShotsTab projectId={id} chapter={chapters[cursor]?.title || ''} running={running} jobs={jobs} onRefresh={loadProject} />
+            <ShotsTab projectId={id} chapter={chapters[shotCursor]?.title || ''} running={running} jobs={jobs} onRefresh={loadProject} />
           </div>
         )}
         {pview === 'music' && <MusicTab projectId={id} chapters={chapters} running={running} onRefresh={loadProject} />}

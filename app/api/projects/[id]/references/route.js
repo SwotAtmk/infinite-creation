@@ -2,10 +2,10 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Projects, ReferenceImages, Assets, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger, withWriteContext } from '@/lib/core/index.js';
+import { Projects, ReferenceImages, Assets, Chapters, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger, withWriteContext } from '@/lib/core/index.js';
 import { runInlineJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
-import { PROJECT_ASSET_SUBDIRS } from '@/lib/shared/index.js';
+import { PROJECT_ASSET_SUBDIRS, ASSET_CATEGORY_IDS } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,6 +63,14 @@ export async function POST(req, { params }) {
   const name = String(fd.get('name') || '');
   const description = String(fd.get('description') || '');
   if (!file || typeof file.arrayBuffer !== 'function') return NextResponse.json({ error: '缺少文件' }, { status: 400 });
+  // chapter_id 来自表单，必须属于本项目：挂到别的项目的章节（或拼错/空串）会让这条参考图
+  // 在章节视图与生成上下文里都筛不到——不报错、也不参与任何生成，成了看不见的脏数据。
+  // （历史上「项目级参考图」用空 chapter_id 表示，迁移后已统一归入各项目第1章，故不再放行空值。）
+  if (!chapter_id) return NextResponse.json({ error: '缺少 chapter_id（参考图必须归属某章）' }, { status: 400 });
+  const chapterOf = Chapters.get(chapter_id);
+  if (!chapterOf || chapterOf.project_id !== id) return NextResponse.json({ error: '章节不存在' }, { status: 404 });
+  // 分类同样必须在值域内（素材库按 category 过滤）；放在读文件之前，避免为必然失败的请求写盘。
+  if (!ASSET_CATEGORY_IDS.includes(category)) return NextResponse.json({ error: '素材分类不存在：' + category }, { status: 400 });
   const buf = Buffer.from(await file.arrayBuffer());
   if (!buf.length) return NextResponse.json({ error: '缺少文件内容' }, { status: 400 });
   if (buf.length > MAX_BYTES) return NextResponse.json({ error: '图片超过 10MB' }, { status: 400 });

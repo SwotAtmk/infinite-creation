@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Button, Input, Card, CardBody, Chip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
 import { fileUrl, dialogueSpeakers, statusColor } from './shared';
+import { nameMatches } from '../../lib/shared/index.js';
 import { useToast } from '../toast';
 import ShotMaterialPicker from './ShotMaterialPicker';
 import LoadingOverlay from './LoadingOverlay';
@@ -181,9 +182,10 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       </div>
       {shown.map((s) => {
         const chars = charsOf(s), scenes = scenesOf(s), props = propsOf(s), costumes = costumesOf(s), ages = agesOf(s), audios = audiosOf(s);
-        // 语音参考只显示「有台词」角色（与后端 assembleShotReferences 一致）：多人同场时仅说话角色才有音色
+        // 语音参考只显示「有台词」角色（与后端 assembleShotReferences 一致，同走 nameMatches：
+        // 名字用规范化后精确相等，避免「明」被对白里的「小明」误判成说话人）
         const speakers = dialogueSpeakers(s.dialogue);
-        const speakingChars = chars.filter((c) => speakers.some((sp) => sp === c.name || sp.includes(c.name) || c.name.includes(sp)));
+        const speakingChars = chars.filter((c) => speakers.some((sp) => nameMatches(sp, c.name)));
         const voices = speakingChars.filter((c) => c.voice_ref).map((c) => ({ name: c.name, voice_ref: c.voice_ref }));
         const allRefs = [...chars, ...scenes, ...props, ...costumes, ...ages];
         const resoLabel = s.resolution === 'custom' && project

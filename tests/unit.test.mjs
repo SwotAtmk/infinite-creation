@@ -14,7 +14,7 @@ import {
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
@@ -431,6 +431,32 @@ test('dialogueSpeakerNames: 解析说话人 + 约束常量', () => {
   assert.deepEqual(dialogueSpeakerNames('小明:现在是3:30了'), ['小明']);
   assert.equal(MAX_SPEAKERS_PER_SHOT, 2);
   assert.equal(MAX_AUDIO_REFS, 3);
+});
+
+test('nameMatches: 规范化后精确相等（短名不被同场更长角色名误命中）', () => {
+  assert.equal(nameMatches('小明', '小明'), true);
+  // canonical 名带身份后缀 / 舞台提示：对白说话人是「小明」，角色资产名是「小明（少年）」
+  assert.equal(nameMatches('小明', '小明（少年）'), true);
+  assert.equal(nameMatches('小明（少年）', '小明'), true);
+  assert.equal(nameMatches('林默（站在路口）', '林默'), true);
+  // 互为子串的名字必须判为不同人：「明」不因对白里「小明」说话而被当成说话人
+  assert.equal(nameMatches('小明', '明'), false);
+  assert.equal(nameMatches('明', '小明'), false);
+  assert.equal(nameMatches('李', '小李'), false);
+  // 空值不匹配（避免「匿名角色」互相匹配上）
+  assert.equal(nameMatches('', '小明'), false);
+  assert.equal(nameMatches('小明', ''), false);
+  assert.equal(nameMatches(null, undefined), false);
+});
+
+test('短名串扰：音色归属与分镜面板都走 nameMatches（源码守卫）', () => {
+  // refs.js 的 speaks / ShotsTab 的说话角色展示都不导出（前者要 DB，后者是 JSX），用源码守卫钉住
+  const refs = fs.readFileSync(path.join(__dirname, '..', 'lib', 'core', 'refs.js'), 'utf8');
+  assert.ok(/nameMatches\(s, c\.name\)/.test(refs), 'refs.js 的说话人判定必须用 nameMatches');
+  assert.ok(!/includes\(c\.name\)/.test(refs), 'refs.js 不应再用 includes 双向包含匹配');
+  const shots = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ShotsTab.jsx'), 'utf8');
+  assert.ok(/nameMatches\(sp, c\.name\)/.test(shots), 'ShotsTab 的说话角色判定必须与后端同口径');
+  assert.ok(!/includes\(c\.name\)/.test(shots), 'ShotsTab 不应再用 includes 双向包含匹配');
 });
 
 test('extractJson: 带围栏与噪音', () => {

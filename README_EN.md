@@ -22,6 +22,8 @@ English | [中文](README.md)
 
 ## Roadmap
 - [Ongoing] Addressing BUGs in the project
+- [In Planning] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
+- [In Progress] Automated Pipeline Supports Custom Prompt Assembly Plugins
 - [In the plan] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
 - [In the plan] For the beautification work of the tool Web page, a highly aesthetic AI designer is needed
 - [In plan] Package and build Docker deployment, desktop app

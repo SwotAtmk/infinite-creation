@@ -22,6 +22,7 @@ English | [中文](README.md)
 
 ## Roadmap
 - [Ongoing] Addressing BUGs in the project
+- [In progress] Integrate the function of automatically generating video subtitles
 - [In progress] Address and optimize issues such as tool invocation security and context compression in internal agents
 - [In Progress] Integrating external agents, divided into standard and professional editions. The professional edition calls external agents for processing, while the standard edition includes an integrated agent module
 - [In Progress] Plugin system development, supporting plugin upload, plugin invocation, plugin framework

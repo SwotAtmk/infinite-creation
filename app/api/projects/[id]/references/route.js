@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Projects, ReferenceImages, Assets, Chapters, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger, withWriteContext } from '@/lib/core/index.js';
 import { runInlineJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
-import { PROJECT_ASSET_SUBDIRS, ASSET_CATEGORY_IDS, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '@/lib/shared/index.js';
+import { PROJECT_ASSET_SUBDIRS, ASSET_CATEGORY_IDS, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES, isVariantAssetCategory } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +32,10 @@ async function analyzeUploadedImage(buf, extName) {
     const info = extractJson(resp.content);
     const name = String(info.name || '').trim().slice(0, 40);
     if (!name) return null;
-    const category = PROJECT_ASSET_SUBDIRS[info.category] ? info.category : 'other';
+    // 服装/年龄是「挂在角色下的变体」，必须有父角色（见 Assets.create 的守卫 + lib/shared 说明）；
+    // 视觉分析这条链路没有「所属角色」可填，模型万一吐出 costume/age 一律退回 other，
+    // 免得在素材库里落一条永远不生效的变体、或让上传直接失败。
+    const category = (PROJECT_ASSET_SUBDIRS[info.category] && !isVariantAssetCategory(info.category)) ? info.category : 'other';
     const description = String(info.description || '').trim().slice(0, 200);
     return { name, category, description };
   } catch (e) {
@@ -99,6 +102,13 @@ export async function POST(req, { params }) {
   const analyzedCategory = (analysis && analysis.category) || 'other';
   const assetCategory = mode === 'library' ? ((category && category !== 'other') ? category : analyzedCategory) : category;
   const finalDescription = (analysis?.description || description || '').trim();
+  // 素材库模式会顺手把这条参考图建成一条素材，而服装/年龄变体必须挂在角色下（另有 db 守卫兜底）。
+  // 这条上传链路没有「所属角色」可选，用户显式选了变体分类就在这里 400（**写盘之前**），
+  // 否则：① db 守卫抛出的错误码没人翻译 → 500；② 文件已经落盘，留下没有 DB 行的孤儿图片。
+  // 模型推断出的变体已在 analyzeUploadedImage 里退回 other，所以这里只会命中用户的显式选择。
+  if (mode === 'library' && isVariantAssetCategory(assetCategory)) {
+    return NextResponse.json({ error: '服装/年龄是挂在角色下的变体，参考图上传无法指定「所属角色」：请到素材库用「＋ 新建资产」并选好所属角色，或改选其它分类' }, { status: 400 });
+  }
   const relDir = mode === 'library' ? ('assets/' + (PROJECT_ASSET_SUBDIRS[assetCategory] || 'other') + '/') : 'references/';
   const rel = relDir + slugify(baseName) + '_' + uid().slice(0, 8) + extName;
   const abs = resolveProjectPath(id, rel);

@@ -455,6 +455,19 @@ test('参考图白名单：前端选择器与后端校验共用一份（含无 M
   assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
 });
 
+test('参考图上传/编辑不能建变体：服装/年龄必须挂在角色下（源码守卫）', () => {
+  const post = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'references', 'route.js'), 'utf8');
+  // 实机核验见探针 ic-r8-parent-probe.mjs 的 K 段（导入素材库+服装 → 400 而非 500；道具 → 200）
+  assert.ok(/mode === 'library' && isVariantAssetCategory\(assetCategory\)/.test(post), '素材库模式必须拦下变体分类，否则 db 守卫抛错 → 500 且文件已落盘');
+  assert.ok(!/PROJECT_ASSET_SUBDIRS\[info\.category\] \? info\.category/.test(post), '视觉模型若返回变体分类要退回 other，不能让上传整体失败');
+  const patch = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'references', '[rid]', 'route.js'), 'utf8');
+  assert.ok(/body\.category !== undefined && isVariantAssetCategory\(category\)/.test(patch), 'PATCH 显式把分类改成变体必须 400');
+  assert.ok(/BAD_VARIANT_PARENT/.test(patch), 'db 守卫的领域错误码必须翻成 400，不能漏成 500');
+  assert.ok(/assetNow\.category === category \|\| isVariantAssetCategory\(category\)\) \? \{ description \}/.test(patch), '分类没变（或是变体分类）时不要把 category 传给 Assets.update，否则存量无父变体连改描述都被拒');
+  const picker = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ReferencePicker.jsx'), 'utf8');
+  assert.ok(/isVariantAssetCategory/.test(picker) && /libCategoryOptions/.test(picker), '前端不该给出「导入素材库 + 服装/年龄」这个必然被拒的选项');
+});
+
 test('server /files：Range 的后缀范围 bytes=-N 返回末尾 N 字节（源码守卫）', () => {
   const s = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   // 实机核验见探针 ic-range-probe.mjs（修复前 bytes=-100 → "bytes 0-100/…" 即开头 101 字节；修复后 → 末尾 100 字节）

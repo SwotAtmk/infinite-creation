@@ -112,7 +112,7 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 
 | 方法 | 路径 | 变更 |
 |------|------|------|
-| `PATCH` | `/api/projects/:id/shots/:sid` | 除 6 个 `*_ids` 外，接受分镜正文字段：`chapter/idx/scene_name/camera/visual/dialogue/narration/sub_shots/duration/seed/references/resolution/aspect_ratio/video_prompt`（**不接受** `status/error/video_path/video_prompt_used`，防伪造生成结果）。写入前过一遍业务校验：`duration` 1~15 秒、`dialogue` ≤ duration×5.5 字、单镜说话人 ≤2、`resolution`/`aspect_ratio` 走枚举 |
+| `PATCH` | `/api/projects/:id/shots/:sid` | 除 6 个 `*_ids` 外，接受分镜正文字段：`chapter/idx/scene_name/camera/visual/dialogue/narration/sub_shots/duration/references/resolution/aspect_ratio/video_prompt`（**不接受** `status/error/video_path/video_prompt_used/seed`，防伪造生成结果；`seed` 见 §二十）。数组字段的元素必须是字符串：塞对象当场 400，不再静默存 `"[object Object]"`。写入前过一遍业务校验：`duration` 1~15 秒、`dialogue` ≤ duration×5.5 字、单镜说话人 ≤2、`resolution`/`aspect_ratio` 走枚举；**跨字段校验只在本次真的改了它依赖的字段时做**（见 §二十一 修复 2） |
 | `PATCH` | `/api/projects/:id/chapters/:cid` | 新增 `script` 字段 |
 | `POST` | `/api/projects/:id/chapters` | `script` 可选 |
 | `POST` | `/api/projects`、`PATCH` `/api/projects/:id` | 新增项目级校验：`video_resolution`/`video_aspect_ratio` 走 `lib/shared` 同一份枚举（空串 = 默认 `480P`/`16:9`），非法值 400。分镜生成时取 `shot.resolution \|\| project.video_resolution`，项目这一层写错会让整个项目在渲染阶段才炸 |
@@ -549,7 +549,7 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 内置 Agent 不受影响：`set_storyboard` / `update_shot` 的 schema 里从来没有 `seed`，它们也不走 `pickShotFields`（该白名单只服务外部写入 API）；界面只展示 seed、不可编辑。
 - 顺手修掉一处**错报**：数字字段循环末尾原本是「兜底分支」，任何白名单里的数字字段走到最后都会被按 `duration` 的区间校验 —— 把 seed 放回白名单做反向验证时，`seed=123456` 报的是「duration 必须在 1~15 秒之间」。现在 `duration` 显式判名（日后往 `SHOT_NUMBER_FIELDS` 加字段要补显式分支）。
 - **若日后要「钉住种子复现」，那是功能变更**：先让渲染读它（非 0 沿用），再把它从 `VOLATILE` 拆出来（否则钉了也不会被日志/回滚看见）。
-- 文档同步：`ic-writer` 技能的「分镜可写字段」清单去掉 `seed`，并把 `seed` 并入「产物字段不可写」（技能在 `~/.agents/skills/ic-writer/SKILL.md`，不在本仓库、不随提交走）。
+- 文档同步：`ic-writer` 技能的「分镜可写字段」清单去掉 `seed`，并把 `seed` 并入「产物字段不可写」。**技能源在本仓库的 `harness-skills/ic-writer/SKILL.md`**（`scripts/install-writer-skill.mjs` 从那里装到 `~/.agents/skills/ic-writer/`）——原先这句写成「不在本仓库、不随提交走」是错的，导致本轮只改了 `~/.agents` 那份、仓库那份仍把 `seed` 列为可写，重跑安装脚本就会把技能回退成错契约（§二十一 修复 9 已把两份对齐）。
 
 验证：单测 **178/178**（断言精确到错误文案——只数条数会被上面那种错报蒙混过去）；反向验证「seed 放回白名单 → 该用例翻红，还原 → 全绿」；实机探针 `ic-seed-reject-probe.mjs` **13/13**（三条写入路径带 seed 均 400 且文案精确、同一条分镜写合法字段仍 200 且落库、`seed` 保持 0 既没被清空也没被伪造、整章重写被拒后原分镜还在）。
 
@@ -560,5 +560,40 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 ### 3. `dev7` 暂不推送
 
 `origin` 是你的 fork（`happymy/infinite-creation`），`upstream` 是上游（`SwotAtmk/infinite-creation`）。本轮没有 PR/评审对象，分支也还没收敛成可交付状态，推送只是多一次公开副作用。要推时说一声，执行 `git push -u origin dev7`（本会话不自行推送）。
+
+
+
+## 二十一、第十四轮：分支整体审计——`dev7` 相对 `origin/main` 的 130 个提交有没有改坏业务逻辑（2026-10-16，dev7）
+
+范围：`934ee07`（= `origin/main`，也是 `merge-base(dev7, main)`）→ `dev7`（`0a16f38`），**130 个提交、58 个文件**（代码 +2695 / −492；不含 docs 与 tests）。方法：把累计代码 diff（`git diff -U6`，5959 行）切成 6 段，逐 hunk 读，**每条候选都回到源码复核调用方**（界面 / 内置 Agent / 既有数据），确认后再动手；改完对每条真问题做反向验证（把改动注回去 → 对应用例翻红 → 还原 → 全绿）。
+
+结论：**这一批改动没有把任何合法流程改坏**（下面「判定不改」项都是既有取舍或既有缺陷，不是 dev7 引入的），但**新加的逻辑里有 9 处会挡住合法流程、或自身状态不一致**，已修。
+
+### 修掉的（9 项）
+
+1. **`＋新增章节` 被自己的唯一性校验堵死**（`db.js`）：自动标题直接拼 `'第' + seq + '章'`，而 `seq` 只看现有最大序号 —— 用户把某章改名成「第3章」后（maxSeq 仍是 2），新增章节又拼出「第3章」→ `DUP_CHAPTER_TITLE`。界面上「＋新增章节」固定发空标题、又没有填标题的入口，用户只能先去改名才能建章。改为 `autoChapterTitle()`：往后找第一个没被占用的「第N章」。
+2. **只改素材绑定也会被「历史超速台词」挡住**（`shot-write.js` `validateShotContent`）：跨字段校验（台词速度、说话人数）原先**无条件**执行，拿库里旧台词重算 —— 历史遗留 / 外部写入的超速行**整行不可编辑**，界面上连解绑都做不了（绑素材只发 6 个 `*_ids` 也 400）。改为只在本次真的改了依赖字段时校验（速度看 `dialogue`/`duration`，说话人看 `dialogue`），与内置 Agent `update_shot` 同口径。`chapter` 归属校验保持无条件（清空归属会让分镜从章节视图与统计里消失）。
+3. **`set_storyboard` 的工具描述与自己的校验对不上**（`tools.js`）：描述写「chapter 传章节号」，校验只认章节标题或 id → 模型照描述传 `"1"` 会让**整批**分镜被拒（一条都不落库）。描述改为「chapter 传章节标题或章节 id（先用 `list_chapters` 看本项目章节）」。
+4. **资产图阶段顺序反了，换装/年龄兜底首次必失败**（`stages.js`）：兜底是图生图，`hChangeOutfit`/`hChangeAge` 在角色 canonical 图不存在时直接抛「角色参考图不存在」，而它原先排在 `generate_assets_batch` **之前** → 新项目首次跑资产图阶段时每个变体都失败（只落进 notes），要再跑一次才生效。改为先批量出图、`isAborted` 检查后再兜底。
+5. **「重做」之后再也回滚不掉那次改动**（`changelog.js`）：回滚一条「回滚日志」= 重做，但原始日志的 `reverted_by` 没被清掉 → 之后单条 / 全量回滚都会把它当「已被回滚」跳过（用户看到「回滚成功」而数据没变）。重做时清掉 `revert_of` 指向那条日志的 `reverted_by`。
+6. **运行中的行内任务仍显示「删除」按钮**（`ProjectView.jsx`）：后端对「运行中且不占渲染槽位」的行内任务（llm 参考图分析 / export 按章导出）明确回 409（停不掉，删记录只会留下看不见的孤儿），而界面给所有任务都渲染删除按钮 → 用户点了必然报错。改为与 `CANCELLABLE` 同一判据：运行中的行内任务不渲染删除。
+7. **数组字段塞对象被静默变成 `"[object Object]"`**（`shot-write.js` `pickShotFields`）：`*_ids` 那条链路会被 db 层当无效 id 丢掉（回 200 却没写进去），`refs` 那条把垃圾字符串存下来。改为当场 400（与「白名单外字段一律报错」同口径）。
+8. **两条写入路径的默认时长不一致**（`tools.js` `hUpdateShot` 写死 `|| 8`，而 `SHOT_DURATION_DEFAULT = 5`）：历史行 `duration` 为空时，同一行在外部 API 与内置 Agent 里按不同上限判台词。统一取 `SHOT_DURATION_DEFAULT`。
+9. **技能文档漂移**（`harness-skills/ic-writer/SKILL.md`，是 `scripts/install-writer-skill.mjs` 的安装源）：仓库内那份仍把 `seed` 列为可写、项目 `PATCH` 那行还是旧措辞，而 §二十 只改了 `~/.agents` 那份 —— 重跑安装脚本会把技能回退成错契约。两份现已逐字一致，并补上「章节重排必须给本项目全部 id」「章节改名请按 `batch_id` 回滚」「数组元素必须是字符串」。
+
+### 本轮核对过、判定「不改」的项
+
+- `activeJobOf` 把 `queued` 也算活动任务 → 本项目任一 running/queued 任务（含不碰分镜的 asset-image / voice-design / music）都会挡住删章节 / 删分镜 / 整章重写；排队任务最多被挡到队列超时。第 11、12 轮已判定「保守但可接受」，本轮复核仍不改（排队任务醒来后确实会写这些行，删了会留孤儿）。后续若要细化，应按「任务类型是否真的写分镜」判。
+- 单条回滚「章节改名」日志**不**连带还原同批的分镜（分镜仍指向旧标题）→ 不改代码，改为写进技能文档：按 `batch_id` 回滚。
+- `VOLATILE.chapter` 含 `music_path` / `music_prompt_used`：`/music/apply` 这种用户级操作也不进变更日志（与渲染链路写同一批字段，无法区分）→ 已知缺口，记录在案。
+- 视频阶段逐章 try/catch：部分章节合并失败仍以 `done` 收尾（detail 里列出失败章节），只有全失败才报失败 —— 第 8 轮既定取舍。
+- 行内任务（llm / export）不可取消、不可删除（409）—— 第 11 轮既定；本轮只让界面别渲染那个必然报错的按钮。
+- `dialogueSpeakerNames` 对「甲，乙：台词」这类标签不拆分（只记一条可观测提示）—— 拆逗号会误伤台词正文，第 9 轮既定。
+- `db.js` 只设 `PRAGMA journal_mode = WAL`、没有 `busy_timeout`：Next 按路由分包 → 多份 `DatabaseSync` 连接同一文件，并发写入理论上可能 `SQLITE_BUSY`（既有情况；本分支事务包住更多语句、窗口更长）。建议后续加一行 `PRAGMA busy_timeout`，本轮不改（非 dev7 引入）。
+- `shots.refs`（`references` 字段）写入后只有 `Assets.usageOf` 扫描消费、渲染链路不读它 —— 既有设计，非本轮引入。
+
+### 第十四轮验证口径
+
+单测 **184/184**（较上轮 +6 条回归：重做后可再回滚 / 只改绑定不被旧台词挡 / 自动标题避让 / 数组含对象报错 / 两条路径同一份默认时长 / 工具描述与校验同口径 + 资产图阶段顺序 + 行内任务不渲染删除）；5 处代码修复**逐条反向验证**（注入原缺陷 → 对应用例 `fail=1` → 还原 → 全绿）。改 `lib/core`、`lib/agent` 后重启实例，既有 **16 支探针全部重跑全绿**（`ic-audit-e2e` 88/0、`ic-refguard-e2e` 15/0、`ic-r4-probe` 6/0、`ic-r4-probe2` 6/0、`ic-malformed-probe` 5/0、`ic-range-probe` 失败 0、`ic-r6-llm-probe` 5/0、`ic-r7-upload-probe` 20/0、`ic-r7-skills-probe` 5/0、`ic-r8-parent-probe` 31/0、`ic-r9-skills-probe` 7/0、`ic-r9-rollback-probe` 11/0、`ic-r10-delstop-probe` 11/0、`ic-r10-bind-probe` 11/0、`ic-r11-inline-cancel-probe` 18/0、`ic-seed-reject-probe` 13/0），并新增 `ic-r14-fixes-probe.mjs` **24/24** 专测本轮修复（直写库造「历史超速行」→ 只发 6 个 `*_ids` 应 200、改台词/时长仍 400、显式空 chapter 仍 400；数组塞对象 400 且库里无 `[object Object]`；「第3章」被占后空标题建章得「第4章」；回滚 → 重做 → 再回滚同一条 create 日志 `applied=1` 且分镜真的消失）。`GET /` 200（长度 24524，与前轮一致）确认 JSX 改动不破坏编译；临时项目清理 7/0，真实库只剩「白衣审判」。
 
 

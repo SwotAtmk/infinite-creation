@@ -229,6 +229,25 @@ test('resolveHardwareConfig: generation 被写成非对象时退回默认值（�
   assert.equal(resolveHardwareConfig({ generation: { videoFreeAfterEvery: 5 } }).generation.freeAfterEvery, 5);
 });
 
+test('resolveHardwareConfig: 其它配置段被写成非对象时同样退回默认值（设置页不再白屏）', () => {
+  // PUT /api/config 会把请求体整段写进 config.json：`{comfyui: null}` 这种脏配置被原样保留后，
+  // 前端 `cfg.comfyui.provider`（SettingsPage）直接抛 → 设置页整页白屏；llm/server 同理。
+  for (const bad of [null, 'x', 5, [], true]) {
+    const r = resolveHardwareConfig({ comfyui: bad, llm: bad, server: bad, hardware: bad });
+    assert.equal(r.comfyui.provider, 'native', 'comfyui 退回默认（' + JSON.stringify(bad) + '）');
+    assert.equal(r.comfyui.baseUrl, 'http://127.0.0.1:8188');
+    assert.equal(r.llm.baseUrl, 'https://api.deepseek.com');
+    assert.equal(r.llm.model, 'DeepSeek-V4.1-Flash');
+    assert.equal(r.server.port, 4600);
+    assert.equal(r.hardware.mode, 'nvidia');
+  }
+  // 正常值不受影响
+  const ok = resolveHardwareConfig({ comfyui: { provider: 'runninghub' }, llm: { model: 'm' }, server: { port: 5000 } });
+  assert.equal(ok.comfyui.provider, 'runninghub');
+  assert.equal(ok.llm.model, 'm');
+  assert.equal(ok.server.port, 5000);
+});
+
 test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前后端共用同一份常量）', () => {
   assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.nvidia), true);
   assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.amd), true);

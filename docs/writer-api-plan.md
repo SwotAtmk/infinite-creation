@@ -269,3 +269,20 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - **`shots/zip` / `export` 缺 `Projects.get`**：项目不存在时下游查询返回空集，路径上不可达（且必须落盘才可能越界）。
 
 第三轮验证口径：`node --test "tests/*.test.mjs"` **126/126**（本轮新增/改写 14 项）；反向验证（`git stash` 掉 `app/api`+`lib` 只留新测试）**14 项全部命中失败**、其余 112 项照常通过（零回归）；真实实例端到端 **88/88**，素材用途守卫端到端 **15/15**（本轮新增「缺 `chapter_id` / 外项目 `chapter_id` / 分类越界 → 400/404 且不落盘」三条）。
+
+## 十二、第四轮（确认轮）补齐
+
+第三轮收尾时按「同一类问题只在一处挡了」的线索回头复查，抓到两处同类的漏网（都是本轮新加校验没覆盖到的兄弟入口）：
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| 中 | 分类值域只挡在 `Assets.create`，而 `PATCH …/assets/:aid` 的可编辑字段里有 `category`：等于留了「先把行建出来、再改成脏分类」的后门，界面分组与批量生成照样扫不到 | `Assets.update` 补上同一道守卫；路由把 `BAD_ASSET_CATEGORY` 翻成 400（原先抛到框架层变 500） |
+| 低 | `POST …/chapters` 把请求体整包丢给 `Chapters.create`：拼错的字段（`titel`/`noval`）被静默忽略却回 200，调用方以为写进去了；显式空白标题会落成一章「界面上没有名字」的章节，而 PATCH 侧本就拒绝空标题（建得出来、却再也存不下去） | 创建路由改用 `pickChapterFields`（只认 `title/novel/script`，其余 400）；`Chapters.create` 把空白标题兜底成「第N章」 |
+
+### 本轮核对过、判定「不改」的项
+
+- **资产名为空**：界面里是一行「没有标题」的素材，但素材的可见性由 `category` 过滤决定（`Assets.list` 只按分类过滤），属观感问题；`POST /assets` 路由与 `create_asset` 工具的 schema 都已要求 `name`，db 层再拦会连带影响内部流程（音色/音乐资产的名字由上游拼出），不加。
+- **`Chapters.create` 不改存储内容**：带前后空格的标题照旧原样落库（只处理纯空白这一种），因为分镜按 `title` 精确归属，写时归一化会让「已有分镜 + 新标题」脱节。
+- **UI 调用点全量核对**：`EditProject` 的 PATCH 字段全在白名单内；`ChaptersView` 的参考上传带 `chapter_id`、新增章节发 `{}`；`AssetsTab` 的资产表单与 `ReferencePicker` 的分类下拉取值都在 `ASSET_CATEGORY_IDS` 内（只少一个 `age`，那是换装/年龄流程生成的，不可手选）；`ShotsTab` 只 PATCH 素材绑定字段。第三轮的收紧没有误伤界面。
+
+第四轮验证口径：`node --test "tests/*.test.mjs"` **126/126**（两处修复各扩写一个既有测试）；真实实例端到端 **88/88**、素材用途守卫 **15/15** 保持不变，另加两条实机探针 **各 6/6**（`PATCH` 分类越界/空 → 400 且分类未变、合法值照常；`POST` 章节拼错字段/空白标题 → 400、省略标题自动「第N章」、重名带尾空格仍 400）。

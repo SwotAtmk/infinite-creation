@@ -82,14 +82,14 @@ node -e "const fs=require('fs');fetch('http://127.0.0.1:4600/api/projects/PID/ch
 | PUT | `/api/projects/:id/context` | `{key:'bible'\|'style'\|'continuity', content}` 或 `{bible?, style?, continuity?}` | 人物圣经/风格/连续性（同时落盘 `context/*.md`） |
 | GET | `/api/projects/:id/chapters` | — | 章节列表（含 `script`、分镜计数、生成状态） |
 | POST | `/api/projects/:id/chapters` | `{title?, novel?, script?}` | **新增章节**（小说原文按章写） |
-| PATCH | `/api/projects/:id/chapters` | `{ids:[...]}` | 按数组顺序重排章节 |
+| PATCH | `/api/projects/:id/chapters` | `{ids:[...]}` | 按数组顺序重排章节。**必须给出本项目全部章节的 id**（少一个就 400：没上榜的章节会保留旧 `seq`，与上榜章节撞号后成片顺序不再确定） |
 | PATCH | `/api/projects/:id/chapters/:cid` | `{title?, novel?, script?}` | 改章节；改标题会同步迁移该章分镜 |
 | DELETE | `/api/projects/:id/chapters/:cid` | — | 删章节（级联删该章分镜，可整批回滚）。**任务运行中 409** |
 | PUT | `/api/projects/:id/chapters/:cid/storyboard` | `{shots:[…], replace?}` | **整章写分镜**（默认 `replace:true` 先清空该章），单次 ≤500 条。**任务运行中 409**；`replace:false` 追加时镜号自动接在该章现有最大 `idx` 之后 |
 | GET / POST | `/api/projects/:id/shots` | POST 见下 | 列 / 建单个分镜 |
 | PATCH / DELETE | `/api/projects/:id/shots/:sid` | PATCH 见下 | 改 / 删单个分镜（删除在**任务运行中 409**） |
 | GET | `/api/projects/:id/logs` | 查询串 `entity/action/source/limit/offset` | **变更日志**（回滚依据） |
-| POST | `/api/projects/:id/logs/rollback` | `{log_id}` \| `{batch_id}` \| `{since_ts}`，可加 `force:true` | **回滚** |
+| POST | `/api/projects/:id/logs/rollback` | `{log_id}` \| `{batch_id}` \| `{since_ts}`，可加 `force:true` | **回滚**。章节改名会级联迁移该章分镜、两者同属一个 `batch_id`：要撤销改名请按 `batch_id` 回滚（只给 `log_id` 只还原章节那一行，分镜仍指向旧标题 → 从章节视图消失、成片里被排到最末） |
 | GET | `/api/projects/:id/assets` | — | 素材（人物/场景/道具/音色/音乐），只读为主 |
 
 ## 内容分层：别写错层
@@ -105,12 +105,14 @@ node -e "const fs=require('fs');fetch('http://127.0.0.1:4600/api/projects/PID/ch
 
 ```
 chapter, idx, scene_name, camera, visual, dialogue, narration, sub_shots,
-duration, seed, resolution, aspect_ratio, video_prompt,
+duration, resolution, aspect_ratio, video_prompt,
 character_ids, scene_ids, prop_ids, costume_ids, age_ids, audio_ids, references
 ```
 
-`status / error / video_path / video_prompt_used / prompt_id` 是生成产物，**不可写**（防伪造「已生成」）。
+`status / error / video_path / video_prompt_used / prompt_id / seed` 是生成产物，**不可写**（防伪造「已生成」）。
+`seed` 尤其别写：渲染链路从不读 `shots.seed`，每次渲染都现取一个随机种子回写，所以写进去的值下一次渲染就被覆盖，且它不进变更日志、回滚也恢复不了——写了等于没写。
 `resolution` / `aspect_ratio` 只接受枚举值（见铁律 8）；`duration` / `idx` 有区间约束。
+数组字段的元素必须是字符串：塞对象（`[{id:'x'}]`）会被 400 拒绝，不会静默变成 `"[object Object]"`。
 
 ## 改写已生成的 LLM 产物
 
@@ -126,7 +128,7 @@ character_ids, scene_ids, prop_ids, costume_ids, age_ids, audio_ids, references
 注意两点：
 
 - **改了要连带说明影响**：分镜的 `video_prompt` 改过之后，应用下次跑渲染阶段会重出这条镜头（应用自己按 `video_prompt_used` 判定，不需要你触发）。这在预期内，但要在交付说明里告诉用户。
-- **产物字段不可写**：`status / error / video_path / video_prompt_used / prompt_id` 一律 400 拒绝——它们是生成链路的结果，写不进去也伪造不出「已生成」。
+- **产物字段不可写**：`status / error / video_path / video_prompt_used / prompt_id / seed` 一律 400 拒绝——它们是生成链路的结果，写不进去也伪造不出「已生成」；`seed` 还会被下一次渲染覆盖。
 
 ## 典型流程
 

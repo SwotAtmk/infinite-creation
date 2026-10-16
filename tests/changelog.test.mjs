@@ -712,6 +712,28 @@ test('activeJobOf：queued（排队中）也算活动任务，防重与 409 守�
   Projects.remove(other.id);
 });
 
+// 轮询等任务走到终态（running/queued 之外）
+async function waitJob(id) {
+  for (let i = 0; i < 250; i++) {
+    const j = Jobs.get(id);
+    if (j && j.status !== 'running' && j.status !== 'queued') return j.status;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return (Jobs.get(id) || {}).status;
+}
+
+test('阶段任务：运行中被停止必须记 cancelled，不能让前端弹「任务完成」', async () => {
+  const { startStageJob } = await import('../lib/agent/stages.js');
+  const { stopJob } = await import('../lib/agent/job-runner.js');
+  const p = mkProject('阶段停止项目');
+  const job = startStageJob({ projectId: p.id, stages: ['image'] });
+  // 立刻停止：runExclusiveVideo 用微任务启动 fn，此刻 run() 还没拿到控制权，
+  // 必然走「阶段循环开头的 isAborted 检查 → 正常 resolve」这条路（正是原先被记成 done 的那条）。
+  stopJob(job.id);
+  assert.equal(await waitJob(job.id), 'cancelled', '被停止的阶段任务记 done 会让前端弹「✅ 任务完成」，而后面几章根本没跑');
+  Projects.remove(p.id);
+});
+
 test('回滚「章节新建」：级联删的分镜逐条留 delete 日志，重做能把章节与分镜一起恢复', () => {
   const p = mkProject('章节回滚级联项目');
   const ch = withWriteContext('POST /api/projects/:id/chapters', () => Chapters.create(p.id, { title: '待撤章节' }));

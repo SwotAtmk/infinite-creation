@@ -455,6 +455,14 @@ test('参考图白名单：前端选择器与后端校验共用一份（含无 M
   assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
 });
 
+test('server /files：Range 的后缀范围 bytes=-N 返回末尾 N 字节（源码守卫）', () => {
+  const s = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  // 实机核验见探针 ic-range-probe.mjs（修复前 bytes=-100 → "bytes 0-100/…" 即开头 101 字节；修复后 → 末尾 100 字节）
+  assert.ok(/if \(!m\[1\]\) \{/.test(s), 'bytes=-N（无起始值）必须单独走后缀分支');
+  assert.ok(/start = Math\.max\(total - n, 0\)/.test(s), '后缀范围的起点应为 total-n（最后 N 字节）');
+  assert.ok(/n <= 0\) \{ reject\(\)/.test(s), 'bytes=-0 非法，应按 RFC 回 416');
+});
+
 test('server：/ws 的客户端畸形帧不能让整个进程退出（源码守卫）', () => {
   const s = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.ok(/ws\.on\('error'/.test(s), "ws 必须挂 'error' 监听：畸形帧会让 ws emit('error')，无人接管时抛 uncaughtException、进程直接退出");

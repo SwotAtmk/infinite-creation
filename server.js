@@ -50,11 +50,23 @@ function serveFile(res, req, abs) {
     if (range) {
       // Range 支持：浏览器 <video>/<audio> 拖进度条靠它（206 分段返回），缺失则无法 seek
       const m = /^bytes=(\d*)-(\d*)$/.exec(range);
-      if (!m || !m[1] && !m[2]) { res.writeHead(416, { 'Content-Range': 'bytes */' + total }); res.end(); return true; }
-      let start = m[1] ? parseInt(m[1], 10) : 0;
-      let end = m[2] ? parseInt(m[2], 10) : total - 1;
-      if (start >= total || start > end) { res.writeHead(416, { 'Content-Range': 'bytes */' + total }); res.end(); return true; }
-      end = Math.min(end, total - 1);
+      const reject = () => { res.writeHead(416, { 'Content-Range': 'bytes */' + total }); res.end(); };
+      if (!m || (!m[1] && !m[2])) { reject(); return true; }
+      let start;
+      let end;
+      if (!m[1]) {
+        // 后缀范围 `bytes=-N` = **最后** N 字节。原实现无论有没有起始值都按 start=0 算，
+        // 于是 `bytes=-1000` 返回的是**开头** 1000 字节（还回 206 + Content-Range，看不出异常）：
+        // 拖到片尾反而拿到片头。`bytes=-0` 非法，按 RFC 回 416。
+        const n = Number(m[2]);
+        if (!Number.isFinite(n) || n <= 0) { reject(); return true; }
+        start = Math.max(total - n, 0);
+        end = total - 1;
+      } else {
+        start = Number(m[1]);
+        end = m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= total || start > end) { reject(); return true; }
+      }
       res.writeHead(206, {
         ...headers,
         'Content-Range': `bytes ${start}-${end}/${total}`,

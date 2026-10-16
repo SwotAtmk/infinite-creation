@@ -837,6 +837,17 @@ test('narration：内置 Agent 与外部写入 API 同口径，可写旁白', as
   Projects.remove(p.id);
 });
 
+test('set_storyboard：对不上的资产名不再静默丢弃（随结果回报）', async () => {
+  const p = mkProject('分镜资产名项目');
+  Assets.create(p.id, { category: 'character', name: '小明' });
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  const r = await runTool(ctx, 'set_storyboard', { shots: [{ idx: 1, visual: '画面', characters: ['小明', '小铭'] }] });
+  assert.match(r, /未找到同名资产/);
+  assert.match(r, /人物「小铭」/);
+  assert.equal(Shots.list(p.id)[0].character_ids.length, 1, '命中的名字照常绑定');
+  Projects.remove(p.id);
+});
+
 test('换装兜底：LLM 阶段（renderDisabled）不渲染，推迟到「资产图」阶段执行', async () => {
   const p = mkProject('换装兜底阶段项目');
   const mkImg = (rel) => {

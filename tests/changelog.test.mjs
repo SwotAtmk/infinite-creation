@@ -376,6 +376,17 @@ test('章节标题唯一：同项目重名（含只差空格）被拒绝', () =>
   Projects.remove(p2.id);
 });
 
+test('＋新增章节：自动标题避开被占用的「第N章」（改名撞号不能把建章按钮堵死）', () => {
+  const p = mkProject('自动标题项目');          // 自动建「第1章」
+  Chapters.create(p.id, { title: '第3章' });    // seq=2，但标题「第3章」已被占用
+  // 界面上「＋新增章节」固定发空标题（没有填标题的入口）：自动标题若直接拼 '第'+seq+'章' 就会撞上
+  // 唯一性校验，只回一个 400 —— 用户只能先去改名才能建章。自动标题要往后找第一个没被占用的编号。
+  assert.equal(Chapters.create(p.id, {}).title, '第4章', '自动标题要跳过已被占用的「第3章」');
+  assert.equal(Chapters.create(p.id, {}).title, '第5章');
+  assert.deepEqual(Chapters.list(p.id).map((c) => c.seq), [1, 2, 3, 4], 'seq 仍要连续（叙事顺序的唯一键）');
+  Projects.remove(p.id);
+});
+
 test('写入事务：中途抛错整体回滚，不留半吊子状态', () => {
   const p = mkProject('事务项目');
   const c = Chapters.create(p.id, { title: '第2章' });

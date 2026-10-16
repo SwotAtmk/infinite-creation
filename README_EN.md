@@ -22,13 +22,15 @@ English | [中文](README.md)
 
 ## Roadmap
 - [Ongoing] Addressing BUGs in the project
-- [In Planning] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
+- [In progress] Address and optimize issues such as tool invocation security and context compression in internal agents
+- [In Progress] Integrating external agents, divided into standard and professional editions. The professional edition calls external agents for processing, while the standard edition includes an integrated agent module
+- [In Progress] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
 - [In Progress] Automated Pipeline Supports Custom Prompt Assembly Plugins
-- [In the plan] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
-- [In the plan] For the beautification work of the tool Web page, a highly aesthetic AI designer is needed
-- [In plan] Package and build Docker deployment, desktop app
-- [Planned] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
-- [Planned] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
+- [In Progress] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
+- [In Progress] For the beautification work of the tool Web page, a highly aesthetic AI designer is needed
+- [In Progress] Package and build Docker deployment, desktop app
+- [In Progress] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
+- [In Progress] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
 - [✅] Support background music management: integrate MiniMax Music3 for local/cloud automatic background-music generation and synthesis into videos, with a "Background Music" library (manual generation / preview / select / apply to chapters)
 - [✅] Add Agent security approval policies to prevent Agent from performing unauthorized operations, deleting projects, or executing dangerous commands
 - [✅] Integrate the online RunningHub-ComfyUI workflow for generation, with free overnight MiniMax-H3 runs for members

@@ -62,7 +62,7 @@ export default function App() {
       <div className="max-w-[1100px] mx-auto px-5 py-5">
         <div className="row justify-between mb-6">
           <h1 className="text-2xl font-semibold m-0">
-            Agent无限创作 <span className="muted">小说 → 视频 · 全自动 Agent · 项目地址：</span>{' '}
+            Agent无限创作 <span className="muted">小说 → 视频 · 全自动 Agent · GitHub项目地址：</span>{' '}
             <a href="https://github.com/SwotAtmk/infinite-creation" target="_blank" rel="noreferrer" className="no-underline" style={{ marginLeft: 10, fontSize: 13 }}>SwotAtmk/infinite-creation</a>
           </h1>
           <div className="row">

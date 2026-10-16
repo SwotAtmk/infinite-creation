@@ -47,9 +47,17 @@ export default function ProjectsPage({ onOpen }) {
     try {
       const style = resolveStyle(form.style, customStyle);
       const p = await api.post('/api/projects', { ...form, style });
-      if (refs.length) {
-        const chapters = await api.get('/api/projects/' + p.id + '/chapters');
-        await uploadReferences(p.id, (chapters[0] && chapters[0].id) || '');
+      // 项目已经落库（POST 成功）：后面的取章节 / 传参考图失败，不能让用户以为「创建失败」——
+      // 此前这类失败只弹一条 toast，列表不刷新、也不进项目，用户会再点一次「创建并打开」，
+      // 于是同一个项目建了两遍（Projects.create 不限制重名）。先刷新列表，再单独兜参考图这一步。
+      load();
+      try {
+        if (refs.length) {
+          const chapters = await api.get('/api/projects/' + p.id + '/chapters');
+          await uploadReferences(p.id, (chapters[0] && chapters[0].id) || '');
+        }
+      } catch (e) {
+        toast.error('项目已创建，但参考图上传失败：' + e.message + '（可在章节页重新上传）');
       }
       onOpen(p.id);
     } catch (e) { toast.error(e.message); }

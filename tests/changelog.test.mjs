@@ -1210,8 +1210,38 @@ test('参考素材上传：走渲染后端分派层（RunningHub 下必须传到
   Projects.remove(p.id);
 });
 
-// —— 第 9 轮：Agent 工具 schema 缺 parent_id，变体写入只能撞 DB 错误、模型无法补救 ——
+test('参考素材：对白说话人未匹配到本镜角色时给出可观测提示（「甲，乙：」这类标签不再静默丢音色）', async () => {
+  // dialogueSpeakerNames 取冒号前整串当「一个」名字，nameMatches 是规范化后精确相等 →
+  // 「李雷，韩梅梅：台词」两人都匹配不上，音色被静默跳过（用户只看到「这一镜没声音」）。
+  // 判定语义不变（不拆逗号：会误伤台词正文），只把这种「静默无效」变成可观测的提示。
+  const p = mkProject('说话人提示项目');
+  fs.mkdirSync(path.join(projectDir(p.id), 'assets/character'), { recursive: true });
+  fs.mkdirSync(path.join(projectDir(p.id), 'assets/voice'), { recursive: true });
+  fs.writeFileSync(path.join(projectDir(p.id), 'assets/character/li.png'), 'x');
+  fs.writeFileSync(path.join(projectDir(p.id), 'assets/voice/li.flac'), 'x');
+  const ch = Assets.create(p.id, { category: 'character', name: '李雷' });
+  Assets.update(ch.id, { image_path: 'assets/character/li.png', voice_ref: 'assets/voice/li.flac' });
+  const cfg = { comfyui: { provider: 'native', baseUrl: 'http://127.0.0.1:8188' } };
+  const run = (dialogue) => {
+    const shot = Shots.create(p.id, { chapter: '第1章', visual: '画面', dialogue, character_ids: [ch.id] });
+    return core.assembleShotReferences({ cfg, project: Projects.get(p.id), shot, assets: Assets.list(p.id), upload: false });
+  };
 
+  // 正常单说话人：音色挂上，没有未匹配提示
+  let r = await run('李雷：你好');
+  assert.deepEqual(r.unmatchedSpeakers, []);
+  assert.equal(r.references.filter((x) => x.type === 'audio').length, 1, '说话角色的音色要挂上');
+  // 一行多说话人标签：整串被当成一个名字，谁都匹配不上 → 旧行为完全静默
+  r = await run('李雷，韩梅梅：你好');
+  assert.deepEqual(r.unmatchedSpeakers, ['李雷，韩梅梅'], '未匹配的说话人必须被报出来，而不是悄悄丢掉');
+  assert.equal(r.references.filter((x) => x.type === 'audio').length, 0, '匹配不上就不挂音色（判定语义不变）');
+  // 说话人根本不在本镜：同样提示
+  r = await run('韩梅梅：你好');
+  assert.deepEqual(r.unmatchedSpeakers, ['韩梅梅']);
+  Projects.remove(p.id);
+});
+
+// —— 第 9 轮：Agent 工具 schema 缺 parent_id，变体写入只能撞 DB 错误、模型无法补救 ——
 test('create_asset 工具：变体必须带 parent_id，且父必须是本项目的角色；非变体带 parent_id 被拒', async () => {
   const p = mkProject('工具变体父项目');
   const ch = Assets.create(p.id, { category: 'character', name: '小明' });

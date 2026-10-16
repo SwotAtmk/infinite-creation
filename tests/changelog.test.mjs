@@ -895,6 +895,23 @@ test('素材库：同名音乐资产复用（重跑不堆重复条目）', () =>
   Projects.remove(p.id);
 });
 
+test('apply_chapter_music：单章合并失败不中断其余章节', async () => {
+  const p = mkProject('应用BGM批量项目');
+  Chapters.create(p.id, { title: '第2章' });
+  // 两章都满足「全部已生成」的前置条件，但视频文件并不存在 → 第 1 章合并必然失败
+  for (const t of ['第1章', '第2章']) {
+    const s = Shots.create(p.id, { chapter: t, visual: '画面' });
+    Shots.update(s.id, { status: 'done', video_path: 'shots/missing.mp4', video_prompt: 'p', video_prompt_used: 'p' });
+  }
+  const music = Assets.create(p.id, { category: 'music', name: 'BGM' });
+  Assets.update(music.id, { audio_path: 'assets/music/x.mp3' });
+  const ctx = createToolRuntime({ projectId: p.id });
+  const r = JSON.parse(await runTool(ctx, 'apply_chapter_music', { music_id: music.id, chapters: ['第1章', '第2章'] }));
+  assert.equal(r.results.length, 2, '两章都要有结果（原先第 1 章一抛错，第 2 章连碰都没碰）');
+  assert.match(r.results[0].error || '', /合并成片失败/);
+  Projects.remove(p.id);
+});
+
 test('素材分类：值域外的分类必须拒绝（否则界面与批量生成都扫不到这一行）', () => {
   const p = mkProject('素材分类项目');
   assert.throws(() => Assets.create(p.id, { category: '不存在的分类', name: 'x' }), /素材分类不存在/);

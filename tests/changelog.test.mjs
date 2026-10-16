@@ -905,6 +905,36 @@ test('换装兜底：LLM 阶段（renderDisabled）不渲染，推迟到「资�
   Projects.remove(p.id);
 });
 
+test('停止：换装/年龄兜底循环不再逐镜继续出图（每个事件都是一次真提交）', async () => {
+  const p = mkProject('换装兜底停止项目');
+  const mkImg = (rel) => {
+    const abs = path.join(projectDir(p.id), rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, 'x');
+    return rel;
+  };
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png') });
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  await runTool(ctx, 'set_storyboard', { shots: [
+    { idx: 1, characters: ['小明'], visual: '小明在屋后沐浴' },
+    { idx: 2, characters: ['小明'], visual: '小明擦着头发走出屋子' },
+  ] });
+  // 用户已经点了「停止」：希望生成服装资产的兜底循环必须立刻退出，一次 ComfyUI 都不许提交
+  ctx.isAborted = () => true;
+  const calls = [];
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => { calls.push(String(url)); throw new Error('停止后不该提交'); };
+  let prov;
+  try {
+    prov = await resolveShotProvisions(ctx, ['第1章']);
+  } finally { globalThis.fetch = origFetch; }
+  assert.equal(prov.outfit.generated, 0, '停止后不该再生成换装变体');
+  assert.equal(prov.age.generated, 0);
+  assert.equal(calls.length, 0, '停止后一次 ComfyUI 提交都不该发生');
+  Projects.remove(p.id);
+});
+
 test('素材库：同名音乐资产复用（重跑不堆重复条目）', () => {
   const p = mkProject('音乐资产复用项目');
   const ctx = createToolRuntime({ projectId: p.id });

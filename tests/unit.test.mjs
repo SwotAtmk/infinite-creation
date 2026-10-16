@@ -939,6 +939,10 @@ test('guardToolCall: 危险命令只扫非正文参数（创作文本不该被�
 test('guardToolCall: 路径穿越仍按路径类参数拦截（与正文无关）', () => {
   assert.equal(guardToolCall('edit_asset_image', { file_path: '../../etc/passwd' }).blocked, true);
   assert.equal(guardToolCall('edit_asset_image', { reference_image_path: '/etc/passwd' }).blocked, true);
+  // Windows 形态的绝对路径/盘符相对路径：运行平台是 win32，只认 POSIX 等于守卫形同虚设
+  assert.equal(guardToolCall('edit_asset_image', { file_path: 'C:\\Windows\\win.ini' }).blocked, true);
+  assert.equal(guardToolCall('edit_asset_image', { file_path: 'C:../x' }).blocked, true);
+  assert.equal(guardToolCall('edit_asset_image', { file_path: '\\\\server\\share\\x' }).blocked, true);
   // 路径穿越只在路径类参数上判：普通文本里出现 ../ 不算（例如正文提及相对路径）
   assert.equal(guardToolCall('set_storyboard', { shots: [{ visual: '她从 ../ 的岔路口走来' }] }).blocked, false);
 });

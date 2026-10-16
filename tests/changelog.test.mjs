@@ -794,6 +794,25 @@ test('回滚：不存在的 log_id/batch_id 报错，不假装「回滚成功」
 });
 
 // ==================== 第 3 轮审计：写入契约 ====================
+test('set_storyboard：clear 只清本次写入的章节，别的章节（含已出片镜头）必须保留', async () => {
+  const p = mkProject('分镜clear范围项目');
+  Chapters.create(p.id, { title: '第2章' });
+  const ctx = createToolRuntime({ projectId: p.id });
+  await runTool(ctx, 'set_storyboard', { shots: [{ chapter: '第1章', idx: 1, visual: '一章画面' }] });
+  // 第2章放一条「已出片」的镜头：它就是被 clear 误删时损失最大的那种数据
+  const s2 = Shots.create(p.id, { chapter: '第2章', idx: 1, visual: '二章画面' });
+  Shots.update(s2.id, { status: 'done', video_path: 'shots/v.mp4', video_prompt: 'p', video_prompt_used: 'p' });
+  // 模型的常见用法：clear=true 表示「本章从头写一遍」
+  await runTool(ctx, 'set_storyboard', { clear: true, shots: [{ chapter: '第1章', idx: 1, visual: '一章重写' }] });
+  const shots = Shots.list(p.id);
+  assert.equal(shots.filter((s) => s.chapter === '第2章').length, 1, '别的章节的分镜不能被一起清掉');
+  assert.equal(Shots.get(s2.id).video_path, 'shots/v.mp4', '别的章节已出片的镜头必须原样保留');
+  const c1 = shots.filter((s) => s.chapter === '第1章');
+  assert.equal(c1.length, 1, '本章按 idx 重写后仍是原条数');
+  assert.equal(c1[0].visual, '一章重写');
+  Projects.remove(p.id);
+});
+
 test('narration：内置 Agent 与外部写入 API 同口径，可写旁白', async () => {
   const p = mkProject('分镜旁白项目');
   const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });

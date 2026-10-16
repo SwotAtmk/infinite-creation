@@ -339,6 +339,16 @@ test('分镜业务校验：台词速度按「真正落库的时长」算，说�
   // 说话人：单镜最多 2 人（参考音色段数上限）
   assert.deepEqual(validateShotContent({ dialogue: '甲：看\n乙：走\n', duration: 5 }, {}), []);
   assert.ok(validateShotContent({ dialogue: '甲：看\n乙：走\n丙：停\n', duration: 5 }, {}).length, '3 个说话人应报错');
+  // 只改素材绑定（界面绑素材只发 6 个 *_ids）时不做跨字段校验：拿库里旧台词重算，会把
+  // 「历史遗留 / 外部写入的超速台词」变成整行不可编辑 —— 连解绑都做不了。与内置 Agent 的
+  // update_shot 同口径（它只在传了 dialogue / duration 时校验）。
+  const legacy = { dialogue: '字'.repeat(60), duration: 5 };
+  assert.deepEqual(validateShotContent({ character_ids: ['a'] }, legacy), [], '只改素材绑定不该被旧台词挡住');
+  assert.ok(validateShotContent({ duration: 5 }, legacy).length, '改时长仍要按行上旧台词校验');
+  assert.ok(validateShotContent({ dialogue: '字'.repeat(60) }, legacy).length, '改台词仍要按行上旧时长校验');
+  // chapter 归属校验与台词无关：任何一次写入都不许把归属清空（否则分镜从章节视图与统计里消失）
+  assert.ok(validateShotContent({ chapter: '' }, legacy).length, '显式空 chapter 仍要拒绝');
+  assert.ok(validateShotContent({ visual: '新画面', chapter: '' }, legacy).length, '只改画面也不能顺带清空归属');
 });
 
 test('章节标题唯一：同项目重名（含只差空格）被拒绝', () => {

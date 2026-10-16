@@ -16,7 +16,8 @@ export async function PATCH(req, { params }) {
   const { patch, errors } = pickShotFields(body);
   if (errors.length) return NextResponse.json({ error: errors.join('；') }, { status: 400 });
   if (!Object.keys(patch).length) return NextResponse.json({ error: '无可更新字段' }, { status: 400 });
-  // 跨字段校验用「合并后的有效值」：只改台词不改时长时，上限要按行上已有的时长算
+  // 跨字段校验（台词速度/说话人数）只在本次改了台词或时长时才做——见 shot-write.js
+  // validateShotContent 的说明：拿库里旧值重算会让历史脏行整行不可编辑（绑素材也被 400 挡住）
   const contentErrors = validateShotContent(patch, shot);
   if (contentErrors.length) return NextResponse.json({ error: contentErrors.join('；') }, { status: 400 });
   if (patch.chapter) {

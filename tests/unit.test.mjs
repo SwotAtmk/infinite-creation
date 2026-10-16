@@ -619,6 +619,11 @@ test('ckBroken: 关 CK 一律不坏；开 CK 按 comfy-kitchen 版本判（≥0.
   assert.equal(ckBroken({ ckAttention: true, ckKitchen: '1.0.0' }), true);
   // 读不到版本 -> 保守判坏
   assert.equal(ckBroken({ ckAttention: true, ckKitchen: '' }), true);
+  // 带后缀的版本号读不准（逐段 Number() 会把 rc1 变 NaN、再被当成 0，于是 0.2.37rc1 被读成 0.2.0
+  // 而放行）-> 一律保守判坏，绝不因为「解析不出来」就把可能坏掉的版本放行
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.37rc1' }), true, 'rc 后缀不能被读成 0.2.0');
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.36+cu124' }), true);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.35rc1' }), true, '读不准宁可拦住（误伤的代价只是少 2.7x 速度，反了就是一批废图）');
 });
 
 test('llmChat: 未配 api_key 也能用无鉴权端点（与 preflight 同口径），配了才带 Authorization', async () => {

@@ -48,7 +48,9 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   const [project, setProject] = useState(null);
   const [pview, setPview] = useState(initialTab === 'generate' ? 'chapters' : initialTab);
   // tab 切换同步到 URL（page.jsx replaceState 更新，刷新后停留原 tab）
-  const setTab = (t) => { setPview(t); if (onTabChange) onTabChange(t); };
+  // 进入「分镜审查」时定位到**最后一章**：生成按章推进，最近的一章才是要看的那一章。
+  // 这里按章节 id 记（见下面 cursorId），不再用「下标 -1 = 默认最后一章」的哨兵值。
+  const setTab = (t) => { if (t === 'shots') setCursorId(chapters.length ? chapters[chapters.length - 1].id : ''); setPview(t); if (onTabChange) onTabChange(t); };
   const [events, setEvents] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
@@ -83,8 +85,9 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
     if (seq !== loadSeqRef.current) return; // 有更新的请求在飞，丢弃本次（旧）结果
     setLoadError('');
     setProject(p); setJobs(j); setChapters(c);
-    // 章节 id 仍存在就保持选中（排序/改名都不影响），否则退回第一章
-    setCursorId((x) => (c.some((ch) => ch.id === x) ? x : (c[0] ? c[0].id : '')));
+    // 章节 id 仍存在就保持选中（排序/改名都不影响），否则退回**最后一章**
+    // （与「进入分镜审查默认看最后一章」保持一致）
+    setCursorId((x) => (c.some((ch) => ch.id === x) ? x : (c.length ? c[c.length - 1].id : '')));
     // 出现新任务就把任务列表展开，让用户提交后立刻看到（无论它瞬间完成/失败）
     if (firstJobsLoadRef.current) firstJobsLoadRef.current = false;
     else if (j.some((x) => !seenJobIdsRef.current.has(x.id))) setQueueOpen(true);
@@ -168,6 +171,8 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   const runningCount = activeJobs.filter((j) => j.status === 'running').length;
   const queuedCount = activeJobs.filter((j) => j.status === 'queued').length;
   const finishedJobs = jobs.filter((j) => j.status !== 'running' && j.status !== 'queued');
+  // 当前「正在生成」的章节：取正在运行任务中带 checkpoint.chapter 的那一个
+  const runningChapter = (jobs.find((j) => j.status === 'running' && j.checkpoint && j.checkpoint.chapter) || {}).checkpoint?.chapter || null;
   // 任务列表：活动任务置顶（执行中 → 排队中；排队按提交先后即队列顺序），其后是最近的已结束任务
   const shownJobs = [
     ...activeJobs.sort((a, b) => ((a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1)) || ((a.startedAt || 0) - (b.startedAt || 0))),
@@ -283,7 +288,7 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
       </Tabs>
 
       <div>
-        {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} onRefresh={loadProject} running={running} onRun={run} onStop={stop} onGoLogs={() => setTab('logs')} />}
+        {pview === 'chapters' && <ChaptersView projectId={id} chapters={chapters} onRefresh={loadProject} running={running} runningChapter={runningChapter} onRun={run} onStop={stop} onGoLogs={() => setTab('logs')} />}
         {pview === 'assets' && <AssetsTab projectId={id} jobs={jobs} onRefresh={loadProject} />}
         {pview === 'shots' && (
           <div className="flex flex-col gap-3">

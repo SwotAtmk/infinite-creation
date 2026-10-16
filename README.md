@@ -19,12 +19,15 @@
 [更多样例](docs/run_demo.md)
 
 ## 项目计划
-- [✅] 支持背景音乐管理，接入 MiniMax Music3 本地/云端自动生成背景音乐并合成到视频中，含「背景音乐库」（手动生成/预览/选择/应用到章节）
+- [持续进行] 解决项目中存在的BUG
+- [计划中] 插件系统开发，支持插件上传、插件调用、插件框架……
+- [计划中] 自动流水线支持提示词自定义编排插件
 - [计划中] 收录更多高阶Skill技能，提升Agent技能视觉美感
 - [计划中] 工具Web页面美化工作，需要一个非常有美感的AI设计师
 - [计划中] 打包构建Docker部署、桌面端App
 - [计划中] 工作流接入视频超分，让生成的视频更加清晰
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
+- [✅] 支持背景音乐管理，接入 MiniMax Music3 本地/云端自动生成背景音乐并合成到视频中，含「背景音乐库」（手动生成/预览/选择/应用到章节）
 - [✅] 添加Agent安全审批策略，防止Agent越权操作，删除项目或执行危险命令
 - [✅] 接入在线RunningHub-ComfyUI工作流生成，会员MiniMax-H3夜间免费运行
 - [✅] 把项目装进Skill技能，支持Agent一键调用
@@ -136,10 +139,10 @@ infinite-creation/
 并且在本地部署启动这个项目。
 ```
 
-**把项目安装为Skill技能**
+**使用Agent自动安装**
 ```text
 请根据 https://gitcode.com/SwotAtmk/infinite-creation/releases/download/v1.0.0/install-skill.md，
-从 https://gitcode.com/SwotAtmk/infinite-creation 安装 infinite-creation。
+从GitHub（国外）或者GitCode（国内）上安装SwotAtmk/infinite-creation 安装 infinite-creation 技能，并根据技能描述启动这个项目。
 ```
 
 
@@ -335,8 +338,7 @@ pnpm test   # node --test tests/unit.test.mjs
 
 ## 致谢
 - 感谢开发者 [happymy](https://github.com/happymy) 为此项目提供了AMD+GGUF适配的解决方案以及解决项目中存在的部分bug
-- 感谢开发者 [binonxia](https://github.com/binonxia) 发现并修复了项目中的bug
-
+- 感谢以下开发者为项目做出的贡献：[ghshhf](https://github.com/ghshhf)、[binonxia](https://github.com/binonxia)
 
 ## Star 历史
 

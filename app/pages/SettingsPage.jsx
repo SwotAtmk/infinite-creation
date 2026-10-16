@@ -236,8 +236,9 @@ export default function SettingsPage({ onBack }) {
 
         <h3 className="text-base font-semibold" style={{ marginTop: 24 }}>技能库<span className="muted">（全局 · 所有项目共用）</span></h3>
         <SkillsTab />
-        <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>工作流库<span className="muted">（全局 · 所有项目共用）</span></h3>
-        <WorkflowsTab />
+        {/* 工作流库：暂隐藏 */}
+        {/* <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>工作流库<span className="muted">（全局 · 所有项目共用）</span></h3>
+        <WorkflowsTab /> */}
       </CardBody>
     </Card>
   );

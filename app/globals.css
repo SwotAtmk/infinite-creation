@@ -36,6 +36,20 @@
     margin-top: 24px;
   }
   .footer a { @apply text-primary; text-decoration: none; }
+
+  /* GitHub logo：CSS mask 引用 public/github_logo.svg，颜色跟随 currentColor 自动适配明暗 */
+  .github-logo {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    background-color: currentColor;
+    -webkit-mask: url('/github_logo.svg') no-repeat center / contain;
+    mask: url('/github_logo.svg') no-repeat center / contain;
+    vertical-align: -0.125em;
+    text-decoration: none;
+  }
+  a.github-logo:hover { background-color: var(--heroui-colors-primary, #4f86ff); }
+  .footer a.github-logo { @apply text-foreground-400; }
 }
 
 /* toast 进入动画 */

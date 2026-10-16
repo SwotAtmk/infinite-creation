@@ -22,7 +22,7 @@ function GripIcon() {
 }
 
 // ============ 章节管理（合并原「章节管理」+「生成内容」） ============
-export default function ChaptersView({ projectId, chapters, onRefresh, running, onRun, onStop, onGoLogs }) {
+export default function ChaptersView({ projectId, chapters, onRefresh, running, runningChapter, onRun, onStop, onGoLogs }) {
   const toast = useToast();
   const [adding, setAdding] = useState(false);
   // 本地顺序副本：拖拽排序时即时更新，drop 后再写回后端 seq
@@ -39,6 +39,10 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
   const [savedRefs, setSavedRefs] = useState([]);
   // 操作弹窗
   const [operating, setOperating] = useState(null);
+  // 正在提交生成的章节标题：提交到「任务真正开始（runningChapter 更新）」之间的加载态
+  const [submitting, setSubmitting] = useState(null);
+  // 正在停止的加载态：点击「停止」到「任务真正停下（running 消失）」之间的转圈
+  const [stopping, setStopping] = useState(false);
 
   useEffect(() => { setOrder(chapters); }, [chapters]);
   useEffect(() => { api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {}); }, []);
@@ -46,6 +50,19 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
     api.get('/api/projects/' + projectId + '/references').then(setSavedRefs).catch(alert);
   }, [projectId]);
   useEffect(() => { loadRefs(); }, [loadRefs]);
+
+  // 一旦有任务真正跑起来，就结束提交加载态：
+  // 要么是本章任务开始 → 按钮转「停止」；要么是别的章节在跑（提交被 409 拒绝）→ 恢复「生成」。
+  // 判据同时看 running（项目里已有活动任务）与 runningChapter（其中带章节的那个）：
+  // 任务可能先落在「排队中」，此时 runningChapter 还是 null。
+  useEffect(() => {
+    if (submitting && (running || runningChapter)) setSubmitting(null);
+  }, [running, runningChapter, submitting]);
+
+  // 停止请求发出后，等任务真正停下（running 变 false）再清除停止加载态。
+  useEffect(() => {
+    if (stopping && !running) setStopping(false);
+  }, [running, stopping]);
 
   // 参考素材按章节归属：仅展示当前编辑章节（chapter_id = editing.id）的参考素材
   const chapterRefs = editing ? savedRefs.filter((r) => r.chapter_id === editing.id) : [];
@@ -80,10 +97,17 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
   async function runAll() {
     await submitRun(null);
   }
-  // 「生成/继续」的唯一入口：onRun（ProjectView.run）现在会把失败抛出来，这里统一提示，
+  // 「生成/继续」的唯一入口：onRun（ProjectView.run）会把失败抛出来，这里统一提示，
   // 成功才由各按钮自己继续（旧写法 onRun 吞掉错误 + 调用方照弹「已提交」= 假成功提示）。
+  // 提交期间进入加载态：任务真正跑起来（running / runningChapter 更新）后由上面的 useEffect 清除；
+  // 提交失败则在这里当场清除，避免按钮永远转圈。
   async function submitRun(title) {
-    try { await onRun(title); } catch (e) { toast.error(e.message); }
+    setSubmitting(title);
+    try { await onRun(title); } catch (e) { toast.error(e.message); setSubmitting(null); }
+  }
+  async function handleStop() {
+    setStopping(true);
+    try { await onStop(); } catch (e) { toast.error(e.message); setStopping(false); }
   }
   async function removeChapter(c) {
     if (!(await toast.confirm('删除「' + c.title + '」及其分镜？此操作不可逆。', { danger: true }))) return;
@@ -203,8 +227,16 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
                       <Chip size="sm" variant="flat" color={statusColor(c.genStatus)}>{label[c.genStatus] || c.status}{c.shotCount > 0 ? ' · ' + c.doneCount + '/' + c.shotCount : ''}</Chip>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" color={running ? 'danger' : 'success'} variant="flat" className="flex-1" onPress={() => (running ? onStop() : submitRun(c.title))}>
-                        {running ? '■ 停止' : '▶ 生成'}
+                      <Button
+                        size="sm"
+                        color={runningChapter === c.title ? 'danger' : 'success'}
+                        variant="flat"
+                        className="flex-1"
+                        isLoading={(submitting === c.title && runningChapter !== c.title) || (runningChapter === c.title && stopping)}
+                        isDisabled={(running && runningChapter !== c.title) || (runningChapter === c.title && stopping)}
+                        onPress={() => (runningChapter === c.title ? handleStop() : submitRun(c.title))}
+                      >
+                        {runningChapter === c.title ? '■ 停止' : '▶ 生成'}
                       </Button>
                       <Button size="sm" color="primary" variant="flat" className="flex-1" onPress={() => openEdit(c)}>编辑</Button>
                       <Button size="sm" color="primary" variant="flat" className="flex-1" onPress={() => setOperating(c)}>操作</Button>
@@ -263,7 +295,7 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
             <>
               <ModalHeader className="pb-2"><h2 className="m-0 text-lg font-semibold">生成操作{operating ? ' · ' + operating.title : ''}</h2></ModalHeader>
               <ModalBody>
-                {operating && <ChapterOps projectId={projectId} chapter={operating} running={running} onRun={onRun} onStop={onStop} onRefresh={onRefresh} onGoLogs={onGoLogs} />}
+                {operating && <ChapterOps projectId={projectId} chapter={operating} running={running} runningChapter={runningChapter} onRun={onRun} onStop={onStop} onRefresh={onRefresh} onGoLogs={onGoLogs} />}
               </ModalBody>
             </>
           )}

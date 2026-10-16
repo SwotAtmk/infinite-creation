@@ -477,6 +477,14 @@ test('参考图白名单：前端选择器与后端校验共用一份（含无 M
   assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
 });
 
+test('技能扫描：目录已删除的技能行必须被清掉（scanSkills 不只会 upsert）', () => {
+  const se = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'skill-engine.js'), 'utf8');
+  // 实机核验见探针 ic-r9-skills-probe.mjs（上传技能 → 删目录 → 重扫；修复前列里仍有该技能）
+  assert.ok(/Skills\.remove\(s\.id\)/.test(se), '目录已删除的陈旧技能行要被清掉，否则界面列着一条加载不出内容的技能');
+  assert.ok(/seen\.has\(s\.id\)/.test(se), '只清理本次扫描没见到的行');
+  assert.ok(/rel\.startsWith\('skills\/'\)/.test(se), '只清理 path 指向 skills/ 的行（不碰非扫描来源）');
+});
+
 test('设置页：配置拉取失败不能永久停在「配置加载中…」（源码守卫）', () => {
   const sp = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'SettingsPage.jsx'), 'utf8');
   // 原先只 catch 弹一次 toast：cfg 一直是 null → 页面永远停在加载态、也没有「返回」按钮，

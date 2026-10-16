@@ -13,7 +13,11 @@ export async function POST(req, { params }) {
   if (!asset || asset.project_id !== id) return NextResponse.json({ error: '资产不存在' }, { status: 404 });
   const buf = Buffer.from(await req.arrayBuffer());
   if (!buf.length) return NextResponse.json({ error: '缺少文件内容' }, { status: 400 });
-  const orig = decodeURIComponent(req.headers.get('x-filename') || '');
+  // 文件名头由客户端编码（界面用 encodeURIComponent）。非法转义（如单个 '%'）会让
+  // decodeURIComponent 抛 URIError，本路由原先没有 try/catch → 未捕获异常 → 500。
+  let orig = '';
+  try { orig = decodeURIComponent(req.headers.get('x-filename') || ''); }
+  catch { return NextResponse.json({ error: 'X-Filename 不是合法的 URL 编码' }, { status: 400 }); }
   const extName = (orig && path.extname(orig) || '').toLowerCase();
   const isAudio = ['voice', 'music', 'sfx'].includes(asset.category);
   const isVideo = asset.category === 'video' || /\.(mp4|webm|mov|avi|mkv|m4v|gif)$/i.test(extName);

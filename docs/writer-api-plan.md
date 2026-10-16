@@ -286,3 +286,31 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - **UI 调用点全量核对**：`EditProject` 的 PATCH 字段全在白名单内；`ChaptersView` 的参考上传带 `chapter_id`、新增章节发 `{}`；`AssetsTab` 的资产表单与 `ReferencePicker` 的分类下拉取值都在 `ASSET_CATEGORY_IDS` 内（只少一个 `age`，那是换装/年龄流程生成的，不可手选）；`ShotsTab` 只 PATCH 素材绑定字段。第三轮的收紧没有误伤界面。
 
 第四轮验证口径：`node --test "tests/*.test.mjs"` **126/126**（两处修复各扩写一个既有测试）；真实实例端到端 **88/88**、素材用途守卫 **15/15** 保持不变，另加两条实机探针 **各 6/6**（`PATCH` 分类越界/空 → 400 且分类未变、合法值照常；`POST` 章节拼错字段/空白标题 → 400、省略标题自动「第N章」、重名带尾空格仍 400）。
+
+## 十三、第五轮：越过「外部写入 API」，把两侧未深审的模块一起过一遍
+
+第四轮之后 API 面（路由 + `lib/core/shot-write.js`）已经查得很细，于是把范围推到两侧：一侧是 `lib/agent/*`（job-runner / agent-loop / openclaude-agent / stages / guard）与 `lib/core` 剩余模块（ffmpeg / logger / config / llm / changelog / backend / prompts / utils）+ `lib/ws.js`；另一侧是界面（`app/pages/*`、`api-client`、`toast`）与尚未细看的路由（jobs / logs / exports / music-apply / config / skills / comfyui-test / llm-test / health / run / shots）。两条线并行审、逐条回到源码核证（不采信报告结论直接改）。
+
+### 修掉的（10 处，10 个原子提交）
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| 高 | `server.js:77,82` 的 `new URL(req.url)` 与 `decodeURIComponent()` 跑在 Next 之外且无兜底：`GET //` 抛 TypeError、`/files/%E0%A4%A` 抛 URIError。实测（旧代码）：该请求**永远挂住不返回**（客户端 timeout/000），每来一条就抛一次 uncaughtException、连接不回收；dev 下侥幸被 Next 的全局兜底接住，生产自定义服务器下这一抛就是整个进程退出、在跑的任务全丢 | 两处入口按 400 处理（`/files` 的解码失败另给 400），`upgrade` 用畸形 URL 时直接断连。**不加**全局 `uncaughtException` 兜底：未知异常之后继续跑属于掩盖问题、状态可能已坏 |
+| 中 | `llm.js` 无条件要求 `apiKey`，而 `preflight` 检查 `/models` 时本来就不发鉴权头 —— 用无鉴权本地 LLM（llama.cpp 等）的用户「预检通过、每个 LLM 阶段都失败：未配置 LLM api_key」 | 改成只在配了 key 时才带 `Authorization`；必须配的是 Base URL。同时把「超时」与「连不上」分开报：服务在跑但卡住时原先把用户引去重启一个活着的服务 |
+| 中 | `stages.js` 的 CK 回归判定写成 `verLe(ckKitchen, CK_BAD_MAX)`（≤0.2.36 全判坏），与仓库里的官方报告相反：`plan/CK注意力回归问题调查报告.md` §6 的版本定位是 #207/#208 在 0.2.35 **之后**才落地、随 **0.2.36** 打包 → 0.2.35 及更早走旧 mask 路径、不受影响。原判定把没问题的旧版本一起拦住（白丢 2.7x 速度），对将来可能仍带缺陷的新版本反倒放行 | 改为下限判定（`≥0.2.36` 才算坏），常量改名 `CK_BAD_MIN` 并写明「上游修好后怎么改」；`preflight` 顺带把 LLM 的 401/403 与「服务没起来」分开提示 |
+| 中 | `stages.js` 阶段任务被停止后仍记 `status:'done'` +「完成」：`run()` 在停止时是**正常 resolve**（各阶段自己 return/break），`.then` 却无条件置 done，前端收到 `status:'done'` 就弹「✅ 任务完成」—— 明明后面几章都没出 | `.then` 与 `.catch` 同口径：`isAborted(job.id)()` 为真记 `cancelled`。判据不用 `run()` 返回的 `results.aborted`：它只在「下一个阶段开始前」置位，停在最后一个阶段时根本不会设置 |
+| 中 | 背景音乐资产：路由发起任务前就置 `generating`，只有工具内部会改成 `done/failed`。任务在**排队期间**被停止（或排队超时、或工具在写状态之前抛错）时工具根本没跑 → 资产永远停在「生成中」，列表一直转圈且无法重试 | `startMusicJob` 的 `.catch` 里兜一道：仍是 `generating` 就按 `failed` 复位 |
+| 低 | `ConsoleTab` 的「完整日志」固定取 `jobs[0]`（最后创建的一条），而最后创建的常常是刚入队、还没写日志的命名/子任务 → 面板显示「（暂无完整日志）」，用户想排查刚失败的那条看到的却是别人的日志 | 改成：正在执行/排队的任务 → 最新一条写过日志文件的任务 → 最新任务 |
+| 低 | `ProjectView.loadProject` 没有 `catch`：id 不存在 / 项目被别的标签页删掉时，`Promise.all` 的拒绝无人处理，界面永远停在「项目加载中…」，连返回按钮都没有 | 给出错误文案 +「返回列表」；同时加在途请求序号（WS 每条消息 + 2.5s 轮询 + 初始加载会同时在飞，先发后到的旧响应会把新状态盖回去） |
+| 低 | `ProjectsPage.create`：POST 已成功、项目已落库，若后面的取章节 / 传参考图失败只弹一条 toast：列表不刷新、也不进项目 → 用户以为创建失败，再点一次「创建并打开」，同一个项目建了两遍（`Projects.create` 不限制重名） | POST 成功即刷新列表，参考图另包一层错误提示，最后始终进入项目页 |
+| 低 | `SkillsTab.rescan` 没有 `catch`：重新扫描失败时拒绝无人接管，按钮点了完全没反应 | 失败弹 toast |
+
+### 本轮核对过、判定「不改」的项
+
+- **`ffmpeg` 拼接为每个输入强制 `-f lavfi -i anullsrc` 音轨**：要断言「镜头视频可能没有音轨」才能算 bug，而本项目的视频一律由 H3（自带语音）产出；真缺音轨时合并会**大声失败**并给出 ffmpeg 原始错误，不是静默出错。缺证据，不改。
+- **`openclaude-agent` 把 `providerEnv(cfg)` 写进 `process.env`**：代码里写明了理由（部分 provider 读 `process.env`）。风险面是「本进程内其它代码能读到」——读到的都是我们自己的配置；唯一被 spawn 的子进程是 ffmpeg，参数由内部拼装、不读这些变量。属风格问题，不改。
+- **`createToolRuntime` 抛错时 `Jobs.create` 已落库（孤儿 running job）**：该错误只有「项目不存在」一种，而 `startStageJob` 从路由检查项目到 `createToolRuntime` 是**同步**执行的（中途没有 await，单线程下无人能插进来删项目），因此不可达，不改。
+- **`comfyui/test`、`llm/test` 可被用来打任意内网地址（SSRF 面）**：这两个端点的**用途**就是让用户填地址测试连通性，且本应用是无鉴权的本地单用户工具（能调它的人本来就能直接改配置）；跨站页面用 JSON POST 还需过预检。属设计取舍，已记录。
+- 沿用前面几轮的判定：`withRetry` 死代码、`abortFlags` 只增不减、`PUT /api/config` 整体覆盖语义、`installSkillsFromZip` 中途失败不回滚、`shots/zip` 空集 500、`mergeVideos` 的 volume、`music/apply` 路由层不校验 `music_id`、章节/分镜 PATCH 无 `activeJobOf` 守卫、`shots/zip`/`export` 缺 `Projects.get`、资产名为空、章节标题不做存储归一化。
+
+第五轮验证口径：`node --test "tests/*.test.mjs"` **130/130**（本轮新增 4 项：阶段停止记 cancelled、音乐资产复位、`llmChat` 无 key 可用、`llmChat` 超时提示；改写 CK 判定 1 项）；反向验证（只撤掉 `stages.js`+`llm.js`+`job-runner.js` 三处修复）**恰好这 5 项失败、其余 125 项照常通过**（零回归）。实机：畸形请求探针 **5/5**（`//`、`/files/%E0%A4%A`、`/files/%` → 400，畸形 upgrade → 断连，正常请求不受影响；同一探针对旧代码是 1/5、且请求挂死 + 每次一条 uncaughtException）；`ic-audit-e2e` **88/88**、`ic-refguard-e2e` **15/15**、第四轮两条探针 **各 6/6**；界面 `GET /`、`GET /?id=<项目>` 均 200（本轮改了 4 个页面的编译通过）。

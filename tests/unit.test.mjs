@@ -616,6 +616,55 @@ test('ckBroken: 关 CK 一律不坏；开 CK 按 comfy-kitchen 版本判', () =>
   assert.equal(ckBroken({ ckAttention: true, ckKitchen: '' }), true);
 });
 
+test('llmChat: 未配 api_key 也能用无鉴权端点（与 preflight 同口径），配了才带 Authorization', async () => {
+  const http = await import('node:http');
+  const { llmChat } = await import('../lib/core/index.js');
+  const seen = [];
+  const srv = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      seen.push({ auth: req.headers.authorization || '', body });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '好' } }] }));
+    });
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + srv.address().port;
+  try {
+    // 本地 llama.cpp 这类端点本来就不发鉴权头：此前 llmChat 无条件要求 apiKey，
+    // 结果「preflight 通过、每个 LLM 阶段都报未配置 api_key」。
+    const r1 = await llmChat({ baseUrl: base, model: 'm', apiKey: '' }, [{ role: 'user', content: 'x' }]);
+    assert.equal(r1.content, '好');
+    assert.equal(seen[0].auth, '', '没配 api_key 不该发 Authorization 头');
+    await llmChat({ baseUrl: base, model: 'm', apiKey: 'sk-test' }, [{ role: 'user', content: 'x' }]);
+    assert.equal(seen[1].auth, 'Bearer sk-test');
+    // Base URL 才是必须配的（模型名/键可留空，交给端点自己报错）
+    await assert.rejects(() => llmChat({ baseUrl: '', model: 'm', apiKey: 'k' }, [{ role: 'user', content: 'x' }]), /未配置 LLM Base URL/);
+  } finally {
+    srv.closeAllConnections?.();
+    srv.close();
+  }
+});
+
+test('llmChat: 假死（TCP 挂着不响应）报「超时」而不是「无法连接」', async () => {
+  const http = await import('node:http');
+  const { llmChat } = await import('../lib/core/index.js');
+  // 只收请求、永不响应：模拟 LLM 在跑但卡住（模型加载/排队）
+  const srv = http.createServer(() => {});
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + srv.address().port;
+  try {
+    await assert.rejects(
+      () => llmChat({ baseUrl: base, model: 'm', apiKey: '' }, [{ role: 'user', content: 'x' }], { timeoutMs: 300 }),
+      /LLM 响应超时/,
+    );
+  } finally {
+    srv.closeAllConnections?.();
+    srv.close();
+  }
+});
+
 test('renderDisabled：渲染工具被跳过且不抛错（防 Agent 反复重试）', async () => {
   const reports = [];
   const ctx = { renderDisabled: true, report: (x) => reports.push(x) };

@@ -813,6 +813,17 @@ test('set_storyboard：clear 只清本次写入的章节，别的章节（含已
   Projects.remove(p.id);
 });
 
+test('set_storyboard：同批「自动号在前、显式号在后」不再撞号吞内容', async () => {
+  const p = mkProject('分镜镜号两遍分配项目');
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  await runTool(ctx, 'set_storyboard', { shots: [{ visual: '自动号' }, { idx: 1, visual: '显式1' }] });
+  const shots = Shots.list(p.id);
+  assert.equal(shots.length, 2, '两条都要落库（单遍分配时后一条会 upsert 覆盖前一条，内容静默丢失）');
+  assert.deepEqual(shots.map((s) => s.idx).sort((a, b) => a - b), [1, 2]);
+  assert.deepEqual(shots.map((s) => s.visual).sort(), ['自动号', '显式1'].sort());
+  Projects.remove(p.id);
+});
+
 test('narration：内置 Agent 与外部写入 API 同口径，可写旁白', async () => {
   const p = mkProject('分镜旁白项目');
   const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });

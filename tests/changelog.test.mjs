@@ -546,6 +546,20 @@ test('update_shot：时长归一化后才落库（越界裁剪、非数字拒绝
   Projects.remove(p.id);
 });
 
+test('台词速度校验：两条写入路径共用同一份默认时长（历史 duration=0 的行不许两套上限）', async () => {
+  const p = mkProject('默认时长项目');
+  const s = Shots.create(p.id, { chapter: '第1章', visual: '画面' });
+  // 历史行：duration 为空/0（本约束出现之前落库的）。两条路径必须按同一个默认值算上限，否则
+  // 同一行在外部 API 里「能改台词」、在内置 Agent 里「超速被拒」——而默认值原先在这里写死 8。
+  core.getDb().prepare('UPDATE shots SET duration = 0 WHERE id = ?').run(s.id);
+  const dlg = '字'.repeat(30);   // 30/5=6 超速（上限 5.5 字/秒）；30/8=3.75 不超速
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  await assert.rejects(() => runTool(ctx, 'update_shot', { shot_id: s.id, dialogue: dlg }), /超速/);
+  assert.ok(validateShotContent({ dialogue: dlg }, { duration: 0 }).length, '外部写入 API 同口径');
+  assert.deepEqual(validateShotContent({ dialogue: dlg }, { duration: 8 }), [], '时长真是 8 秒时不该报错');
+  Projects.remove(p.id);
+});
+
 test('update_shot：不得改写别的项目的分镜（归属校验）', async () => {
   const p1 = mkProject('归属校验甲');
   const p2 = mkProject('归属校验乙');

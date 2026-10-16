@@ -947,3 +947,25 @@ test('素材分类：值域外的分类必须拒绝（否则界面与批量生�
   Projects.remove(p.id);
 });
 
+test('参考素材上传：走渲染后端分派层（RunningHub 下必须传到云端并用平台 fileName）', async () => {
+  const p = mkProject('参考素材后端分派项目');
+  const abs = path.join(projectDir(p.id), 'assets/character/x.png');
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, 'x');
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  Assets.update(ch.id, { image_path: 'assets/character/x.png' });
+  const shot = Shots.create(p.id, { chapter: '第1章', idx: 1, character_ids: [ch.id] });
+
+  const cfg = { comfyui: { provider: 'runninghub', apiKey: 'k', baseUrl: 'http://127.0.0.1:8188', tier: 'standard' } };
+  const orig = global.fetch;
+  const calls = [];
+  global.fetch = async (url) => { calls.push(String(url)); return { ok: true, json: async () => ({ code: 0, data: { fileName: 'rh_uploaded_x.png' } }) }; };
+  try {
+    const r = await core.assembleShotReferences({ cfg, project: Projects.get(p.id), shot, assets: Assets.list(p.id), upload: true });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0], /runninghub\.cn/, '上传必须打给 RunningHub（云端工作流要的是平台 fileName）');
+    assert.ok(!/127\.0\.0\.1:8188/.test(calls[0]), '不能打到本机 ComfyUI（原先写死 comfyui.baseUrl）');
+    assert.deepEqual(r.references.filter((x) => x.type === 'image').map((x) => x.filename), ['rh_uploaded_x.png'], '工作流里要用平台返回的 fileName');
+  } finally { global.fetch = orig; }
+  Projects.remove(p.id);
+});

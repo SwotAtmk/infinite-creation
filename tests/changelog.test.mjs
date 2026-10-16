@@ -944,6 +944,11 @@ test('素材分类：值域外的分类必须拒绝（否则界面与批量生�
   assert.equal(Assets.list(p.id).length, 0);
   const a = Assets.create(p.id, { category: 'other', name: 'x' });
   assert.equal(a.category, 'other');
+  // 改分类同样要守住：PATCH …/assets/:aid 的可编辑字段里有 category，
+  // 只在 create 挡一次，等于留了「先把行建出来、再改成脏分类」的后门。
+  assert.throws(() => Assets.update(a.id, { category: '不存在的分类' }), /素材分类不存在/);
+  assert.equal(Assets.get(a.id).category, 'other');
+  assert.equal(Assets.update(a.id, { category: 'scene' }).category, 'scene');
   Projects.remove(p.id);
 });
 

@@ -379,3 +379,42 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - **新探针**：素材上传 **20/20**（含分块无 `Content-Length` 的 21MB → 413、25MB 音频不被图片档误拦、`voice` 素材仍双写 `voice_ref`+`audio_path`）、技能包上传 **5/5**。回归：`ic-audit-e2e` **88/88**、`ic-refguard-e2e` **15/15**、第四轮两条探针 **各 6/6**、畸形请求探针 **5/5**、LLM 门槛探针 **5/5**。
 - 一处**未能实机覆盖**并如实记录：`providerEnv` 到 openclaude 的接线无法端到端跑（需要真实 LLM 跑完整条 Agent 流水线），故用源码守卫 + `openaiCompatBaseUrl` 值断言 + vendor SDK 的拼装证据（`sdk.mjs:234670`）三者共同锁定。
 
+## 十六、第八轮：换角度审「同一件事在两个入口口径不一致」与「界面假成功」
+
+前七轮把外部写入 API、生成链路、停止语义、同一判定多处漂移都过了一遍。第八轮换两个角度：（a）**同一条业务规则在「LLM 工具入口」与「界面/HTTP 入口」口径不一致** —— 界面做的事 LLM 不能做、或两处判定不同；（b）**界面的假成功** —— 提示语宣称的成果与后台实际做的事不符。方法：三个子代理并行走查界面各页，本地逐条核验，并取上游 `SwotAtmk/infinite-creation`（`refs.js`/`tools.js`）对照判断是本仓独有还是上游同样存在。
+
+### 修掉的（7 个原子提交）
+
+| 提交 | 级别 | 问题 | 修复 |
+|------|------|------|------|
+| `db7ab4d` | 中 | `refs.js` 判定「本镜谁在说话」用 `s === c.name \|\| s.includes(c.name) \|\| c.name.includes(s)`：同场有「小明」和「明」时，说话人「小明」会把「明」也算成说话人，「明」被错挂音色（台词音色串到同名短角色上） | `lib/shared` 新增 `normalizeName` / `nameMatches`（规范化后**精确相等**，只容忍身份后缀与空白），`refs.js` 与 `ShotsTab` 共用。实测：说话人「小明」+ 同场角色 小明/明 → 旧判定 `['小明','明']`、新判定 `['小明']`。上游同样未修，本仓自行统一 |
+| `e902773` | 中 | `tools.js` 的自动换装/年龄用 `text.includes(char.name)` 判定「本镜文本是否提到该角色」：同场有「小明」和「明」时，文本里的「小明」让 `includes('明')` 为真 → 给「明」也真提交一次图生图（Qwen-Image-Edit），白烧 GPU，并把不属于他的服装/年龄写进本镜参考 | `lib/shared` 新增 `textMentions(text, name, allNames)`：只有当某次「名字出现」没被同场更长的角色名完整覆盖时才算真提到；两条归属路径（换装/年龄）共用 |
+| `202412b` | 高 | **服装/年龄变体不绑角色**：这两个分类全流程只按 `parent_id` 认（`refs.js` 按它映射到角色，`tools.js` 只把带 `parent_id` 的算作已有变体），而 `POST /assets` 一直丢掉 `parent_id`、界面新建/上传也不传 → 用户上传的服装/年龄变体素材库里看得见、分镜能引用、点保存也成功，**生成时被完全忽略**，还会被自动换装再生成一套 | 三处同一道不变量：① `lib/core/db.js` 的 `Assets.create/update` 变体必须带 `parent_id`（`BAD_VARIANT_PARENT`，中央守卫，LLM 工具入口一并拦住；`update` 只在主动动 `category/parent_id` 时拦，存量无父变体仍可改名清理）；② HTTP 路由接受并校验 `parent_id`（必须指向**本项目**的**角色**素材，跨项目/指场景/指不存在都 400；守卫码翻 400 而非 500）；③ 界面新建资产与分镜「＋服装/＋年龄」的上传都必须先选「所属角色」（分镜内只有一个角色时自动选中，没有角色则禁用上传并提示） |
+| `173823b` | 中 | **假成功**：`ProjectView.run` 自己 `catch` 后只弹一次错误、**不抛出**，而 `ChapterOps` 的「生成/继续」`await onRun(...)` 后无条件弹「已提交…生成」—— 409「已有运行中的任务」/400 时用户同时看到「错误」和「已提交」两条互相矛盾的提示，还会点「前往运行日志」找一个并不存在的任务；`ChaptersView` 的章节卡片「生成」还裸调 `onRun(c.title)`（错误成为未处理拒绝，点了完全没反应）。另：`ChapterOps` 拉 `/stages` 用 `.catch(() => {})` 静默吞错 → `stageList` 恒为 `null`，界面永远停在「分阶段运行加载中…」 | `run` 把错误抛给调用方（各自唯一的 `catch` 提示）；章节卡片改走带 `catch` 的 `submitRun`；`/stages` 失败把原因显示出来（成功时清空） |
+| `54faeeb` | 中 | 参考图上传前后端口径不一致：后端只认 `.png/.jpg/.jpeg/.webp/.gif` + 10MB，前端按 `file.type.startsWith('image/')` 过滤 → bmp/avif/svg/tiff 能选中、**上传到那张才 400**（前面的已落盘，留下半截状态）；而没有 MIME type 的合法 png 又被**静默丢掉**（连提示都没有）；`accept="image/*"` 还让文件框摆出选不了的类型 | `lib/shared` 增加 `REFERENCE_IMAGE_EXTS` / `REFERENCE_IMAGE_MAX_BYTES` / `isReferenceImageName`，路由改为引用共享常量；选择器按同一白名单判定、超限提前拦，被跳过的文件分「非支持格式」「超 10MB」两类明确提示；`accept` 改成明确列表 |
+| `7a92b21` | 中 | 背景音乐三处「说的和做的不一致」：①「应用到」成功后提示「已应用背景音乐并重新合成成片」，但接口只是**入队**（用户按提示去成片页只有旧片）；②`apply_chapter_music` 逐章 `try/catch`（本意对：单章失败不中断其余章节），但**全部章节失败**时照样正常返回 → 任务被记成 `done`、界面弹「✅ 任务完成」，用户什么都没得到却被明确告知成功；③详情弹窗存的是点击时的对象**快照**，弹窗开着时轮询/生成写回的新状态永远反映不到里面 | ①成功提示改为「已提交…逐章进度与失败原因见运行日志」；②全失败（且非用户停止）时抛错，**逐章原因带进错误**（日志/任务详情仍能看清是哪一章、为什么），`aborted` 不抛（用户主动停止属于「取消」，与阶段任务停止语义一致）；③详情只存 id、值从最新 `assets` 派生 |
+| `e79641f` | 低 | UI 三则：①`ShotsTab` 空态判的是未筛选的 `shots.length`，按章筛选时本章一条分镜都没有却连「暂无分镜」都不显示（只剩标题，像渲染坏了）；②`ProjectView` 的分镜页「当前章节」游标存**下标**，章节可拖拽排序/删除/新增 → 排序一次就看着 A 章的名字渲染 B 章的分镜；③`ChaptersView` 批量上传参考图，一条失败时已成功的仍留在待上传列表，用户再点一次就**重复上传**（素材库多出重复参考图），且错误不说哪个文件、不说前面成功几张 | ①改判 `shown.length`；②游标改存章节 id（列表刷新时 id 还在就保持选中，否则退回第一章），下拉 key 也从下标改 id；③成功一条立刻按 key 从待上传列表摘掉，错误里带上文件名与已成功数量 |
+
+### 本轮核对过、判定「不改」的项
+
+- **`ChaptersView` 拖拽排序的 splice 语义**：拖拽项最终落在高亮圈对应的 `to` 下标上，与视觉提示自洽（不是「差一位」的经典 bug）。不改。
+- **上游 `SwotAtmk` 的 `ShotsTab.jsx` 同样没修短名串扰**（`refs.js` 上游已用 `nameMatches`、`tools.js` 上游有 `textMentions`/`mentionsName`）：本仓把界面展示也统一到同一判定，属于本仓增强，不回灌上游。
+- **`tools.js` 里 LLM 的 `create_asset` / `generate_asset_from_reference` 能造无 `parent_id` 的变体**：本轮判定**已由 db 层守卫覆盖**（不再是「文档残留项」）—— 两条路径都会命中 `BAD_VARIANT_PARENT` 并收到可读错误，LLM 会据此改用 `change_outfit`/`change_age`。
+- 以下判定**延后、登记在案**（都是界面体验类、不影响数据正确性，改动面大于收益）：
+  - `ChaptersView` 的「保存本章」不提交参考图，参考图要在上传区另点一次；
+  - 编辑弹窗关闭会丢掉未保存的文本（没有草稿保护）；
+  - 分镜音频引用超过上限（`MAX_AUDIO_REFS`）时静默截断，界面没有提示；
+  - `ShotMaterialPicker` 上传音频时分类恒用 `voice`（`music`/`sfx` 也能当参考音频，但界面只能传 `voice`）。
+- 沿用前面几轮的判定（不再重复理由）：`update_shot` 改台词不清 `video_prompt_used`、`upsertMusicAsset` 同名复用、兜底提示词写进 `video_prompt`、整片合并与 `/export` 不响应停止、`withRetry` 死代码、`abortFlags` 只增不减、`PUT /api/config` 覆盖语义、`installSkillsFromZip` 不回滚、`shots/zip` 空集 500、`mergeVideos` 的 volume、`music/apply` 路由层不校验 `music_id`、章节/分镜 PATCH 无 `activeJobOf`、`comfyui/test`+`llm/test` 的 SSRF 面、`openclaude-agent` 写 `process.env`、`ffmpeg` 强制音轨、素材空名、`Chapters.create` 不归一化、`pendingByStage` 的 tts 计数、`custom` 空宽高 → 1024×576、同名资产 `byName` 取最新、`DELETE /references/:rid` 连带删关联素材、`refs.js` 参考图上限在全部上传后才抛、`audioTruncated` 在 `rel` 为空也置位、`comfyui.js` 超时不 interrupt、`music/route.js` POST 返回陈旧 asset、`runninghub.js` 用全局 `crypto.randomUUID()`，以及仍未收紧的 JSON 请求体 / `GET /files/*` 体积（建议靠反代与 `server.host` 收敛）。
+
+### 第八轮验证口径
+
+- 单测：`node --test "tests/*.test.mjs"` **155/155**（本轮新增 7 项 + 改 1 项：`nameMatches`、`textMentions`、变体判定与写入端不变量、参考图白名单与单源守卫、音乐应用全失败必须报失败、UI 三则源码守卫）。
+- 反向验证（撤掉修复即失败）：
+  - 单测路：`nameMatches`/`textMentions`/`Assets.create` 变体不变量/参考图守卫/音乐全失败/UI 三则 —— 逐条撤掉后对应用例立即失败，还原即通过；其中 UI 三则的 7 条断言还用脚本**跑在 HEAD（修复前）版本**上，7/7 全部不成立，证明守卫不是恒真的空断言。
+  - 实机路：把 `assets/route.js` 回退到 HEAD 版本 → `ic-r8-parent-probe` 从 19/19 变成 **9 项失败**（无父变体 400 变 200、`parent_id` 落空等）。
+- 新探针 `ic-r8-parent-probe.mjs` **19/19**：无父 costume/age → 400；带本项目角色 → 200 且 `parent_id` 落库；`parent_id` 指场景 / 指别的项目的角色 / 不存在 → 400；`PATCH category→costume`（无父）→ 400 且分类未被改动；character/other 不带 `parent_id` 仍 200（回归）；参考图 `.bmp` → 400、`.png` → 200；`GET /` 200。
+- 回归：`ic-audit-e2e` **88/88**、`ic-refguard-e2e` **15/15**、第四轮两条探针 **各 6/6**、畸形请求 **5/5**、LLM 门槛 **5/5**、素材上传 **20/20**、技能包 **5/5**。
+- 一处如实记录**未驱动浏览器**：弹窗/游标/toast 这类界面行为用「源码守卫 + HEAD 版反证 + 页面编译 200」锁定，没有用真实浏览器点按验证（本机只有 dev server，无 E2E 浏览器驱动）。
+
+

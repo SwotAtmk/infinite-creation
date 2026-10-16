@@ -18,7 +18,7 @@ import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceIm
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
-import { runExclusiveVideo, concurrencyLimit } from '../lib/agent/job-runner.js';
+import { runExclusiveVideo, concurrencyLimit, holdsRenderSlot } from '../lib/agent/job-runner.js';
 import { guardToolCall } from '../lib/agent/guard.js';
 import { CATEGORIES } from '../app/pages/shared.js';
 
@@ -1281,6 +1281,60 @@ test('runExclusiveVideo: 不看服务状态——没有任务在跑时立即执�
     assert.equal(ran, true, '没有其他任务时必须立即执行（不排队、不等待）');
     assert.equal(probes, 0, '不得探测 LLM /models 或 ComfyUI /system_stats —— 服务状态不参与调度');
   } finally { global.fetch = orig; }
+});
+
+test('holdsRenderSlot: 只有真正占着渲染槽位的任务为真（行内任务/排队中/已结束都为假）', async () => {
+  assert.equal(holdsRenderSlot(''), false);
+  assert.equal(holdsRenderSlot(undefined), false, 'jobId 缺失不应抛错');
+  assert.equal(holdsRenderSlot('never-ran'), false, '没跑过的任务不占槽位');
+  assert.ok(globalThis.__infiniteCreationVideoGate.holders instanceof Set, '持有者集合也要挂 globalThis（Next dev 每个 route 一份模块）');
+
+  // 占满全部槽位（本地默认 1）：持有者算占用，后面的任务只能排队——排队 ≠ 占用
+  const limit = concurrencyLimit(loadConfig());
+  const releases = [];
+  const blockers = [];
+  for (let i = 0; i < limit; i++) {
+    const blocked = new Promise((r) => { releases.push(r); });
+    blockers.push(runExclusiveVideo(() => blocked, () => false, { jobId: 'r-block-' + i }));
+  }
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(holdsRenderSlot('r-block-0'), true, '拿到槽位即视为占用（取消它才该打断 ComfyUI）');
+
+  let ran = false;
+  const queued = runExclusiveVideo(async () => { ran = true; }, () => false, { jobId: 'r-wait' });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(holdsRenderSlot('r-wait'), false, '排队中还没拿到槽位，不得当成占用（否则取消排队任务会误打断前排）');
+  assert.equal(ran, false, '槽位被占满时不得开跑');
+
+  releases.forEach((r) => r());
+  await Promise.all([...blockers, queued]);
+  assert.equal(ran, true);
+  assert.equal(holdsRenderSlot('r-block-0'), false, '释放槽位后必须为假');
+  assert.equal(holdsRenderSlot('r-wait'), false, '跑完也必须为假');
+});
+
+test('取消/删除任务：只有占着渲染槽位的任务才打断 ComfyUI（行内任务不再误杀别人的渲染）', () => {
+  // 行内任务（runInlineJob：llm 参考图分析 / export 按章导出）在请求内同步执行、不进闸门、
+  // 也没人读它的停止标记，但状态同样是 running。旧代码用「状态是 running」决定 /interrupt，
+  // 于是取消/删除它们会把**当时真正在跑的渲染任务**（全局槽位串行，可能是另一个项目的整片生成）
+  // 打断成 failed。这里钉住「用 holdsRenderSlot 决定是否打断」+「行内任务如实拒绝」。
+  const read = (...segs) => fs.readFileSync(path.join(__dirname, '..', ...segs), 'utf8');
+  const cancel = read('app', 'api', 'projects', '[id]', 'jobs', '[jobId]', 'cancel', 'route.js');
+  assert.ok(/holdsRenderSlot\(jobId\)/.test(cancel), '取消：running 要看是否真占槽位');
+  assert.ok(/不占渲染队列/.test(cancel), '取消行内任务要如实拒绝（409），不能假成功');
+  assert.ok(cancel.indexOf('holdsRenderSlot(jobId)') < cancel.indexOf('await interruptTask(cfg)'), '判断必须发生在打断之前');
+
+  const del = read('app', 'api', 'projects', '[id]', 'jobs', '[jobId]', 'route.js');
+  assert.ok(/holdsRenderSlot\(jobId\)/.test(del), '删除任务记录：行内任务同步执行中不得删记录（会成为看不见的孤儿）');
+  assert.ok(del.indexOf('holdsRenderSlot(jobId)') < del.indexOf('await interruptTask(cfg)'), '判断必须发生在打断之前');
+
+  const stop = read('app', 'api', 'projects', '[id]', 'stop', 'route.js');
+  assert.ok(/jobs\.some\(\(j\) => holdsRenderSlot\(j\.id\)\)/.test(stop), '/stop 只在本项目确实占槽位时才打断');
+  assert.ok(stop.indexOf('holdsRenderSlot(j.id)') < stop.indexOf('await interruptTask(cfg)'), '判断必须发生在打断之前');
+
+  const project = read('app', 'api', 'projects', '[id]', 'route.js');
+  assert.ok(/active\.some\(\(j\) => holdsRenderSlot\(j\.id\)\)/.test(project), '删项目同上（否则删一个只有行内任务的项目会打断别的项目）');
+  assert.ok(project.indexOf('holdsRenderSlot(j.id)') < project.indexOf('await interruptTask(loadConfig())'), '判断必须发生在打断之前');
 });
 
 test('variantReusable / variantPrompt: 变体内容或提示词改过就必须重做，并用用户改过的提示词', () => {

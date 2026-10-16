@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import { Projects, Jobs, loadConfig, interruptTask, projectDir, withWriteContext, pickProjectFields } from '@/lib/core/index.js';
-import { stopJob } from '@/lib/agent/index.js';
+import { stopJob, holdsRenderSlot } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,9 +49,11 @@ export async function DELETE(_req, { params }) {
   // 再也看不到、也停不掉（项目页与任务列表都没了），只剩占显存与孤儿行，还会重建项目目录。
   // 与 /stop、/cancel、删除单个任务同一口径：活动任务先取消（停标记 + 立即出队；执行中的再主动
   // 打断一次 ComfyUI，让「停止」立刻生效、马上释放显存，而不是等 generate 轮询到下一拍）。
+  // 但只有本项目确实有任务占着渲染槽位时才打断：行内任务（llm 参考图分析 / export 按章导出）
+  // 不占 ComfyUI，而 /interrupt 是全局的——无脑打断会误杀**另一个项目**正在跑的渲染任务。
   const active = Jobs.list(id).filter((j) => j.status === 'running' || j.status === 'queued');
   for (const j of active) stopJob(j.id);
-  if (active.some((j) => j.status === 'running')) {
+  if (active.some((j) => holdsRenderSlot(j.id))) {
     try { await interruptTask(loadConfig()); } catch {}
   }
   Projects.remove(id);

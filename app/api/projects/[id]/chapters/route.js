@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
-import { Chapters, Shots, Projects, extractFrame, resolveProjectPath, withWriteContext, chapterStats } from '@/lib/core/index.js';
+import { Chapters, Shots, Projects, extractFrame, resolveProjectPath, withWriteContext, chapterStats, pickChapterFields } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,9 +49,13 @@ export async function POST(req, { params }) {
   const body = await req.json().catch(() => ({}));
   // id 未校验就 create，会留下挂在不存在项目下的孤儿章节行（DB 垃圾）；与 /run、/stages 一致先确认项目存在
   if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
+  // 与 PATCH …/chapters/:cid 同口径：只认内容字段。此前请求体整包丢给 Chapters.create，
+  // 拼错的字段（titel/noval）被静默忽略却回 200「创建成功」，调用方以为写进去了。
+  const { patch, errors } = pickChapterFields(body);
+  if (errors.length) return NextResponse.json({ error: errors.join('；') }, { status: 400 });
   return withWriteContext('POST /api/projects/:id/chapters', async () => {
     try {
-      const c = Chapters.create(id, body || {});
+      const c = Chapters.create(id, patch);
       return NextResponse.json(c);
     } catch (e) {
       // 同项目标题唯一（章节是分镜的归属键，重名会让两章共用分镜）：底层抛错，这里翻成 400

@@ -922,6 +922,12 @@ test('章节标题：空标题会让整章分镜从章节视图消失，写入�
   // db 层兜底：绕过路由直接调用也必须拒绝（空标题会绕过标题唯一性检查）
   assert.throws(() => Chapters.update(cid, { title: '' }), /标题不能为空/);
   assert.equal(Chapters.get(cid).title, '第1章');
+  // 创建侧：显式空白标题在路由层被 pickChapterFields 拒掉；绕过路由（内部调用）时兜底成「第N章」，
+  // 不能让「建得出来、却再也存不下去」的一章落库
+  assert.match(pickChapterFields({ title: '\t ' }).errors.join('；'), /title 不能为空/);
+  assert.equal(Chapters.create(p.id, { title: '   ' }).title, '第2章');
+  assert.equal(Chapters.create(p.id, { novel: '只给正文' }).title, '第3章');
+  assert.equal(Chapters.create(p.id, { title: '第9章' }).title, '第9章');
   Projects.remove(p.id);
 });
 

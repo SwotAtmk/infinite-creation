@@ -219,6 +219,15 @@ test('pickShotFields：白名单外的字段一律报错，产物字段不可写
   // 白名单里的数字字段必须各自显式判名，不能被兜底分支按 duration 区间校验
   assert.deepEqual(pickShotFields({ duration: 6 }).errors, []);
   assert.deepEqual(pickShotFields({ idx: 1, duration: 15 }).errors, []);
+  // 数组元素塞对象（[{id:'x'}]）：String() 会把它变成 "[object Object]"，*_ids 那条链路会被
+  // db 层当「无效 id」静默丢弃（回 200 却没写进去），refs 那条则把垃圾字符串存下来。
+  // 与「白名单外字段一律报错」同口径：当场报错，别让调用方以为写成功了。
+  const objArr = pickShotFields({ character_ids: [{ id: 'a' }], visual: 'v' });
+  assert.deepEqual(objArr.errors, ['character_ids 的元素必须是字符串（当前含对象/数组）']);
+  assert.equal(objArr.patch.character_ids, undefined, '被拒的字段不能进 patch');
+  assert.equal(objArr.patch.visual, 'v', '同一请求里的合法字段仍要写入');
+  // 数字/null 仍按原行为归一（String(2)='2'，null 被滤掉）：模型常把 id 写成别的标量形态
+  assert.deepEqual(pickShotFields({ character_ids: ['a', 2, null] }).patch.character_ids, ['a', '2']);
 });
 
 // —— 以下为审计修复的回归：业务校验 / 标题唯一 / 事务 / since_ts 语义 / 章内镜号 ——

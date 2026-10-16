@@ -559,6 +559,13 @@ test('textMentions: 短名不被同场更长角色名吞掉（换装/年龄变�
   assert.equal(textMentions('明：好的', '明', ['小明']), true);
   assert.equal(textMentions('', '明', names), false);
   assert.equal(textMentions('小明换上新衣', '', names), false);
+  // canonical 名带身份后缀时，文本里通常只写简称：必须按「规范化后的更长名」去找覆盖，
+  // 否则「小明（少年）」盖不住「明」，短名又被误判（真提交一次错误的图生图）。
+  assert.equal(textMentions('小明换上新衣', '明', ['小明（少年）', '明']), false);
+  assert.equal(nameMatches('小明（少年）', '小明'), true); // 规范化只剥后缀，不是变同一人
+  assert.equal(textMentions('小明（少年）换上新衣', '明', ['小明（少年）', '明']), false);
+  assert.equal(textMentions('明换上新衣', '明', ['小明（少年）', '明']), true);
+  assert.equal(textMentions('小红换上新衣', '明', ['小明（少年）', '明']), false);
 });
 
 test('提交生成：失败必须抛给调用方（不再吞错后照弹「已提交」）+ 分阶段加载失败要可见', () => {

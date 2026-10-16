@@ -19,9 +19,14 @@ export default function ConsoleTab({ projectId, events, jobs, onRefresh }) {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [log]);
   useEffect(() => {
-    const job = jobs[0];
-    if (!job) { setFullLog(null); return; }
-    api.get('/api/projects/' + projectId + '/jobs/' + job.id + '/log')
+    // 完整日志默认看「最相关的那条」：正在执行/排队的任务 → 最新一条写过日志文件的任务 → 最新任务。
+    // 原先固定取 jobs[0]（最后创建的一条），而最后创建的常常是刚入队、还没写日志的命名/子任务，
+    // 面板显示成「（暂无完整日志）」——用户想排查刚失败的那条，看到的却是别人的日志。
+    const target = jobs.find((j) => j.status === 'running' || j.status === 'queued')
+      || jobs.find((j) => j.logPath)
+      || jobs[0];
+    if (!target) { setFullLog(null); return; }
+    api.get('/api/projects/' + projectId + '/jobs/' + target.id + '/log')
       .then(setFullLog)
       .catch(() => setFullLog(null));
   }, [projectId, jobs]);

@@ -1481,3 +1481,15 @@ test('素材分类下拉：与写入端值域同源，且不遗漏 age（下拉�
   // 下拉是 [id, label] 成对结构，Tab/SelectItem 都按它对解构
   for (const c of CATEGORIES) assert.equal(c.length, 2, '分类项必须是 [id, label] 两元组');
 });
+
+// —— 分支审计（dev7 相对 origin/main）的回归：写入契约与执行顺序 ——
+
+test('set_storyboard：工具描述与「章节必须存在」的校验同口径（模型按描述传参不能必错）', () => {
+  // 校验（tools.js hSetStoryboard）只认章节标题或 id，但描述一直写着「chapter 传章节号」：
+  // 模型照描述传 "1" / "2" 会让**整批**分镜被拒（一条都不落库）。描述必须给出可用的取值形态。
+  const sb = TOOL_DEFINITIONS.find((t) => t.function.name === 'set_storyboard');
+  assert.ok(sb, '找不到 set_storyboard 工具定义');
+  assert.match(sb.function.description, /chapter 传章节标题或章节 id/, '描述要写明可传标题或 id');
+  assert.doesNotMatch(sb.function.description, /chapter 传章节号/, '不能再写「章节号」——校验不接受纯序号');
+});
+

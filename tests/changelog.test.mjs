@@ -1165,3 +1165,67 @@ test('参考素材上传：走渲染后端分派层（RunningHub 下必须传到
   } finally { global.fetch = orig; }
   Projects.remove(p.id);
 });
+
+// —— 第 9 轮：Agent 工具 schema 缺 parent_id，变体写入只能撞 DB 错误、模型无法补救 ——
+
+test('create_asset 工具：变体必须带 parent_id，且父必须是本项目的角色；非变体带 parent_id 被拒', async () => {
+  const p = mkProject('工具变体父项目');
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  const scene = Assets.create(p.id, { category: 'scene', name: '街道' });
+  const ctx = createToolRuntime({ projectId: p.id });
+  // 缺 parent_id：必须给出可读指引（旧行为直接落 db 抛 BAD_VARIANT_PARENT，模型看不懂、无法补救）
+  await assert.rejects(() => runTool(ctx, 'create_asset', { category: 'costume', name: '进城旧衣' }), /parent_id.*角色/);
+  await assert.rejects(() => runTool(ctx, 'create_asset', { category: 'age', name: '小时候' }), /parent_id.*角色/);
+  assert.equal(Assets.list(p.id).filter((x) => x.category === 'costume' || x.category === 'age').length, 0, '被拒时不得留下半截写入');
+  // 父不是角色 / 父不存在 / 父属于别的项目 → 一律拒
+  await assert.rejects(() => runTool(ctx, 'create_asset', { category: 'costume', name: '进城旧衣', parent_id: scene.id }), /parent_id.*角色/);
+  await assert.rejects(() => runTool(ctx, 'create_asset', { category: 'costume', name: '进城旧衣', parent_id: 'no-such' }), /parent_id.*角色/);
+  const p2 = mkProject('工具变体父项目2');
+  const ch2 = Assets.create(p2.id, { category: 'character', name: '韩梅梅' });
+  await assert.rejects(() => runTool(ctx, 'create_asset', { category: 'costume', name: '进城旧衣', parent_id: ch2.id }), /parent_id.*角色/);
+  // 合法：带本项目角色 → 落库且 parent_id 真的写进去（refs.js 按它映射角色）
+  const ok = JSON.parse(await runTool(ctx, 'create_asset', { category: 'costume', name: '进城旧衣', parent_id: ch.id }));
+  assert.equal(Assets.get(ok.id).parent_id, ch.id);
+  assert.equal(ok.parent_id, ch.id);
+  // 非变体分类带 parent_id → 拒（parent_id 会让 Assets.remove 把它级联删、usageOf 把它计成 children）
+  await assert.rejects(() => runTool(ctx, 'create_asset', { category: 'scene', name: '广场', parent_id: ch.id }), /parent_id 只能用于/);
+  assert.equal(Assets.list(p.id).filter((x) => x.name === '广场').length, 0);
+  Projects.remove(p.id);
+  Projects.remove(p2.id);
+});
+
+test('create_asset 工具：变体幂等去重按 parent_id 区分（不同角色同名服装不互相复用）', async () => {
+  const p = mkProject('变体去重项目');
+  const a = Assets.create(p.id, { category: 'character', name: '甲' });
+  const b = Assets.create(p.id, { category: 'character', name: '乙' });
+  const ctx = createToolRuntime({ projectId: p.id });
+  const r1 = JSON.parse(await runTool(ctx, 'create_asset', { category: 'costume', name: '旧衣', parent_id: a.id }));
+  const r2 = JSON.parse(await runTool(ctx, 'create_asset', { category: 'costume', name: '旧衣', parent_id: b.id }));
+  assert.notEqual(r1.id, r2.id, '不同角色的同名服装必须各自成行（只按 name 复用会挂到别的角色上）');
+  assert.equal(r1.reused, undefined);
+  const r3 = JSON.parse(await runTool(ctx, 'create_asset', { category: 'costume', name: '旧衣', parent_id: a.id }));
+  assert.equal(r3.id, r1.id, '同一角色重复建必须复用');
+  assert.equal(r3.reused, true);
+  // 非变体去重不受影响（同名复用，不带 parent 维度）
+  const s1 = JSON.parse(await runTool(ctx, 'create_asset', { category: 'scene', name: '街道' }));
+  const s2 = JSON.parse(await runTool(ctx, 'create_asset', { category: 'scene', name: '街道' }));
+  assert.equal(s1.id, s2.id);
+  Projects.remove(p.id);
+});
+
+test('generate_asset_from_reference 工具：变体缺 parent_id 在落盘/出图前就被拒', async () => {
+  const p = mkProject('参考生成变体项目');
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  const ref = core.ReferenceImages.create(p.id, { name: 'r', image_path: 'references/r.png', mode: 'reference' });
+  const ctx = createToolRuntime({ projectId: p.id });
+  await assert.rejects(
+    () => runTool(ctx, 'generate_asset_from_reference', { reference_id: ref.id, category: 'costume', name: '旧衣' }),
+    /parent_id.*角色/,
+  );
+  assert.equal(Assets.list(p.id).filter((x) => x.category === 'costume').length, 0, '规则校验必须发生在 Assets.create / 出图之前');
+  await assert.rejects(
+    () => runTool(ctx, 'generate_asset_from_reference', { reference_id: ref.id, category: 'scene', name: '广场', parent_id: ch.id }),
+    /parent_id 只能用于/,
+  );
+  Projects.remove(p.id);
+});

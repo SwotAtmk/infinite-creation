@@ -17,7 +17,7 @@ import {
 import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
-import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
+import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
 import { runExclusiveVideo, concurrencyLimit } from '../lib/agent/job-runner.js';
 import { guardToolCall } from '../lib/agent/guard.js';
 
@@ -582,6 +582,14 @@ test('assets POST：服装/年龄变体强制 parent_id 且必须指向角色（
   assert.ok(/isVariantAssetCategory\(category\)/.test(src), '写入端必须按分类判定变体');
   assert.ok(/parent\.category !== 'character'/.test(src), 'parent_id 必须校验指向角色素材');
   assert.ok(/parent_id: parentId/.test(src), 'parent_id 必须真的落库（原来被丢弃）');
+});
+
+test('工具 schema：create_asset / generate_asset_from_reference 暴露 parent_id（否则变体写入只能撞 DB 错误）', () => {
+  const props = (n) => TOOL_DEFINITIONS.find((t) => t.function.name === n).function.parameters.properties;
+  // 之前 schema 的 category 枚举含 costume/age，却没有 parent_id → 模型没法把变体绑到角色，
+  // 只能写出无父变体（被 db 层 BAD_VARIANT_PARENT 拒绝，且是模型看不懂的 DB 错误、无法补救）
+  assert.ok(props('create_asset').parent_id, 'create_asset 必须声明 parent_id');
+  assert.ok(props('generate_asset_from_reference').parent_id, 'generate_asset_from_reference 必须声明 parent_id');
 });
 
 test('nameMatches: 规范化后精确相等（短名不被同场更长角色名误命中）', () => {

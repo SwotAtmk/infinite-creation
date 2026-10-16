@@ -612,6 +612,22 @@ test('set_storyboard：未声明字段当场拒绝（字段拼错不再被静默
   Projects.remove(p.id);
 });
 
+test('set_storyboard：duration 必须当场校验成数字（NaN 落库会让这条分镜永远出不了片）', async () => {
+  const p = mkProject('分镜时长项目');
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  await assert.rejects(
+    () => runTool(ctx, 'set_storyboard', { shots: [{ idx: 1, visual: '画面', duration: '8秒' }] }),
+    /duration 必须是数字/,
+  );
+  assert.equal(Shots.list(p.id).length, 0, '被拒的批次一行都不写');
+  // 数字形态的字符串照常接受（模型常把数字写成字符串）
+  await runTool(ctx, 'set_storyboard', { shots: [{ idx: 1, visual: '画面', duration: '8' }] });
+  assert.equal(Shots.list(p.id)[0].duration, 8);
+  // 非对象元素要有可读的错误，而不是后面遍历时抛 TypeError
+  await assert.rejects(() => runTool(ctx, 'set_storyboard', { shots: [null] }), /必须是对象/);
+  Projects.remove(p.id);
+});
+
 test('变更日志：seed 是流水线易变字段（渲染回写不刷日志、不阻塞内容回滚）', () => {
   const p = mkProject('seed 项目');
   // harness 风格的一次写入：共享 batch，便于之后整批回滚

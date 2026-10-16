@@ -9,7 +9,7 @@ import {
   analyzeWorkflow, buildWorkflow, getDefaultSpecById, getSpecForKind,
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
-  extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks,
+  extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks, llmEndpoint, openaiCompatBaseUrl,
   freeComfy, checkComfyUI, generate, queuePrompt, getHistory, interrupt, deleteQueued, downloadOutput, getObjectInfo, resolveHardwareConfig, HW_PRESETS, loadConfig,
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
@@ -266,6 +266,30 @@ test('maskComfyBaseUrl: RunningHub 脱敏 apiKey，native 原样返回', () => {
   const key = 'd6198825ebff49b2994bb8c5d7ee3d66';
   assert.equal(maskComfyBaseUrl({ comfyui: { provider: 'runninghub', apiKey: key, tier: 'standard' } }), 'https://www.runninghub.cn（apiKey: d619****3d66）');
   assert.equal(maskComfyBaseUrl({ comfyui: { provider: 'native', baseUrl: 'http://127.0.0.1:8188' } }), 'http://127.0.0.1:8188');
+});
+
+test('openaiCompatBaseUrl: 与 llmEndpoint 同一套 /v1 归一化（Agent 运行时不再少一段 /v1）', () => {
+  // openclaude 的 OpenAI SDK 只在 base 后拼 '/chat/completions'，不会替你补 /v1：
+  // 少了这层归一化，base 写成 http://127.0.0.1:11434 的本地端点会「预检 /v1/models 通过、
+  // llmChat /v1/chat/completions 通过，唯独整条 Agent 流水线请求 /chat/completions 404」。
+  assert.equal(openaiCompatBaseUrl('http://127.0.0.1:11434'), 'http://127.0.0.1:11434/v1');
+  assert.equal(openaiCompatBaseUrl('http://127.0.0.1:11434/v1'), 'http://127.0.0.1:11434/v1');
+  assert.equal(openaiCompatBaseUrl('https://api.deepseek.com/'), 'https://api.deepseek.com/v1');
+  assert.equal(openaiCompatBaseUrl('https://api.openai.com/v1'), 'https://api.openai.com/v1');
+  // 已经写到 /chat/completions 的地址回退成 base
+  assert.equal(openaiCompatBaseUrl('http://127.0.0.1:8080/v1/chat/completions'), 'http://127.0.0.1:8080/v1');
+  // 与 llmEndpoint 同源：base + '/chat/completions' 必须与直连调用完全一致
+  for (const u of ['http://127.0.0.1:11434', 'http://127.0.0.1:8080/v1', 'https://api.deepseek.com']) {
+    assert.equal(openaiCompatBaseUrl(u) + '/chat/completions', llmEndpoint(u));
+    assert.equal(llmEndpoint(openaiCompatBaseUrl(u)), llmEndpoint(u));
+  }
+});
+
+test('openclaude providerEnv 的 OPENAI_BASE_URL 走归一化（不是裸 baseUrl）', () => {
+  // providerEnv 不导出（整份文件会拉起 vendor SDK），改用源码守卫钉住这一行：
+  // 一旦有人改回 `cfg.llm?.baseUrl`，就是「预检通过、流水线 404」那个 bug 复发。
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'openclaude-agent.js'), 'utf8');
+  assert.match(src, /OPENAI_BASE_URL:\s*openaiCompatBaseUrl\(/, 'OPENAI_BASE_URL 必须经 openaiCompatBaseUrl 归一化');
 });
 
 test('concurrencyLimit: runninghub 用 runninghubConcurrency，native 用 videoConcurrency', () => {

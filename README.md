@@ -19,12 +19,13 @@
 [更多样例](docs/run_demo.md)
 
 ## 项目计划
-- [✅] 支持背景音乐管理，接入 MiniMax Music3 本地/云端自动生成背景音乐并合成到视频中，含「背景音乐库」（手动生成/预览/选择/应用到章节）
+- [Ongoing] Addressing BUGs in the project
 - [计划中] 收录更多高阶Skill技能，提升Agent技能视觉美感
 - [计划中] 工具Web页面美化工作，需要一个非常有美感的AI设计师
 - [计划中] 打包构建Docker部署、桌面端App
 - [计划中] 工作流接入视频超分，让生成的视频更加清晰
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
+- [✅] 支持背景音乐管理，接入 MiniMax Music3 本地/云端自动生成背景音乐并合成到视频中，含「背景音乐库」（手动生成/预览/选择/应用到章节）
 - [✅] 添加Agent安全审批策略，防止Agent越权操作，删除项目或执行危险命令
 - [✅] 接入在线RunningHub-ComfyUI工作流生成，会员MiniMax-H3夜间免费运行
 - [✅] 把项目装进Skill技能，支持Agent一键调用

@@ -21,12 +21,13 @@ English | [中文](README.md)
 [More samples](docs/run_demo.md)
 
 ## Roadmap
-- [✅] Support background music management: integrate MiniMax Music3 for local/cloud automatic background-music generation and synthesis into videos, with a "Background Music" library (manual generation / preview / select / apply to chapters)
+
 - [In the plan] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
 - [In the plan] For the beautification work of the tool Web page, a highly aesthetic AI designer is needed
 - [In plan] Package and build Docker deployment, desktop app
 - [Planned] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
 - [Planned] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
+- [✅] Support background music management: integrate MiniMax Music3 for local/cloud automatic background-music generation and synthesis into videos, with a "Background Music" library (manual generation / preview / select / apply to chapters)
 - [✅] Add Agent security approval policies to prevent Agent from performing unauthorized operations, deleting projects, or executing dangerous commands
 - [✅] Integrate the online RunningHub-ComfyUI workflow for generation, with free overnight MiniMax-H3 runs for members
 - [✅] Consolidated text-to-image and image-to-image workflows using the latest Qwen-Image 2.1

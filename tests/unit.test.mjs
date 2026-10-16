@@ -14,7 +14,7 @@ import {
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
@@ -447,6 +447,28 @@ test('slugify / ratioToSize', () => {
 test('资产分类含服装 costume', () => {
   assert.ok(ASSET_CATEGORIES.some((c) => c.id === 'costume'));
   assert.equal(PROJECT_ASSET_SUBDIRS.costume, 'costumes');
+});
+
+test('uploadMediaKind: 分类优先 + 扩展名兜底（gif 归图片、音频扩展名归音频）', () => {
+  // 分类优先：voice/music/sfx 是音频、video 是视频
+  assert.equal(uploadMediaKind({ category: 'voice' }), 'audio');
+  assert.equal(uploadMediaKind({ category: 'music' }), 'audio');
+  assert.equal(uploadMediaKind({ category: 'sfx' }), 'audio');
+  assert.equal(uploadMediaKind({ category: 'video' }), 'video');
+  assert.equal(uploadMediaKind({ category: 'character' }), 'image');
+  assert.equal(uploadMediaKind({ category: 'video', ext: '.png' }), 'video', '分类优先于扩展名');
+  // 扩展名兜底：上传框不限类型，只看 category 会把 mp3 塞进 image_path
+  assert.equal(uploadMediaKind({ category: 'other', ext: '.mp3' }), 'audio');
+  assert.equal(uploadMediaKind({ category: 'character', ext: '.wav' }), 'audio');
+  assert.equal(uploadMediaKind({ ext: '.MP3' }), 'audio', '扩展名大小写不敏感');
+  assert.equal(uploadMediaKind({ category: 'other', ext: '.mp4' }), 'video');
+  assert.equal(uploadMediaKind({ category: 'other', ext: '.mkv' }), 'video');
+  // gif 是图片：<video> 放不出 gif，references 上传路由也把 gif 当图片
+  assert.equal(uploadMediaKind({ category: 'character', ext: '.gif' }), 'image');
+  assert.equal(uploadMediaKind({ category: 'other', ext: '.gif' }), 'image');
+  assert.equal(uploadMediaKind({ ext: '.png' }), 'image');
+  assert.equal(uploadMediaKind({}), 'image');
+  assert.equal(uploadMediaKind(), 'image');
 });
 
 test('imageToDataUrl: png 编码与拒绝分支', () => {

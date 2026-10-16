@@ -843,6 +843,22 @@ test('watchdogStep: 截断后可恢复（截断→工具→截断→截断不熔
 
 // —— 主动查询任务状态（不干等分钟级超时兜底） ——
 
+test('runFfmpeg：合并途中被停止 → 杀掉子进程，不再空等整次合并跑完', async () => {
+  const out = path.join(os.tmpdir(), 'ic-ffmpeg-abort-' + Date.now() + '.mp4');
+  let aborted = false;
+  setTimeout(() => { aborted = true; }, 300);
+  const t0 = Date.now();
+  try {
+    await assert.rejects(
+      () => runFfmpeg(['-y', '-f', 'lavfi', '-i', 'testsrc=duration=600:size=640x360:rate=25', '-c:v', 'libx264', '-preset', 'slow', out], { isAborted: () => aborted, timeoutMs: 60000 }),
+      /已停止/,
+    );
+    assert.ok(Date.now() - t0 < 15000, '停止后必须很快退出（长章节合并可达数分钟）');
+  } finally {
+    try { fs.unlinkSync(out); } catch {}
+  }
+});
+
 test('generate: 主动查询——任务从 ComfyUI 队列消失则主动失败（不干等 timeoutMs）', async () => {
   const orig = global.fetch;
   global.fetch = async (url) => {

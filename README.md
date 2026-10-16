@@ -19,7 +19,7 @@
 [更多样例](docs/run_demo.md)
 
 ## 项目计划
-- [Ongoing] Addressing BUGs in the project
+- [持续进行] 解决项目中存在的BUG
 - [计划中] 收录更多高阶Skill技能，提升Agent技能视觉美感
 - [计划中] 工具Web页面美化工作，需要一个非常有美感的AI设计师
 - [计划中] 打包构建Docker部署、桌面端App

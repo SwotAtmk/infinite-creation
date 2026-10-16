@@ -21,7 +21,7 @@ English | [中文](README.md)
 [More samples](docs/run_demo.md)
 
 ## Roadmap
-
+- [Ongoing] Addressing BUGs in the project
 - [In the plan] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
 - [In the plan] For the beautification work of the tool Web page, a highly aesthetic AI designer is needed
 - [In plan] Package and build Docker deployment, desktop app

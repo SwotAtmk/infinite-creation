@@ -74,12 +74,28 @@ function serveFile(res, req, abs) {
 
 app.prepare().then(() => {
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url, 'http://localhost');
+    // req.url 是客户端给的原文，这一层又跑在 Next 之外（抛出的异常没有任何兜底）：
+    // `GET //` 会让 new URL 抛 TypeError、`/files/%E0%A4%A` 会让 decodeURIComponent 抛 URIError，
+    // 两者都会直接杀死整个进程——正在跑的任务一起没了、jobs 留在 running。
+    // 一律按 400 处理：畸形请求不该拖垮服务（不能靠全局 uncaughtException 兜，那种「继续跑」的状态不可信）。
+    let url;
+    try {
+      url = new URL(req.url, 'http://localhost');
+    } catch {
+      res.writeHead(400).end();
+      return;
+    }
     if (url.pathname.startsWith('/files/')) {
       // 相对路径 -> data/ 下的绝对路径，并做路径穿越防护。
       // 只放开 data/projects/：data/ 根下还放着数据库（ic.db）等本不该对外暴露的文件，
       // 前台所有 /files 链接都是 /files/projects/<项目id>/... ，收窄到项目目录不影响功能。
-      const rel = decodeURIComponent(url.pathname.slice('/files/'.length));
+      let rel;
+      try {
+        rel = decodeURIComponent(url.pathname.slice('/files/'.length));
+      } catch {
+        res.writeHead(400).end();
+        return;
+      }
       const abs = path.resolve(DATA_DIR, '.' + path.sep + rel.replace(/^\/+/, ''));
       const safe = path.relative(PROJECTS_DIR, abs);
       if (safe && !safe.startsWith('..') && !path.isAbsolute(safe) && serveFile(res, req, abs)) return;
@@ -102,7 +118,15 @@ app.prepare().then(() => {
   // 导致浏览器报 “WebSocket connection to .../_next/webpack-hmr failed”。
   const upgradeHandler = app.getUpgradeHandler();
   server.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url, 'http://localhost');
+    // 同上：畸形 URL（如 `//`）会在 new URL 抛异常，而这里是 upgrade 事件回调，
+    // 抛出去同样无人接管、直接杀进程。升级请求容错更简单：直接断开。
+    let url;
+    try {
+      url = new URL(req.url, 'http://localhost');
+    } catch {
+      socket.destroy();
+      return;
+    }
     if (url.pathname === '/ws') {
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit('connection', ws, req);

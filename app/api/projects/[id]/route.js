@@ -1,7 +1,7 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
-import { Projects, projectDir, withWriteContext } from '@/lib/core/index.js';
+import { Projects, projectDir, withWriteContext, pickProjectFields } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,9 +15,14 @@ export async function GET(_req, { params }) {
 export async function PATCH(req, { params }) {
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
+  // 只接受内容字段（见 lib/core/shot-write.js 的 pickProjectFields）：status 是流水线状态
+  // （前端「运行中」判定、/run、/stages 都读它），context 有专门的 PUT /context 路由
+  // （同时落盘 context/*.md）——从 PATCH 进来会伪造状态，或让 DB 与盘上文件脱节。
+  const { patch, errors } = pickProjectFields(body);
+  if (errors.length) return NextResponse.json({ error: errors.join('；') }, { status: 400 });
   return withWriteContext('PATCH /api/projects/:id', async () => {
     try {
-      const p = Projects.update(id, body || {});
+      const p = Projects.update(id, patch);
       if (!p) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
       return NextResponse.json(p);
     } catch (e) {

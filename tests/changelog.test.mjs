@@ -17,7 +17,7 @@ const shared = await import('../lib/shared/index.js');
 const { createToolRuntime, runTool, resolveShotProvisions, upsertMusicAsset } = await import('../lib/agent/tools.js');
 const {
   Projects, Chapters, Shots, Assets, Jobs, listChanges, countChanges, rollbackLogs, getChange,
-  withWriteContext, rawGet, pickShotFields, pickChapterFields, idxTakenBy, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
+  withWriteContext, rawGet, pickShotFields, pickChapterFields, pickProjectFields, idxTakenBy, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
 } = core;
 
 const findLog = (pid, pred) => listChanges(pid, { limit: 500 }).find(pred);
@@ -910,6 +910,32 @@ test('apply_chapter_music：单章合并失败不中断其余章节', async () =
   assert.equal(r.results.length, 2, '两章都要有结果（原先第 1 章一抛错，第 2 章连碰都没碰）');
   assert.match(r.results[0].error || '', /合并成片失败/);
   Projects.remove(p.id);
+});
+
+test('章节标题：空标题会让整章分镜从章节视图消失，写入必须拒绝', () => {
+  const p = mkProject('章节空标题项目');
+  const cid = Chapters.list(p.id)[0].id;
+  // 外部写入 API 的入口（PATCH …/chapters/:cid）
+  assert.match(pickChapterFields({ title: '' }).errors.join('；'), /title 不能为空/);
+  assert.match(pickChapterFields({ title: '   ' }).errors.join('；'), /title 不能为空/);
+  assert.equal(pickChapterFields({ novel: '正文' }).errors.length, 0, '不带 title 时不校验');
+  // db 层兜底：绕过路由直接调用也必须拒绝（空标题会绕过标题唯一性检查）
+  assert.throws(() => Chapters.update(cid, { title: '' }), /标题不能为空/);
+  assert.equal(Chapters.get(cid).title, '第1章');
+  Projects.remove(p.id);
+});
+
+test('PATCH 项目：只接受内容字段，status/context 等流水线字段必须拒绝', () => {
+  const ok = pickProjectFields({ name: '甲', video_width: 1280.9, target_duration: 90.5, enable_bgm: false });
+  assert.equal(ok.errors.length, 0);
+  assert.equal(ok.patch.video_width, 1280, '像素取整');
+  assert.equal(ok.patch.target_duration, 90.5, '时长是秒，允许小数');
+  assert.equal(ok.patch.enable_bgm, false);
+  // status 是流水线状态（前端「运行中」判定、/run、/stages 都读它）
+  assert.match(pickProjectFields({ status: 'done' }).errors.join('；'), /不接受字段 status/);
+  // context 只能在 PUT /context 写（同时落 context/*.md，从这个口进去会让 DB 与盘上文件脱节）
+  assert.match(pickProjectFields({ context: {} }).errors.join('；'), /不接受字段 context/);
+  assert.match(pickProjectFields({ video_width: 'abc' }).errors.join('；'), /不小于 0 的数字/);
 });
 
 test('素材分类：值域外的分类必须拒绝（否则界面与批量生成都扫不到这一行）', () => {

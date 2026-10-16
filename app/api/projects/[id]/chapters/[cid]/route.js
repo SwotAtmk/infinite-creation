@@ -23,7 +23,7 @@ export async function PATCH(req, { params }) {
       const c = tx(() => {
         const updated = Chapters.update(cid, patch);
         if (!updated) return null;
-        if (patch.title && before.title !== updated.title) {
+        if (patch.title !== undefined && before.title !== updated.title) {
           for (const s of Shots.list(id)) if (s.chapter === before.title) Shots.update(s.id, { chapter: updated.title });
         }
         return updated;
@@ -31,7 +31,7 @@ export async function PATCH(req, { params }) {
       if (!c) return NextResponse.json({ error: '章节不存在' }, { status: 404 });
       return NextResponse.json(c);
     } catch (e) {
-      if (e && e.code === 'DUP_CHAPTER_TITLE') return NextResponse.json({ error: e.message }, { status: 400 });
+      if (e && (e.code === 'DUP_CHAPTER_TITLE' || e.code === 'EMPTY_CHAPTER_TITLE')) return NextResponse.json({ error: e.message }, { status: 400 });
       throw e;
     }
   });

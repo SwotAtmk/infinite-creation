@@ -14,7 +14,7 @@ process.env.IC_DATA_DIR = TMP;
 
 const core = await import('../lib/core/index.js');
 const shared = await import('../lib/shared/index.js');
-const { createToolRuntime, runTool } = await import('../lib/agent/tools.js');
+const { createToolRuntime, runTool, resolveShotProvisions } = await import('../lib/agent/tools.js');
 const {
   Projects, Chapters, Shots, Assets, Jobs, listChanges, countChanges, rollbackLogs, getChange,
   withWriteContext, rawGet, pickShotFields, pickChapterFields, idxTakenBy, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
@@ -834,6 +834,41 @@ test('narration：内置 Agent 与外部写入 API 同口径，可写旁白', as
   assert.equal(s.narration, '她想起那年冬天。');
   await runTool(ctx, 'update_shot', { shot_id: s.id, narration: '改过的旁白。' });
   assert.equal(Shots.get(s.id).narration, '改过的旁白。');
+  Projects.remove(p.id);
+});
+
+test('换装兜底：LLM 阶段（renderDisabled）不渲染，推迟到「资产图」阶段执行', async () => {
+  const p = mkProject('换装兜底阶段项目');
+  const mkImg = (rel) => {
+    const abs = path.join(projectDir(p.id), rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, 'x');
+    return rel;
+  };
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png') });
+  // 预置一套「内容与提示词都没改过」的服装：兜底判定可复用 → 直接返回，不触发渲染
+  const costume = Assets.create(p.id, { category: 'costume', name: '小明-沐浴后换上的干净衣裳', description: '沐浴后换上的干净衣裳', prompt: 'keep', parent_id: ch.id });
+  Assets.update(costume.id, { status: 'done', image_path: mkImg('assets/costume/y.png'), prompt_used: 'keep' });
+
+  // LLM 创作阶段：只检测、不生成（原先会绕过 runTool 的 RENDER_TOOLS 硬拦真的去渲染，
+  // 而该阶段 ComfyUI 通常没启动 → 白等一次超时）
+  const llmCtx = createToolRuntime({ projectId: p.id, chapter: '第1章', renderDisabled: true });
+  const r = await runTool(llmCtx, 'set_storyboard', { shots: [
+    { idx: 1, characters: ['小明'], visual: '小明在屋后沐浴' },
+    { idx: 2, characters: ['小明'], visual: '小明擦着头发走出屋子' },
+  ] });
+  assert.match(r, /将在「资产图」阶段生成并绑定/, '推迟必须回报给模型，否则它会以为已经处理完');
+  assert.ok(Shots.list(p.id).every((s) => s.costume_ids.length === 0), 'LLM 阶段不绑定（此刻没有服装可绑）');
+
+  // 「资产图」阶段：同一份分镜文本，兜底在这里执行并绑定（同名服装直接复用，不真的渲染）
+  const imgCtx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  const prov = await resolveShotProvisions(imgCtx, ['第1章']);
+  assert.equal(prov.outfit.generated, 1, '资产图阶段执行兜底');
+  const after = Shots.list(p.id);
+  assert.deepEqual(after.find((s) => s.idx === 2).costume_ids, [costume.id], '换装自「事件之后」的镜头起生效');
+  assert.deepEqual(after.find((s) => s.idx === 1).costume_ids, [], '沐浴事件本身的镜头仍用角色原图');
+  assert.match(prov.text, /自动换装/);
   Projects.remove(p.id);
 });
 

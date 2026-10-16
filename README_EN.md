@@ -240,10 +240,59 @@ On the Workflows page, paste a new ComfyUI workflow JSON → "Analyze nodes/role
 | POST     | /api/projects/:id/stages                  | Run by stages (check llm/image/tts/video to start a batch, incl. preflight) |
 | POST     | /api/projects/:id/music                   | Generate background music (create / regenerate a music asset) |
 | POST     | /api/projects/:id/music/apply             | Apply background music to multiple chapters and re-merge the final film |
+| GET/PUT  | /api/projects/:id/context                 | Context: character bible / style / continuity (also written to context/*.md) |
+| PUT      | /api/projects/:id/chapters/:cid/storyboard | Write a whole chapter's shots in one call (≤500 per call) |
+| POST/DELETE | /api/projects/:id/shots                | Create / delete a single shot        |
+| PATCH    | /api/projects/:id/shots/:sid              | Edit a single shot's content (generated-result fields are not writable) |
+| GET      | /api/projects/:id/logs                    | Change log: who changed what, when (the basis for rollback) |
+| POST     | /api/projects/:id/logs/rollback           | Roll back: one entry / a whole batch / everything since a timestamp |
 | GET      | /api/skills                               | Skill list                           |
 | GET/POST | /api/workflows                            | Workflow list / register (self-iteration) |
 | GET/PUT  | /api/config                               | Configuration                        |
 | WS       | /ws                                       | Task progress push                   |
+
+## Let Claude Code / opencode Write Content for You (External Writing)
+
+Besides clicking through the UI, you can let a local AI coding tool (Claude Code, opencode, Codex, Trae, …) write **text content** straight into a running project: create a project, write novel text, write scripts, write shots, write the character bible / style. The typical case: you already have a long novel and want to import it in bulk and split it into chapters.
+
+It writes **text only**: it will not generate images, videos, voices or music, and it will not export a film — those still happen from the UI.
+
+### Three steps
+
+```bash
+# 1. Install the skill (once; restart your AI tool afterwards so it discovers it)
+pnpm run install:ic-writer     # installs to ~/.agents/skills/ic-writer/ by default
+
+# 2. Start the server (defaults to http://127.0.0.1:4600)
+pnpm run dev
+
+# 3. Just talk to your AI tool, for example:
+#    "Write this novel into infinite-creation, one chapter per section"
+#    "Write 3 chapters of script for this project"
+#    "Rewrite the storyboard of chapter 2"
+```
+
+The skill source lives in this repo: `harness-skills/ic-writer/SKILL.md` (`pnpm run install:ic-writer` copies it into your skills directory). To install it elsewhere: `node scripts/install-writer-skill.mjs --target <your-skills-dir>`.
+
+### What it can and cannot write
+
+|  |  |
+|---|---|
+| ✅ Can write | Project fields, novel text, scripts, shots (dialogue / visual / camera / duration, …), character bible / style / continuity, asset prompts; **already generated** versions of all of these can be overwritten too |
+| ❌ Cannot write | Generated-result fields such as `status` and `video_path` — they are rejected, so nobody can fake "already generated" |
+| ❌ Never touches | Image / video / voice / music generation and final export (`/run`, `/stages`, `/regenerate`, `/music`, `/export`) |
+| ❌ Not available | Deleting projects (no such API, by design) |
+
+### Limits and caveats
+
+- **Local use only**: it talks to `127.0.0.1:4600` by default. That instance has **no authentication** — if you change `server.host` in `config.json` to `0.0.0.0`, you expose an endpoint on your LAN that can read every project, edit content and roll it back. Don't.
+- **Don't write while the project is running**: if `status` from `GET /api/projects/:id` is `running`, wait for it to finish (deleting writes are rejected with 409; content writes may be overwritten by the task's stale data, leaving the final film and the storyboard out of sync).
+- **Shots must pass the app's business rules** or the API returns 400: duration 1–15 s; dialogue length ≤ duration × 5.5 (over-fast lines get squeezed into unintelligible audio); at most 2 speakers per shot; resolution / aspect ratio must be one of the fixed enums.
+- **HTTP API only**: read and write through `{base}/api/...`. Never open `data/ic.db` directly (not even read-only) and never hand-edit files under `data/` or `config.json` — bypassing the API means no change log and nothing to roll back.
+- **Every step is reversible**: one call = one batch; roll back a single entry, a whole batch (`batch_id`), or everything since a timestamp. Rollback restores database rows only — image/video files on disk are not deleted (re-upload them).
+- **Works on any machine**: none of the commands above depend on a specific directory — just run them from the project root; the skill installs into your home directory (`~/.agents/skills/`).
+
+See section 6 of [SKILL.md](SKILL.md) (the full contract for the agent) and [docs/writer-api-plan.md](docs/writer-api-plan.md) (design trade-offs and round-by-round log).
 
 ## Tests
 

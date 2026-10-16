@@ -592,6 +592,10 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - `db.js` 只设 `PRAGMA journal_mode = WAL`、没有 `busy_timeout`：Next 按路由分包 → 多份 `DatabaseSync` 连接同一文件，并发写入理论上可能 `SQLITE_BUSY`（既有情况；本分支事务包住更多语句、窗口更长）。建议后续加一行 `PRAGMA busy_timeout`，本轮不改（非 dev7 引入）。
 - `shots.refs`（`references` 字段）写入后只有 `Assets.usageOf` 扫描消费、渲染链路不读它 —— 既有设计，非本轮引入。
 
+### 顺带：README 补上「外部写入」的用法与限制（面向用户）
+
+仓库根 `README.md` / `README_EN.md` 各新增一节「让 Claude Code / opencode 帮你写内容（外部写入）」：三步用法（`pnpm run install:ic-writer` → `pnpm run dev` → 对工具说人话）、能写 / 不能写对照表、限制（零鉴权只连本机、`running` 时别写、分镜业务校验、只走 HTTP API、回滚只恢复 DB 行不删磁盘文件），并把 `context` / `storyboard` / `shots` / `logs` / `logs/rollback` 补进「API 一览」表。技能目录新增 `harness-skills/ic-writer/README.md`（给人读；`SKILL.md` 仍是给 Agent 的契约，两份随安装脚本一起复制到技能目录）。三份文档都不含绝对路径，换机器可直接照做。
+
 ### 第十四轮验证口径
 
 单测 **184/184**（较上轮 +6 条回归：重做后可再回滚 / 只改绑定不被旧台词挡 / 自动标题避让 / 数组含对象报错 / 两条路径同一份默认时长 / 工具描述与校验同口径 + 资产图阶段顺序 + 行内任务不渲染删除）；5 处代码修复**逐条反向验证**（注入原缺陷 → 对应用例 `fail=1` → 还原 → 全绿）。改 `lib/core`、`lib/agent` 后重启实例，既有 **16 支探针全部重跑全绿**（`ic-audit-e2e` 88/0、`ic-refguard-e2e` 15/0、`ic-r4-probe` 6/0、`ic-r4-probe2` 6/0、`ic-malformed-probe` 5/0、`ic-range-probe` 失败 0、`ic-r6-llm-probe` 5/0、`ic-r7-upload-probe` 20/0、`ic-r7-skills-probe` 5/0、`ic-r8-parent-probe` 31/0、`ic-r9-skills-probe` 7/0、`ic-r9-rollback-probe` 11/0、`ic-r10-delstop-probe` 11/0、`ic-r10-bind-probe` 11/0、`ic-r11-inline-cancel-probe` 18/0、`ic-seed-reject-probe` 13/0），并新增 `ic-r14-fixes-probe.mjs` **24/24** 专测本轮修复（直写库造「历史超速行」→ 只发 6 个 `*_ids` 应 200、改台词/时长仍 400、显式空 chapter 仍 400；数组塞对象 400 且库里无 `[object Object]`；「第3章」被占后空标题建章得「第4章」；回滚 → 重做 → 再回滚同一条 create 日志 `applied=1` 且分镜真的消失）。`GET /` 200（长度 24524，与前轮一致）确认 JSX 改动不破坏编译；临时项目清理 7/0，真实库只剩「白衣审判」。

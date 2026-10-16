@@ -244,10 +244,59 @@ pnpm run build && pnpm start
 | POST     | /api/projects/:id/stages                | 分阶段运行（勾选 llm/image/tts/video 起一批，含预检） |
 | POST     | /api/projects/:id/music                 | 生成背景音乐（新建 / 编辑后重新生成一条音乐资产） |
 | POST     | /api/projects/:id/music/apply           | 把背景音乐应用到多个章节并重新合成成片 |
+| GET/PUT  | /api/projects/:id/context               | 上下文：人物圣经 / 风格 / 连续性（同时落盘 context/*.md） |
+| PUT      | /api/projects/:id/chapters/:cid/storyboard | 整章批量写分镜（单次 ≤500 条） |
+| POST/DELETE | /api/projects/:id/shots              | 新建 / 删除单个分镜     |
+| PATCH    | /api/projects/:id/shots/:sid            | 改单个分镜正文（生成结果字段不可写） |
+| GET      | /api/projects/:id/logs                  | 变更日志：谁在什么时候改了什么（回滚依据） |
+| POST     | /api/projects/:id/logs/rollback         | 回滚：单条 / 整批 / 按时间点 |
 | GET      | /api/skills                             | 技能列表            |
 | GET/POST | /api/workflows                          | 工作流列表 / 注册（自迭代） |
 | GET/PUT  | /api/config                             | 配置              |
 | WS       | /ws                                     | 任务进度推送          |
+
+## 让 Claude Code / opencode 帮你写内容（外部写入）
+
+除了在界面里点，你也可以让本机的 AI 编程工具（Claude Code、opencode、Codex、Trae 等）直接把**文字内容**写进正在运行的项目：新建项目、写小说原文、写剧本、写分镜、写人物圣经/风格。典型场景是「手里已经有一部长篇小说，想批量导入并拆成章节」。
+
+它**只写文字**：不会帮你生图、生视频、配音、配乐、导出成片——那些仍然在界面里点。
+
+### 三步用起来
+
+```bash
+# 1. 装技能（只需一次；装完重启一下 AI 工具，它才会发现新技能）
+pnpm run install:ic-writer     # 默认装到 ~/.agents/skills/ic-writer/
+
+# 2. 起服务（地址默认 http://127.0.0.1:4600）
+pnpm run dev
+
+# 3. 对 AI 工具说人话，例如：
+#    「把这本小说写进 infinite-creation，一章一段」
+#    「给这个项目写 3 章剧本」
+#    「把第 2 章的分镜表重写一遍」
+```
+
+技能源就在仓库里：`harness-skills/ic-writer/SKILL.md`（`pnpm run install:ic-writer` 就是把它复制到技能目录）。想装到别处：`node scripts/install-writer-skill.mjs --target <你的技能目录>`。
+
+### 能写什么、不能写什么
+
+|  |  |
+|---|---|
+| ✅ 能写 | 项目属性、小说原文、剧本、分镜（台词/画面/镜头/时长等）、人物圣经/风格/连续性、素材提示词；**已经生成过的**这些内容也能改写覆盖 |
+| ❌ 不能写 | `status`、`video_path` 这类「生成结果」字段——写不进去，也伪造不出「已生成」 |
+| ❌ 不会碰 | 生图 / 生视频 / 配音 / 配乐 / 导出成片（`/run`、`/stages`、`/regenerate`、`/music`、`/export`） |
+| ❌ 没有 | 删除项目的接口（永远不提供） |
+
+### 限制与注意
+
+- **只对本机用**：默认只连 `127.0.0.1:4600`。这个实例**没有鉴权**——如果把 `config.json` 里的 `server.host` 改成 `0.0.0.0`，等于给局域网开了一个「能读全文、能改内容、能回滚」的入口，别这么配。
+- **项目正在跑任务时先别写**：`GET /api/projects/:id` 的 `status` 是 `running` 就等它跑完（删除类写入会被直接拒 409；内容类写入也可能被任务用旧数据覆盖，最后成片和分镜表对不上）。
+- **写进去的分镜要过业务校验**，否则接口直接 400：时长 1~15 秒；台词字数 ≤ 时长 × 5.5（超了会被压成听不清的模糊声）；单个分镜说话人 ≤ 2；分辨率 / 宽高比走固定枚举。
+- **只走 HTTP API**：读写一律通过 `{base}/api/...`。不要直连 `data/ic.db`（只读也不行）、不要手改 `data/` 里的文件和 `config.json`——绕过去就没有变更日志，写错了回滚不了。
+- **每一步都能回滚**：一次调用就是一个批次，可以单条、整批（`batch_id`）或按时间点回滚；回滚只恢复数据库里的内容，磁盘上的图片/视频文件不会跟着删（要重传）。
+- **换机器照样用**：上面的命令都不依赖具体目录，在项目根目录执行即可；技能默认装到用户主目录 `~/.agents/skills/`。
+
+细节见仓库根 [SKILL.md](SKILL.md) 第六节（给 Agent 的完整契约）与 [docs/writer-api-plan.md](docs/writer-api-plan.md)（设计取舍与逐轮记录）。
 
 ## 测试
 

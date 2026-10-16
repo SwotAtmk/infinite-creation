@@ -794,6 +794,32 @@ test('generate: 主动查询——任务从 ComfyUI 队列消失则主动失败�
   }
 });
 
+test('generate: 提交失败（ComfyUI 校验失败）时必须关掉 WebSocket，不泄漏长连接', async () => {
+  const origFetch = global.fetch;
+  const origWS = global.WebSocket;
+  const sockets = [];
+  class FakeWS {
+    constructor() { this.closed = false; this.onmessage = null; this.onerror = null; this.onclose = null; sockets.push(this); }
+    close() { this.closed = true; }
+  }
+  global.WebSocket = FakeWS;
+  // 提交阶段就失败（校验失败是最典型的一种）：原先 ws 建连在 try 内、queuePrompt 在 try 外，
+  // 这里一抛错就没人关这条连接；上层对同一分镜还会重试多次，泄漏随失败数线性累积。
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/prompt')) return { ok: true, json: async () => ({ error: { type: 'prompt_outputs_failed_validation' }, node_errors: { '3': { errors: ['bad'] } } }) };
+    return { ok: true, json: async () => ({}) };
+  };
+  try {
+    await assert.rejects(() => generate('http://127.0.0.1:1', { n1: {} }, { timeoutMs: 5000, pollMs: 2 }), /校验失败/);
+    assert.equal(sockets.length, 1, '应建立过一条 WS');
+    assert.equal(sockets[0].closed, true, '提交失败时 WS 必须被关闭');
+  } finally {
+    global.fetch = origFetch;
+    global.WebSocket = origWS;
+  }
+});
+
 test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时→主动放弃', async () => {
   // 占满全部渲染槽位（本地默认 1，云端 RunningHub 按 runninghubConcurrency），让后续任务进入排队分支
   const limit = concurrencyLimit(loadConfig());

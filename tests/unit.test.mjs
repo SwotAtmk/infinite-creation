@@ -506,6 +506,16 @@ test('运行日志：完整日志按「目标任务 id」取，不随 jobs 数�
   assert.ok(/setLogTick\(\(t\) => t \+ 1\); onRefresh\(\)/.test(ct), '「刷新」按钮要能立刻重取完整日志');
 });
 
+test('分镜素材选择器：变体只列、只绑本镜角色的服装/年龄（源码守卫）', () => {
+  const p = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ShotMaterialPicker.jsx'), 'utf8');
+  // 变体只在「所属角色也在本镜」时才生效（refs.js 按 parent_id 替换该角色的参考图），
+  // 原先本镜没有角色时把「所属角色」回退成全部角色 → 能建/选到本镜根本用不上的变体。
+  assert.ok(/const parentChoices = shotChars;/.test(p), '「所属角色」只能是本镜已绑定的角色');
+  assert.ok(!/shotChars\.length \? shotChars : characters/.test(p), '不该再回退到「全部角色」');
+  assert.ok(/if \(isVariant\) return shotCharIds\.has\(a\.parent_id\)/.test(p), '已有变体列表只列本镜角色的变体');
+  assert.ok(/isVariant && !parentChoices\.length/.test(p), '本镜没有角色时要提示先绑角色（并禁用上传）');
+});
+
 test('参考图上传/编辑不能建变体：服装/年龄必须挂在角色下（源码守卫）', () => {
   const post = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'references', 'route.js'), 'utf8');
   // 实机核验见探针 ic-r8-parent-probe.mjs 的 K 段（导入素材库+服装 → 400 而非 500；道具 → 200）

@@ -134,6 +134,23 @@ test('回滚的回滚 = 重做', () => {
   Projects.remove(p.id);
 });
 
+test('重做之后仍能再次回滚（重做必须清掉原始日志的 reverted_by）', () => {
+  const p = mkProject('日志项目G2');
+  const s = Shots.create(p.id, { chapter: '第1章', visual: '画面' });
+  const log = shotLog(p.id, s.id, 'create');
+  rollbackLogs({ projectId: p.id, logId: log.id });        // 回滚：删掉
+  const rb = findLog(p.id, (l) => l.action === 'rollback' && l.entity_id === s.id);
+  rollbackLogs({ projectId: p.id, logId: rb.id });         // 重做：回来
+  assert.ok(Shots.get(s.id), '重做后分镜应回来');
+  // 关键：重做之后原始日志必须不再是「已被回滚」。否则再回滚时会被第 265 行当「已被回滚」跳过，
+  // 这次改动就永远撤不掉了 —— 用户看到「回滚成功」但数据没变，与预期正好相反。
+  assert.equal(getChange(log.id).reverted_by, '', '重做要清掉原始日志的 reverted_by');
+  const again = rollbackLogs({ projectId: p.id, logId: log.id });
+  assert.equal(again.applied.length, 1, '重做过的改动应能再次被回滚');
+  assert.equal(Shots.get(s.id), null, '再次回滚后分镜应再次消失');
+  Projects.remove(p.id);
+});
+
 test('漂移保护：变更之后又被改过 → 拒绝回滚；force=true 才覆盖', () => {
   const p = mkProject('日志项目H');
   const s = Shots.create(p.id, { chapter: '第1章', visual: 'v1' });

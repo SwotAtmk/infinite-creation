@@ -446,6 +446,9 @@ test('参考图白名单：前端选择器与后端校验共用一份（含无 M
   assert.equal(isReferenceImageName('没有扩展名'), false);
   assert.equal(isReferenceImageName(''), false);
   assert.equal(isReferenceImageName(null), false);
+  assert.equal(isReferenceImageName('.png'), false);           // 只有扩展名不是图片（后端 extname → '' → 400）
+  assert.equal(isReferenceImageName('资料.png'), true);
+  assert.equal(isReferenceImageName('a.b.png'), true);
   assert.equal(REFERENCE_IMAGE_MAX_BYTES, 10 * 1024 * 1024);
   const route = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'references', 'route.js'), 'utf8');
   assert.ok(/REFERENCE_IMAGE_EXTS/.test(route) && /REFERENCE_IMAGE_MAX_BYTES/.test(route), '路由必须用共享白名单/上限');

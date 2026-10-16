@@ -314,3 +314,34 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 沿用前面几轮的判定：`withRetry` 死代码、`abortFlags` 只增不减、`PUT /api/config` 整体覆盖语义、`installSkillsFromZip` 中途失败不回滚、`shots/zip` 空集 500、`mergeVideos` 的 volume、`music/apply` 路由层不校验 `music_id`、章节/分镜 PATCH 无 `activeJobOf` 守卫、`shots/zip`/`export` 缺 `Projects.get`、资产名为空、章节标题不做存储归一化。
 
 第五轮验证口径：`node --test "tests/*.test.mjs"` **130/130**（本轮新增 4 项：阶段停止记 cancelled、音乐资产复位、`llmChat` 无 key 可用、`llmChat` 超时提示；改写 CK 判定 1 项）；反向验证（只撤掉 `stages.js`+`llm.js`+`job-runner.js` 三处修复）**恰好这 5 项失败、其余 125 项照常通过**（零回归）。实机：畸形请求探针 **5/5**（`//`、`/files/%E0%A4%A`、`/files/%` → 400，畸形 upgrade → 断连，正常请求不受影响；同一探针对旧代码是 1/5、且请求挂死 + 每次一条 uncaughtException）；`ic-audit-e2e` **88/88**、`ic-refguard-e2e` **15/15**、第四轮两条探针 **各 6/6**；界面 `GET /`、`GET /?id=<项目>` 均 200（本轮改了 4 个页面的编译通过）。
+
+## 十四、第六轮：把「停止」当一条完整链路审，并首次系统深审 `lib/agent/tools.js`
+
+第五轮把范围推到两侧后，第六轮做两件事：一条对抗式复核线专门**反查第五轮 diff**（挑新引入的问题），一条深审线首次把 1400 多行的 `lib/agent/tools.js`（内置 Agent 的全部工具）逐段过一遍。结论是：本轮最集中、最严重的一类问题是**「停止」只停了一部分**——用户按下停止之后，队列项还会被执行、换装/年龄兜底还会逐镜提交、整章合并还会跑完；其次是**同一件事在两处口径不一致**（LLM 门槛、取消的收尾状态、时长校验）。
+
+### 修掉的（12 处，12 个原子提交）
+
+| 级别 | 问题 | 修复 |
+|------|------|------|
+| 高 | `comfyui.generate()` 先 `queuePrompt` 提交、之后才检查停止标记；而 `abort()` 只调 `/interrupt`——它只打断**正在执行**的那一项，已经排进 ComfyUI 队列的项稍后照样被逐个执行。用户点了停止，队列里还留着自己刚提交的生成，等于停下来继续烧 GPU（单镜视频可达数分钟） | 提交前先查停止标记直接抛；`abort()` 除 `/interrupt` 外再按 `prompt_id` 调 `POST /queue {"delete":[id]}` 删掉自己**尚未执行**的队列项（接口见 ComfyUI `server.py` 的 `post_queue`）。新增 `deleteQueued()` 并配 3 项单测（提交前不提交、中止时两条请求都发、空 id 不发请求） |
+| 高 | `tools.js` 的换装兜底（`autoResolveOutfits`）与年龄兜底（`autoResolveAges`）循环**没有**停止检查：每一次「换装事件/年龄事件」都是一次真的图生图提交，用户停止后仍会一镜一镜继续出图 | 两个循环开头加 `ctx.isAborted()` 检查即退出（停止后重跑该阶段会幂等补齐绑定） |
+| 高 | `set_storyboard` 的 `duration` 未做数字校验：模型写 `"8秒"` 时 `sb.duration \|\| 8` 取到字符串、`Math.max/min` 得到 `NaN` 落库；而 `validateSubShots` 把 `NaN` 当 0 秒 → 该分镜**永远出不了片**（任何子分镜都判「超过总时长」，错误信息里只有「超过」两个字，看不出根因）。同一处 `shots:[null]`（模型偶尔这么写）会让后面的遍历抛 `TypeError: Cannot read properties of null` | 加 `durationOf()` 唯一入口：非数字当场报错（与 `update_shot`／外部 API「必须是有限数字」同口径）、越界仍夹到 `[1,15]`；非对象元素同样当场拒绝并点名第几条。（`update_shot` 早就是对的，只有这条路径漏了） |
+| 中 | `startChapterVideoJob` 被停止后仍记 `status:'done'` +「完成」：`generate_chapter_videos` 停止时是**正常返回**（`{aborted:true}`，不抛错），`.then` 无条件置 done → 前端弹「✅ 任务完成」，而后面几镜根本没跑。第五轮只修了阶段任务那条 `.then`，同源问题在 `job-runner.js` 里还有 8 处 | 抽出 `finishJobOk()`：与 `finishJobError` 同口径看 `isAborted(job.id)()`，为真记 `cancelled`；9 处 `.then` 全部改用它（一处修改覆盖全部「工具正常返回但其实被停止」的路径） |
+| 中 | 背景音乐**重新生成**失败/被停止时，把该资产上已有的 `audio_path` 一并作废成 `failed`：列表里上一版音频还在播，但「应用到章节」按钮（只对 `done` 显示）直接消失，用户既用不上旧的、也没拿到新的。而分镜路径早就是「取消恢复原视频」的口径 | 与分镜同口径：取消/失败时若资产上已有音频则恢复 `done`（保留旧音频），确实没有音频才标 `failed`；工具内 catch 与 `startMusicJob` 的兜底 catch 两处都改 |
+| 中 | LLM 门槛残留 `apiKey`：`/api/llm/test`、参考图上传的视觉命名（`references` 路由）、`edit_asset_image`/年龄变体的视觉精修（`tools.js`）都以 `apiKey` 为门槛。第五轮已把 `llmChat` 与 `preflight` 改成「只要求 Base URL」，但这些入口没跟上 → 用本地无鉴权端点（llama.cpp 等）的用户「测试连接」直接判负、视觉功能静默降级 | 统一到 Base URL（`vision` 开关 + `baseUrl`）。实机探针证明：无 `apiKey` 的本地端点现在能测通（`ok:true`、且确实没带 `Authorization`） |
+| 低 | `preflight` 用 `base + '/models'` 探测，而真正调用走 `llmEndpoint()`（会自动补 `/v1`）：用户把 Base URL 写成 `http://127.0.0.1:8080` 时，预检打 `/models` 通过、真实调用打 `/v1/chat/completions` 却 404 —— 「预检过了，每个阶段都失败」 | 探测地址改用 `llmEndpoint()` 推导（`/models` 由 `/chat/completions` 换得），与调用同源 |
+| 低 | `comfyui.js` 的 `comfyFetch` 把**假死超时**也说成「无法连接 ComfyUI，请确认已启动」：连接是通的（进程活着、在加载模型或卡住），这句会把用户引去重启一个本来就活着的服务。`llm.js` 第五轮已经分开报，这里没跟上 | 按 `TimeoutError/AbortError` 分开报「响应超时（连接是通的）」与「无法连接」 |
+| 低 | 单镜渲染被停止时写成 `status:'failed'` + `error:'已取消'`：用户点一下「停止」就在分镜上看到一条失败记录（章节批量路径会把它复位成 `pending`，单镜路径不会）。停止不是失败 | 与 `generate_chapter_videos` 收尾同口径：已有成片恢复 `done` 并保留原视频，尚未成片回到 `pending`、清空 `error` |
+| 低 | `edit_asset_image` 的 `reference_asset_id` 不校验项目归属：跨项目 id 会按**本项目**路径解析（两个项目都有 `assets/character/xxx.png` 时），拿错图当参考 | 参考资产必须属于本项目，否则「参考资产不存在」 |
+| 低 | CK 版本判定里 `(pa[i] \|\| 0)` 的解析太宽松：`0.2.37rc1` 逐段 `Number()` 得到 `NaN`、再被当成 0，于是 `0.2.37rc1` 被读成「0.2.0」而**放行**。本机装的正是 `comfy-kitchen 0.2.37`（`plan/ComfyUI_MiniMaxH3_AMD_7900XTX_Plan.md:1153` 逐 commit 核实：0.2.37 只修了 NaN，token>64 的 mask 崩坏**未修**），旧解析会让 `0.2.37rc1` 这样的版本号绕过拦截 | 版本号必须是纯数字段，含后缀（`rc1`/`+cu124`）或为空一律算「读不准」→ **保守判坏**（误伤的代价只是少 2.7x 速度，反了就是一批废图） |
+| 低 | `mergeVideos` 没有中止通道：整章合并（长章节可达数分钟）期间点停止完全无效，ffmpeg 照跑到底 | `runCapture` 增加 `isAborted` 轮询、命中即 `SIGKILL` 子进程并报「已停止」；`runFfmpeg`/`mergeVideos` 透传，`assemble_video` 传入 `ctx.isAborted`（半截产物文件按既有「失败留孤儿文件」口径处理） |
+
+### 本轮核对过、判定「不改」的项
+
+- **`update_shot` 改台词不重置 `video_prompt_used`（不触发重渲染）**：视频阶段的跳过规则就是「已出片且**提示词**没变过」（改提示词即重出，写在工具说明里）；把「改台词」也当失效会让整章在下次运行时全量重渲染（几十镜 × 数分钟），成本不可控。单镜「重新生成」按钮与 `regenerate_shot` 都在手边。不改。
+- **`upsertMusicAsset` 同名复用可能覆盖用户自建的同名音乐资产**：名字就是「某章 BGM」这个业务槽位（该设计有成文注释与既有测试），覆盖同时写变更日志（可回滚），磁盘上旧文件也不删；改成「另建一条」会重新引入两条同名音乐谁对应哪章的歧义。不改。
+- **兜底提示词会被写进 `video_prompt`**：`generate_shot_video` 的文档明确写「未写提示词时用兜底提示词并记录」；之后 LLM 若写下正式提示词，`video_prompt_used !== video_prompt` 会让该镜下次重出（既有已知行为）。不改。
+- **`assemble_video` 的整片合并（不传 `chapter`）与 `/export` 路由不响应停止**：两者都是「请求内同步等待」的一次性动作，界面不为它们显示停止按钮；按章合并（含 `apply_chapter_music`）已支持中途停止。属设计取舍，已记录。
+- 沿用前面几轮的判定（不再重复理由）：`withRetry` 死代码、`abortFlags` 只增不减、`PUT /api/config` 整体覆盖语义、`installSkillsFromZip` 中途失败不回滚、`shots/zip` 空集 500、`mergeVideos` 的 volume、`music/apply` 路由层不校验 `music_id`、章节/分镜 PATCH 无 `activeJobOf` 守卫、`shots/zip`/`export` 缺 `Projects.get`、`comfyui/test`+`llm/test` 的 SSRF 面、`openclaude-agent` 写 `process.env`、`startStageJob` 里 `Jobs.create` 早于 `createToolRuntime`、`ffmpeg` 强制音轨、素材空名、`Chapters.create` 不做存储归一化、`pendingByStage` 的 tts 计数、`custom` 空宽高 → 1024×576、同名资产 `byName` 取最新、`DELETE /references/:rid` 连带删关联素材。
+
+第六轮验证口径：`node --test "tests/*.test.mjs"` **138/138**（本轮新增 8 项：停止后不再提交、中止时按 `prompt_id` 清队列、`deleteQueued` 请求形态、`runFfmpeg` 中止杀子进程、换装/年龄兜底循环停止后零提交、章节视频任务记 `cancelled`、音乐重生成停止保留旧音频、`set_storyboard` 时长与元素校验；改写「停止复位」1 项以对齐新口径）。反向验证：整批撤掉源码修复 → 单测文件因 `deleteQueued` 未导出直接加载失败、3 项 changelog 新测试逐条失败；逐条撤（提交前检查／中止清队列／兜底循环检查／ffmpeg 中止通道）→ 对应测试各自失败，其中 `runFfmpeg` 一项在旧代码下**跑满 17.9s 才结束**，正是「停止后合并照跑」的现场。实机：`ic-audit-e2e` **88/88**、`ic-refguard-e2e` **15/15**、第四轮两条探针 **各 6/6**、畸形请求探针 **5/5**，新增 LLM 门槛探针 **5/5**（无 `apiKey` 的本地端点可测通、地址按 `llmEndpoint` 补 `/v1`、未填 Base URL 报 Base URL、连不上给出可读原因）。

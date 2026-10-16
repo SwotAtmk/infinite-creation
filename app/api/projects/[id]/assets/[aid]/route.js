@@ -38,8 +38,8 @@ export async function PATCH(req, { params }) {
     try {
       return NextResponse.json(Assets.update(aid, patch));
     } catch (e) {
-      // 值域外的分类 / 无父变体（db 层 Assets.update 的守卫）：是入参错误，翻成 400 而不是 500
-      if (e && (e.code === 'BAD_ASSET_CATEGORY' || e.code === 'BAD_VARIANT_PARENT')) return NextResponse.json({ error: e.message }, { status: 400 });
+      // 值域外的分类 / 无父变体 / 非变体带父（db 层 Assets.update 的守卫）：是入参错误，翻成 400 而不是 500
+      if (e && (e.code === 'BAD_ASSET_CATEGORY' || e.code === 'BAD_VARIANT_PARENT' || e.code === 'BAD_ASSET_PARENT')) return NextResponse.json({ error: e.message }, { status: 400 });
       throw e;
     }
   });

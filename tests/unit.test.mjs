@@ -583,6 +583,9 @@ test('assets POST：服装/年龄变体强制 parent_id 且必须指向角色（
   assert.ok(/isVariantAssetCategory\(category\)/.test(src), '写入端必须按分类判定变体');
   assert.ok(/parent\.category !== 'character'/.test(src), 'parent_id 必须校验指向角色素材');
   assert.ok(/parent_id: parentId/.test(src), 'parent_id 必须真的落库（原来被丢弃）');
+  // 非变体分类带 parent_id 必须被拒（旧行为：只要父存在就放行 → 被当子变体级联删）
+  assert.ok(/parent_id 只用于服装/.test(src), '非变体分类不得接受 parent_id');
+  assert.ok(/BAD_ASSET_PARENT/.test(src), 'db 层的非变体父守卫要翻成 400');
 });
 
 test('工具 schema：create_asset / generate_asset_from_reference 暴露 parent_id（否则变体写入只能撞 DB 错误）', () => {

@@ -91,9 +91,9 @@ export async function PATCH(req, { params }) {
       return NextResponse.json({ reference: ReferenceImages.get(rid) });
     });
   } catch (e) {
-    // db 层的领域守卫（变体必须有父 / 分类不在值域）在这里翻成 400 而不是 500：
+    // db 层的领域守卫（变体必须有父 / 非变体不得带父 / 分类不在值域）在这里翻成 400 而不是 500：
     // 走到这里说明是存量脏数据或未预料路径，给出可读原因，别让用户看到「服务器内部错误」。
-    if (e && (e.code === 'BAD_VARIANT_PARENT' || e.code === 'BAD_ASSET_CATEGORY')) {
+    if (e && (e.code === 'BAD_VARIANT_PARENT' || e.code === 'BAD_ASSET_PARENT' || e.code === 'BAD_ASSET_CATEGORY')) {
       return NextResponse.json({ error: e.message + '（服装/年龄请在素材库「＋ 新建资产」里选好所属角色）' }, { status: 400 });
     }
     throw e;

@@ -1165,6 +1165,28 @@ test('服装/年龄变体：写入端必须带 parent_id（无父变体在生成
   Projects.remove(p.id);
 });
 
+test('非变体分类不得带 parent_id（否则会被当子变体级联删、计进 usageOf.children）', () => {
+  const p = mkProject('非变体父项目');
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  // create：非变体 + parent_id 直接拒（旧行为是写进库，删除角色时被级联删掉）
+  assert.throws(() => Assets.create(p.id, { category: 'scene', name: '街道', parent_id: ch.id }), (e) => e.code === 'BAD_ASSET_PARENT');
+  assert.throws(() => Assets.create(p.id, { category: 'character', name: '小王', parent_id: ch.id }), (e) => e.code === 'BAD_ASSET_PARENT');
+  assert.equal(Assets.list(p.id).filter((x) => x.parent_id).length, 0, '被拒的写入不许留下父指针');
+  // update：把非变体改成「有父」同样拒
+  const s = Assets.create(p.id, { category: 'scene', name: '街道' });
+  assert.throws(() => Assets.update(s.id, { parent_id: ch.id }), (e) => e.code === 'BAD_ASSET_PARENT');
+  assert.equal(Assets.get(s.id).parent_id, '');
+  // 清空 parent_id（空串）不算「带父」，不拦
+  assert.equal(Assets.update(s.id, { parent_id: '' }).parent_id, '');
+  // 存量脏数据（历史遗留的非变体父指针）不该连累无关编辑：改名照常
+  core.getDb().prepare('UPDATE assets SET parent_id = ? WHERE id = ?').run(ch.id, s.id);
+  assert.equal(Assets.update(s.id, { name: '改名后的街道' }).name, '改名后的街道');
+  assert.equal(Assets.get(s.id).parent_id, ch.id, '没提 parent_id 就不动它');
+  // 变体仍正常（regression：这道闸不能把合法的变体写入也堵死）
+  assert.equal(Assets.create(p.id, { category: 'costume', name: '旧衣', parent_id: ch.id }).parent_id, ch.id);
+  Projects.remove(p.id);
+});
+
 test('参考素材上传：走渲染后端分派层（RunningHub 下必须传到云端并用平台 fileName）', async () => {
   const p = mkProject('参考素材后端分派项目');
   const abs = path.join(projectDir(p.id), 'assets/character/x.png');

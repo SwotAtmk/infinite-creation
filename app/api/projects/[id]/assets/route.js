@@ -37,15 +37,16 @@ export async function POST(req, { params }) {
       return NextResponse.json({ error: '服装/年龄变体的 parent_id 必须指向角色素材（当前是 ' + parent.category + '）' }, { status: 400 });
     }
   } else if (parentId) {
-    const parent = Assets.get(parentId);
-    if (!parent || parent.project_id !== id) return NextResponse.json({ error: 'parent_id 指向的素材不存在' }, { status: 400 });
+    // parent_id 的唯一语义是「挂在角色下的变体」（refs.js 只对 costume/age 按它映射角色）。
+    // 写在其它分类上只会让 Assets.remove 把它当子变体级联删、usageOf 把它计成 children。
+    return NextResponse.json({ error: 'parent_id 只用于服装（costume）/年龄（age）变体；' + category + ' 不能挂在其它素材下' }, { status: 400 });
   }
   return withWriteContext('POST /api/projects/:id/assets', async () => {
     try {
       return NextResponse.json(Assets.create(id, { category, name, description, parent_id: parentId }));
     } catch (e) {
-      // 与 PATCH 同一套口径：db 层的「分类值域 / 变体必须带 parent_id」守卫是入参错误，翻 400
-      if (e && (e.code === 'BAD_ASSET_CATEGORY' || e.code === 'BAD_VARIANT_PARENT')) return NextResponse.json({ error: e.message }, { status: 400 });
+      // 与 PATCH 同一套口径：db 层的分类/变体父守卫是入参错误，翻 400
+      if (e && (e.code === 'BAD_ASSET_CATEGORY' || e.code === 'BAD_VARIANT_PARENT' || e.code === 'BAD_ASSET_PARENT')) return NextResponse.json({ error: e.message }, { status: 400 });
       throw e;
     }
   });

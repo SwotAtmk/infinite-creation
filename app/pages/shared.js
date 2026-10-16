@@ -1,10 +1,10 @@
 // 共享常量与工具函数（无 React 依赖）
-import { VIDEO_ASPECT_RATIOS, VIDEO_RESOLUTION_CUSTOM, VIDEO_RESOLUTION_OPTIONS } from '../../lib/shared/index.js';
+import { VIDEO_ASPECT_RATIOS, VIDEO_RESOLUTION_CUSTOM, VIDEO_RESOLUTION_OPTIONS, ASSET_CATEGORIES } from '../../lib/shared/index.js';
 
-export const CATEGORIES = [
-  ['character', '人物'], ['scene', '场景'], ['prop', '道具'], ['costume', '服装'],
-  ['voice', '语音'], ['music', '音乐'], ['sfx', '音效'], ['video', '视频'], ['other', '其他'],
-];
+// 资产分类下拉（素材库分组 Tab + 新建/编辑素材的分类选择）与写入端共用一份值域：
+// 之前这里手写清单且漏了 age，导致「年龄/时期」变体在素材库里既建不出、也改不过去
+// （界面下拉没有这项），而 Agent 工具与后端都能写它 —— 下拉与真实值域漂移。
+export const CATEGORIES = ASSET_CATEGORIES.map((c) => [c.id, c.label]);
 // 分辨率 / 宽高比的取值域统一来自 lib/shared（工作流映射表与写入校验共用同一份），
 // 这里只做「值 → 显示名」的展示层映射，避免下拉与映射表各写一份而彼此漂移。
 export const VIDEO_RESOLUTIONS = VIDEO_RESOLUTION_OPTIONS.map((v) => [v, v === VIDEO_RESOLUTION_CUSTOM ? '自定义宽高' : v]);

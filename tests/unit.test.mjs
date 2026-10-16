@@ -20,6 +20,7 @@ import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
 import { runExclusiveVideo, concurrencyLimit } from '../lib/agent/job-runner.js';
 import { guardToolCall } from '../lib/agent/guard.js';
+import { CATEGORIES } from '../app/pages/shared.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -1391,4 +1392,13 @@ test('deleteQueued：空 id 不发请求；有 id 才 POST /queue {"delete":[...
   } finally {
     globalThis.fetch = origFetch;
   }
+});
+
+test('素材分类下拉：与写入端值域同源，且不遗漏 age（下拉缺 age 会建不出/改不了年龄变体）', () => {
+  const ids = CATEGORIES.map(([k]) => k);
+  assert.deepEqual(ids, ASSET_CATEGORIES.map((c) => c.id), '下拉分类必须与 lib/shared 的值域完全一致');
+  assert.ok(ids.includes('age'), '下拉必须能选「年龄/时期」（原来手写清单漏了 age）');
+  assert.deepEqual(CATEGORIES.map(([, l]) => l), ASSET_CATEGORIES.map((c) => c.label), '显示名不得与 ASSET_CATEGORIES 漂移');
+  // 下拉是 [id, label] 成对结构，Tab/SelectItem 都按它对解构
+  for (const c of CATEGORIES) assert.equal(c.length, 2, '分类项必须是 [id, label] 两元组');
 });

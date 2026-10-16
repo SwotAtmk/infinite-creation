@@ -18,18 +18,31 @@ export default function ConsoleTab({ projectId, events, jobs, onRefresh }) {
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [log]);
+  // 完整日志默认看「最相关的那条」：正在执行/排队的任务 → 最新一条写过日志文件的任务 → 最新任务。
+  // 原先固定取 jobs[0]（最后创建的一条），而最后创建的常常是刚入队、还没写日志的命名/子任务，
+  // 面板显示成「（暂无完整日志）」——用户想排查刚失败的那条，看到的却是别人的日志。
+  const logJob = jobs.find((j) => j.status === 'running' || j.status === 'queued')
+    || jobs.find((j) => j.logPath)
+    || jobs[0] || null;
+  const logJobId = logJob ? logJob.id : '';
+  const logLive = !!(logJob && (logJob.status === 'running' || logJob.status === 'queued'));
+  const [logTick, setLogTick] = useState(0);      // 「刷新」按钮：让完整日志立刻重取
+  const logSeqRef = useRef(0);
   useEffect(() => {
-    // 完整日志默认看「最相关的那条」：正在执行/排队的任务 → 最新一条写过日志文件的任务 → 最新任务。
-    // 原先固定取 jobs[0]（最后创建的一条），而最后创建的常常是刚入队、还没写日志的命名/子任务，
-    // 面板显示成「（暂无完整日志）」——用户想排查刚失败的那条，看到的却是别人的日志。
-    const target = jobs.find((j) => j.status === 'running' || j.status === 'queued')
-      || jobs.find((j) => j.logPath)
-      || jobs[0];
-    if (!target) { setFullLog(null); return; }
-    api.get('/api/projects/' + projectId + '/jobs/' + target.id + '/log')
-      .then(setFullLog)
-      .catch(() => setFullLog(null));
-  }, [projectId, jobs]);
+    if (!logJobId) { setFullLog(null); return undefined; }
+    // 依赖是「目标任务 id」而不是 jobs 数组：加载中每 2.5s 刷新一次项目、每条 WS 消息也会刷，
+    // jobs 每次都换一个新的数组引用 —— 原先会让完整日志（后端 fs.readFileSync 整个日志文件）
+    // 跟着被反复重取，任务越久、日志越大越重。
+    // seq 用来丢弃过期响应：换任务/换项目时旧请求可能后到，不能覆盖新任务的内容。
+    const seq = ++logSeqRef.current;
+    const load = () => api.get('/api/projects/' + projectId + '/jobs/' + logJobId + '/log')
+      .then((r) => { if (seq === logSeqRef.current) setFullLog(r); })
+      .catch(() => { if (seq === logSeqRef.current) setFullLog(null); });
+    load();
+    if (!logLive) return undefined;   // 任务已结束：日志不会再变，不必轮询
+    const t = setInterval(load, 5000);
+    return () => { clearInterval(t); logSeqRef.current += 1; };
+  }, [projectId, logJobId, logLive, logTick]);
   // 完整日志：加载/变化时滚到底部
   useEffect(() => {
     if (fullLogRef.current) fullLogRef.current.scrollTop = fullLogRef.current.scrollHeight;
@@ -39,7 +52,7 @@ export default function ConsoleTab({ projectId, events, jobs, onRefresh }) {
       <CardBody className="gap-2">
         <div className="row justify-between">
           <h2 className="m-0">运行日志</h2>
-          <Button size="sm" variant="flat" onPress={onRefresh}>刷新</Button>
+          <Button size="sm" variant="flat" onPress={() => { setLogTick((t) => t + 1); onRefresh(); }}>刷新</Button>
         </div>
         <pre className="logbox" ref={logRef}>{log || '（暂无日志，在「生成内容」页点击生成启动流水线）'}</pre>
         <div style={{ marginTop: 12 }}>

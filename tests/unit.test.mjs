@@ -458,6 +458,17 @@ test('参考图白名单：前端选择器与后端校验共用一份（含无 M
   assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
 });
 
+test('运行日志：完整日志按「目标任务 id」取，不随 jobs 数组引用反复重取（源码守卫）', () => {
+  const ct = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ConsoleTab.jsx'), 'utf8');
+  // jobs 每次 loadProject 都是新数组（运行中 2.5s 一次 + 每条 WS 消息），当依赖会让
+  // 完整日志（后端 readFileSync 整个文件）被反复重取；依赖换成目标任务 id + 固定低频轮询。
+  assert.ok(/\[projectId, logJobId, logLive, logTick\]/.test(ct), '依赖必须是目标任务 id，而不是整个 jobs 数组');
+  assert.ok(!/\}, \[projectId, jobs\]\)/.test(ct), '不该再把 jobs 数组当完整日志的依赖');
+  assert.ok(/logSeqRef\.current/.test(ct), '需要 seq 丢弃过期响应（换任务时旧响应可能后到并覆盖新内容）');
+  assert.ok(/if \(!logLive\) return undefined;/.test(ct), '任务已结束就不必再轮询日志文件');
+  assert.ok(/setLogTick\(\(t\) => t \+ 1\); onRefresh\(\)/.test(ct), '「刷新」按钮要能立刻重取完整日志');
+});
+
 test('参考图上传/编辑不能建变体：服装/年龄必须挂在角色下（源码守卫）', () => {
   const post = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'references', 'route.js'), 'utf8');
   // 实机核验见探针 ic-r8-parent-probe.mjs 的 K 段（导入素材库+服装 → 400 而非 500；道具 → 200）

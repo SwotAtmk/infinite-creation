@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardBody, Button, Input, Checkbox, RadioGroup, Radio, Select, SelectItem, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
 import { useToast } from '../toast';
@@ -12,14 +12,21 @@ import WorkflowsTab from './WorkflowsTab';
 export default function SettingsPage({ onBack }) {
   const toast = useToast();
   const [cfg, setCfg] = useState(null);
+  const [loadErr, setLoadErr] = useState('');
   const [test, setTest] = useState('');
   const [llmTest, setLlmTest] = useState('');
   const [comfyInfo, setComfyInfo] = useState(null);
   const [workflows, setWorkflows] = useState([]);
-  useEffect(() => {
-    api.get('/api/config').then((c) => { setCfg(c); detectComfy(c.comfyui); }).catch((e) => toast.error(e.message));
+  // 读取配置失败不能只弹一次 toast 就把用户留在「配置加载中…」：cfg 一直是 null，
+  // 页面永远不会渲染出「返回」按钮，用户既看不到原因、也退不出去（只能刷浏览器）。
+  const loadConfig = useCallback(() => {
+    setLoadErr('');
+    api.get('/api/config')
+      .then((c) => { setCfg(c); detectComfy(c.comfyui); })
+      .catch((e) => setLoadErr(e.message || '未知错误'));
     api.get('/api/workflows').then(setWorkflows).catch(() => {});
   }, []);
+  useEffect(() => { loadConfig(); }, [loadConfig]);
   async function detectComfy(comfyui) {
     try { setComfyInfo(await api.post('/api/comfyui/test', { comfyui })); } catch { setComfyInfo({ ok: false, error: '连接失败' }); }
   }
@@ -36,9 +43,21 @@ export default function SettingsPage({ onBack }) {
   if (!cfg) {
     return (
       <Card>
-        <CardBody className="flex-row items-center justify-center gap-2.5 py-10">
-          <Spinner size="sm" />
-          <span className="muted">配置加载中…</span>
+        <CardBody className="items-center gap-3 py-10">
+          {loadErr ? (
+            <>
+              <span className="muted">配置加载失败：{loadErr}</span>
+              <div className="row" style={{ gap: 8 }}>
+                <Button size="sm" color="primary" onPress={loadConfig}>重试</Button>
+                <Button size="sm" variant="flat" onPress={onBack}>返回</Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex-row items-center justify-center gap-2.5">
+              <Spinner size="sm" />
+              <span className="muted">配置加载中…</span>
+            </div>
+          )}
         </CardBody>
       </Card>
     );

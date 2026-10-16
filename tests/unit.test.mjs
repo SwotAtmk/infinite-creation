@@ -9,15 +9,18 @@ import {
   analyzeWorkflow, buildWorkflow, getDefaultSpecById, getSpecForKind,
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
-  extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks,
-  freeComfy, checkComfyUI, generate, queuePrompt, getHistory, interrupt, downloadOutput, getObjectInfo, resolveHardwareConfig, HW_PRESETS, loadConfig,
-  toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask,
+  extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks, llmEndpoint, openaiCompatBaseUrl,
+  freeComfy, checkComfyUI, generate, queuePrompt, getHistory, interrupt, deleteQueued, downloadOutput, getObjectInfo, resolveHardwareConfig, HW_PRESETS, loadConfig,
+  runFfmpeg,
+  toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, comfyBaseUrl, maskComfyBaseUrl } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
-import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
-import { runExclusiveVideo, concurrencyLimit } from '../lib/agent/job-runner.js';
+import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
+import { runExclusiveVideo, concurrencyLimit, holdsRenderSlot } from '../lib/agent/job-runner.js';
+import { guardToolCall } from '../lib/agent/guard.js';
+import { CATEGORIES } from '../app/pages/shared.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -212,6 +215,40 @@ test('resolveHardwareConfig: 模式切换工作流预设与显存释放默认值
   assert.equal(resolveHardwareConfig({ hardware: { mode: 'weird' } }).hardware.mode, 'nvidia');
 });
 
+test('resolveHardwareConfig: generation 被写成非对象时退回默认值（不把 loadConfig 弄崩）', () => {
+  // config.json 被手改成 "generation": null / "x" / 5 时，deepMerge 会原样保留该值；
+  // 旧代码紧接着往它身上写 freeAfterEvery → TypeError。而 loadConfig 每个请求都要跑，
+  // 于是全部路由 500、PUT /api/config 也 500（脏配置只该退回默认值，不该让应用不可用）。
+  for (const bad of [null, 'x', 5, [], true]) {
+    const r = resolveHardwareConfig({ generation: bad });
+    assert.ok(r.generation && typeof r.generation === 'object', 'generation 必须是对象：' + JSON.stringify(bad));
+    assert.equal(typeof r.generation.freeAfterEvery, 'number', 'freeAfterEvery 必须是数字：' + JSON.stringify(bad));
+    assert.equal(r.generation.videoTimeoutMinutes, 90, '其余字段退回默认值：' + JSON.stringify(bad));
+  }
+  // 正常的对象配置不受影响（含旧键迁移）
+  assert.equal(resolveHardwareConfig({ generation: { videoConcurrency: 3 } }).generation.videoConcurrency, 3);
+  assert.equal(resolveHardwareConfig({ generation: { videoFreeAfterEvery: 5 } }).generation.freeAfterEvery, 5);
+});
+
+test('resolveHardwareConfig: 其它配置段被写成非对象时同样退回默认值（设置页不再白屏）', () => {
+  // PUT /api/config 会把请求体整段写进 config.json：`{comfyui: null}` 这种脏配置被原样保留后，
+  // 前端 `cfg.comfyui.provider`（SettingsPage）直接抛 → 设置页整页白屏；llm/server 同理。
+  for (const bad of [null, 'x', 5, [], true]) {
+    const r = resolveHardwareConfig({ comfyui: bad, llm: bad, server: bad, hardware: bad });
+    assert.equal(r.comfyui.provider, 'native', 'comfyui 退回默认（' + JSON.stringify(bad) + '）');
+    assert.equal(r.comfyui.baseUrl, 'http://127.0.0.1:8188');
+    assert.equal(r.llm.baseUrl, 'https://api.deepseek.com');
+    assert.equal(r.llm.model, 'DeepSeek-V4.1-Flash');
+    assert.equal(r.server.port, 4600);
+    assert.equal(r.hardware.mode, 'nvidia');
+  }
+  // 正常值不受影响
+  const ok = resolveHardwareConfig({ comfyui: { provider: 'runninghub' }, llm: { model: 'm' }, server: { port: 5000 } });
+  assert.equal(ok.comfyui.provider, 'runninghub');
+  assert.equal(ok.llm.model, 'm');
+  assert.equal(ok.server.port, 5000);
+});
+
 test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前后端共用同一份常量）', () => {
   assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.nvidia), true);
   assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.amd), true);
@@ -219,6 +256,37 @@ test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前�
   assert.equal(isPresetWorkflows({ ...SHARED_HW_PRESETS.nvidia, t2i: 'my_custom_t2i' }), false, '手改过 → 不随模式切换');
   assert.equal(isPresetWorkflows({ t2i: 'krea2_hyperreal_t2i' }), false, '缺键 → 不算预设');
   assert.equal(isPresetWorkflows(null), false);
+});
+
+test('工作流规格自检: roles/outputs 指向的节点必须在 sourceFile 里真实存在', () => {
+  // 防回归：setInput 找不到节点时只打一条 warn 就跳过参数写入（不抛错），
+  // 一旦规格与工作流文件对不上，caption/seed 这类参数会被静默丢掉，只留下「用模板占位值生成」的假成功。
+  for (const spec of DEFAULT_SPECS) {
+    assert.ok(fs.existsSync(path.join(WF, spec.sourceFile)), spec.id + ' 的 sourceFile 不存在: ' + spec.sourceFile);
+    const wf = load(spec.sourceFile);
+    for (const [role, r] of Object.entries(spec.roles || {})) {
+      const node = wf[r.node];
+      assert.ok(node, spec.id + ' 的 roles.' + role + ' 指向不存在的节点 ' + r.node);
+      assert.ok(Object.prototype.hasOwnProperty.call(node.inputs || {}, r.field), spec.id + ' 的 roles.' + role + ' 指向节点 ' + r.node + ' 上不存在的字段 ' + r.field);
+    }
+    assert.ok((spec.outputs || []).some((ct) => Object.values(wf).some((n) => n.class_type === ct)), spec.id + ' 的 outputs 在 sourceFile 里一个都匹配不上');
+  }
+});
+
+test('presetModeOf/isPresetWorkflows: 缺后加的 music 键的老配置仍算预设（AMD 不会被误判成 NVIDIA）', () => {
+  // 实测踩坑：music 键加入预设后，老配置（只有 t2i/i2i/r2v/tts）被判为「自定义映射」，
+  // 模式推断退化成 nvidia → AMD 专属保护（preflight 的 CK 缺陷与显存余量）静默失效。
+  const legacyAmd = { t2i: 'qwen_image_2_1_t2i_gguf', i2i: 'qwen_image_2_1_i2i_gguf', r2v: 'minimax_h3_r2v_gguf', tts: 'qwen3_tts_voice_design_gguf' };
+  assert.equal(isPresetWorkflows(legacyAmd), true, '缺 music 键仍应认成 AMD 预设');
+  assert.equal(presetModeOf(legacyAmd), 'amd');
+  const resolved = resolveHardwareConfig({ workflows: legacyAmd });
+  assert.equal(resolved.hardware.mode, 'amd');
+  assert.equal(resolved.workflows.music, HW_PRESETS.amd.music, '缺的 music 由预设补齐');
+  assert.equal(resolved.generation.freeAfterEvery, 3, 'AMD 默认显存释放次数适用');
+  // music 被改成自定义值 → 有自定义键 → 不再当作纯预设（不会随模式切换被覆盖）
+  assert.equal(isPresetWorkflows({ ...legacyAmd, music: 'my_music' }), false);
+  // 缺的是非后加键 → 依旧不算预设
+  assert.equal(isPresetWorkflows({ ...SHARED_HW_PRESETS.nvidia, tts: undefined }), false);
 });
 
 test('comfyBaseUrl: native 返回原地址，runninghub 返回固定域名', () => {
@@ -233,6 +301,30 @@ test('maskComfyBaseUrl: RunningHub 脱敏 apiKey，native 原样返回', () => {
   const key = 'd6198825ebff49b2994bb8c5d7ee3d66';
   assert.equal(maskComfyBaseUrl({ comfyui: { provider: 'runninghub', apiKey: key, tier: 'standard' } }), 'https://www.runninghub.cn（apiKey: d619****3d66）');
   assert.equal(maskComfyBaseUrl({ comfyui: { provider: 'native', baseUrl: 'http://127.0.0.1:8188' } }), 'http://127.0.0.1:8188');
+});
+
+test('openaiCompatBaseUrl: 与 llmEndpoint 同一套 /v1 归一化（Agent 运行时不再少一段 /v1）', () => {
+  // openclaude 的 OpenAI SDK 只在 base 后拼 '/chat/completions'，不会替你补 /v1：
+  // 少了这层归一化，base 写成 http://127.0.0.1:11434 的本地端点会「预检 /v1/models 通过、
+  // llmChat /v1/chat/completions 通过，唯独整条 Agent 流水线请求 /chat/completions 404」。
+  assert.equal(openaiCompatBaseUrl('http://127.0.0.1:11434'), 'http://127.0.0.1:11434/v1');
+  assert.equal(openaiCompatBaseUrl('http://127.0.0.1:11434/v1'), 'http://127.0.0.1:11434/v1');
+  assert.equal(openaiCompatBaseUrl('https://api.deepseek.com/'), 'https://api.deepseek.com/v1');
+  assert.equal(openaiCompatBaseUrl('https://api.openai.com/v1'), 'https://api.openai.com/v1');
+  // 已经写到 /chat/completions 的地址回退成 base
+  assert.equal(openaiCompatBaseUrl('http://127.0.0.1:8080/v1/chat/completions'), 'http://127.0.0.1:8080/v1');
+  // 与 llmEndpoint 同源：base + '/chat/completions' 必须与直连调用完全一致
+  for (const u of ['http://127.0.0.1:11434', 'http://127.0.0.1:8080/v1', 'https://api.deepseek.com']) {
+    assert.equal(openaiCompatBaseUrl(u) + '/chat/completions', llmEndpoint(u));
+    assert.equal(llmEndpoint(openaiCompatBaseUrl(u)), llmEndpoint(u));
+  }
+});
+
+test('openclaude providerEnv 的 OPENAI_BASE_URL 走归一化（不是裸 baseUrl）', () => {
+  // providerEnv 不导出（整份文件会拉起 vendor SDK），改用源码守卫钉住这一行：
+  // 一旦有人改回 `cfg.llm?.baseUrl`，就是「预检通过、流水线 404」那个 bug 复发。
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'openclaude-agent.js'), 'utf8');
+  assert.match(src, /OPENAI_BASE_URL:\s*openaiCompatBaseUrl\(/, 'OPENAI_BASE_URL 必须经 openaiCompatBaseUrl 归一化');
 });
 
 test('concurrencyLimit: runninghub 用 runninghubConcurrency，native 用 videoConcurrency', () => {
@@ -361,6 +453,235 @@ test('dialogueSpeakerNames: 解析说话人 + 约束常量', () => {
   assert.equal(MAX_AUDIO_REFS, 3);
 });
 
+test('参考图白名单：前端选择器与后端校验共用一份（含无 MIME 的合法 png）', () => {
+  assert.equal(isReferenceImageName('a.png'), true);
+  assert.equal(isReferenceImageName('b.JPG'), true);
+  assert.equal(isReferenceImageName('c.jpeg'), true);
+  assert.equal(isReferenceImageName('d.webp'), true);
+  assert.equal(isReferenceImageName('e.gif'), true);
+  // 后端只认这五种：前端不该再把它们放进去（选中→上传→400）
+  assert.equal(isReferenceImageName('f.bmp'), false);
+  assert.equal(isReferenceImageName('g.avif'), false);
+  assert.equal(isReferenceImageName('h.svg'), false);
+  assert.equal(isReferenceImageName('没有扩展名'), false);
+  assert.equal(isReferenceImageName(''), false);
+  assert.equal(isReferenceImageName(null), false);
+  assert.equal(isReferenceImageName('.png'), false);           // 只有扩展名不是图片（后端 extname → '' → 400）
+  assert.equal(isReferenceImageName('资料.png'), true);
+  assert.equal(isReferenceImageName('a.b.png'), true);
+  assert.equal(REFERENCE_IMAGE_MAX_BYTES, 10 * 1024 * 1024);
+  const route = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'references', 'route.js'), 'utf8');
+  assert.ok(/REFERENCE_IMAGE_EXTS/.test(route) && /REFERENCE_IMAGE_MAX_BYTES/.test(route), '路由必须用共享白名单/上限');
+  assert.ok(!/const IMAGE_EXTS = new Set\(\['/.test(route), '路由不该再自带一份扩展名白名单');
+  const picker = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ReferencePicker.jsx'), 'utf8');
+  assert.ok(/isReferenceImageName\(file\.name\)/.test(picker), '选择器必须与后端同口径判定');
+  assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
+});
+
+test('技能扫描：目录已删除的技能行必须被清掉（scanSkills 不只会 upsert）', () => {
+  const se = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'skill-engine.js'), 'utf8');
+  // 实机核验见探针 ic-r9-skills-probe.mjs（上传技能 → 删目录 → 重扫；修复前列里仍有该技能）
+  assert.ok(/Skills\.remove\(s\.id\)/.test(se), '目录已删除的陈旧技能行要被清掉，否则界面列着一条加载不出内容的技能');
+  assert.ok(/seen\.has\(s\.id\)/.test(se), '只清理本次扫描没见到的行');
+  assert.ok(/rel\.startsWith\('skills\/'\)/.test(se), '只清理 path 指向 skills/ 的行（不碰非扫描来源）');
+});
+
+test('设置页：配置拉取失败不能永久停在「配置加载中…」（源码守卫）', () => {
+  const sp = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'SettingsPage.jsx'), 'utf8');
+  // 原先只 catch 弹一次 toast：cfg 一直是 null → 页面永远停在加载态、也没有「返回」按钮，
+  // 用户既看不到原因也退不出去（只能刷浏览器）。
+  assert.ok(/setLoadErr\(e\.message/.test(sp), '拉取配置失败要把原因记下来');
+  assert.ok(/配置加载失败：\{loadErr\}/.test(sp), '失败态要把原因显示出来');
+  assert.ok(/onPress=\{loadConfig\}>重试/.test(sp), '失败态要有「重试」');
+  assert.ok(/onPress=\{onBack\}>返回/.test(sp), '失败态要有「返回」出口');
+});
+
+test('运行日志：完整日志按「目标任务 id」取，不随 jobs 数组引用反复重取（源码守卫）', () => {
+  const ct = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ConsoleTab.jsx'), 'utf8');
+  // jobs 每次 loadProject 都是新数组（运行中 2.5s 一次 + 每条 WS 消息），当依赖会让
+  // 完整日志（后端 readFileSync 整个文件）被反复重取；依赖换成目标任务 id + 固定低频轮询。
+  assert.ok(/\[projectId, logJobId, logLive, logTick\]/.test(ct), '依赖必须是目标任务 id，而不是整个 jobs 数组');
+  assert.ok(!/\}, \[projectId, jobs\]\)/.test(ct), '不该再把 jobs 数组当完整日志的依赖');
+  assert.ok(/logSeqRef\.current/.test(ct), '需要 seq 丢弃过期响应（换任务时旧响应可能后到并覆盖新内容）');
+  assert.ok(/if \(!logLive\) return undefined;/.test(ct), '任务已结束就不必再轮询日志文件');
+  assert.ok(/setLogTick\(\(t\) => t \+ 1\); onRefresh\(\)/.test(ct), '「刷新」按钮要能立刻重取完整日志');
+});
+
+test('分镜素材选择器：变体只列、只绑本镜角色的服装/年龄（源码守卫）', () => {
+  const p = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ShotMaterialPicker.jsx'), 'utf8');
+  // 变体只在「所属角色也在本镜」时才生效（refs.js 按 parent_id 替换该角色的参考图），
+  // 原先本镜没有角色时把「所属角色」回退成全部角色 → 能建/选到本镜根本用不上的变体。
+  assert.ok(/const parentChoices = shotChars;/.test(p), '「所属角色」只能是本镜已绑定的角色');
+  assert.ok(!/shotChars\.length \? shotChars : characters/.test(p), '不该再回退到「全部角色」');
+  assert.ok(/if \(isVariant\) return shotCharIds\.has\(a\.parent_id\)/.test(p), '已有变体列表只列本镜角色的变体');
+  assert.ok(/isVariant && !parentChoices\.length/.test(p), '本镜没有角色时要提示先绑角色（并禁用上传）');
+});
+
+test('参考图上传/编辑不能建变体：服装/年龄必须挂在角色下（源码守卫）', () => {
+  const post = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'references', 'route.js'), 'utf8');
+  // 实机核验见探针 ic-r8-parent-probe.mjs 的 K 段（导入素材库+服装 → 400 而非 500；道具 → 200）
+  assert.ok(/mode === 'library' && isVariantAssetCategory\(assetCategory\)/.test(post), '素材库模式必须拦下变体分类，否则 db 守卫抛错 → 500 且文件已落盘');
+  assert.ok(!/PROJECT_ASSET_SUBDIRS\[info\.category\] \? info\.category/.test(post), '视觉模型若返回变体分类要退回 other，不能让上传整体失败');
+  const patch = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'references', '[rid]', 'route.js'), 'utf8');
+  assert.ok(/body\.category !== undefined && isVariantAssetCategory\(category\)/.test(patch), 'PATCH 显式把分类改成变体必须 400');
+  assert.ok(/BAD_VARIANT_PARENT/.test(patch), 'db 守卫的领域错误码必须翻成 400，不能漏成 500');
+  assert.ok(/assetNow\.category === category \|\| isVariantAssetCategory\(category\)\) \? \{ description \}/.test(patch), '分类没变（或是变体分类）时不要把 category 传给 Assets.update，否则存量无父变体连改描述都被拒');
+  const picker = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ReferencePicker.jsx'), 'utf8');
+  assert.ok(/isVariantAssetCategory/.test(picker) && /libCategoryOptions/.test(picker), '前端不该给出「导入素材库 + 服装/年龄」这个必然被拒的选项');
+});
+
+test('server /files：Range 的后缀范围 bytes=-N 返回末尾 N 字节（源码守卫）', () => {
+  const s = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  // 实机核验见探针 ic-range-probe.mjs（修复前 bytes=-100 → "bytes 0-100/…" 即开头 101 字节；修复后 → 末尾 100 字节）
+  assert.ok(/if \(!m\[1\]\) \{/.test(s), 'bytes=-N（无起始值）必须单独走后缀分支');
+  assert.ok(/start = Math\.max\(total - n, 0\)/.test(s), '后缀范围的起点应为 total-n（最后 N 字节）');
+  assert.ok(/n <= 0\) \{ reject\(\)/.test(s), 'bytes=-0 非法，应按 RFC 回 416');
+});
+
+test('server：/ws 的客户端畸形帧不能让整个进程退出（源码守卫）', () => {
+  const s = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/ws\.on\('error'/.test(s), "ws 必须挂 'error' 监听：畸形帧会让 ws emit('error')，无人接管时抛 uncaughtException、进程直接退出");
+  assert.ok(/socket\.on\('error'/.test(s), "升级握手中途断开的 raw socket 'error' 也要兜住（ECONNRESET）");
+});
+
+test('界面小修：分镜空态按筛选结果、章节游标记 id、参考图上传按条摘除（源码守卫）', () => {
+  const shots = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ShotsTab.jsx'), 'utf8');
+  assert.ok(/!shown\.length && <p/.test(shots), '分镜空态必须按筛选后的 shown 判断');
+  assert.ok(!/!shots\.length &&/.test(shots), '不该再用未筛选的 shots.length 判空态（按章筛选时会永远不提示）');
+  const pv = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ProjectView.jsx'), 'utf8');
+  assert.ok(/const \[cursorId, setCursorId\]/.test(pv), '章节游标必须记 id');
+  assert.ok(!/setCursor\(/.test(pv), '不能再存章节下标（排序/删除后会指向别的章节）');
+  assert.ok(/setCursorId\(\(x\) => \(c\.some\(\(ch\) => ch\.id === x\)/.test(pv), '章节列表变化后要按 id 保持选中、否则退回第一章');
+  assert.ok(/<SelectItem key=\{c\.id\}>/.test(pv), '章节下拉的 key 应该是章节 id');
+  const cv = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ChaptersView.jsx'), 'utf8');
+  assert.ok(/setRefs\(\(prev\) => prev\.filter\(\(x\) => x\.key !== it\.key\)\)/.test(cv), '上传成功的参考图要立刻从待上传列表摘掉（否则重试会重复上传）');
+});
+
+test('背景音乐：只提交任务就不能宣称「已合成」；全部章节失败要让任务失败（源码守卫）', () => {
+  const mt = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'MusicTab.jsx'), 'utf8');
+  assert.ok(!/已应用背景音乐并重新合成成片/.test(mt), 'apply 只是提交后台任务，不能宣称已经重新合成完成');
+  assert.ok(/已提交背景音乐应用/.test(mt), 'apply 的成功提示必须说明「已提交」并把进度指向运行日志');
+  assert.ok(!/setDetailAsset/.test(mt), '详情弹窗不能存整个对象快照（轮询/生成写回的新状态反映不到弹窗）');
+  assert.ok(/const detailAsset = detailId \? assets\.find/.test(mt), '详情内容必须按 id 从最新 assets 派生');
+  const tools = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'tools.js'), 'utf8');
+  assert.ok(/results\.every\(\(r\) => r\.error\)/.test(tools), '全部章节失败时必须报失败，不能静默记 done');
+});
+
+test('isVariantAssetCategory: 只有服装/年龄算「挂在角色下的变体」', () => {
+  assert.equal(isVariantAssetCategory('costume'), true);
+  assert.equal(isVariantAssetCategory('age'), true);
+  assert.deepEqual(VARIANT_ASSET_CATEGORIES, ['costume', 'age']);
+  // 其他分类都不是变体（不该被要求 parent_id）
+  for (const c of ['character', 'scene', 'prop', 'voice', 'music', 'sfx', 'video', 'other']) {
+    assert.equal(isVariantAssetCategory(c), false, c + ' 不应被当成变体');
+    assert.ok(VARIANT_ASSET_CATEGORIES.includes(c) === false);
+  }
+});
+
+test('assets POST：服装/年龄变体强制 parent_id 且必须指向角色（源码守卫）', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'assets', 'route.js'), 'utf8');
+  assert.ok(/isVariantAssetCategory\(category\)/.test(src), '写入端必须按分类判定变体');
+  assert.ok(/parent\.category !== 'character'/.test(src), 'parent_id 必须校验指向角色素材');
+  assert.ok(/parent_id: parentId/.test(src), 'parent_id 必须真的落库（原来被丢弃）');
+  // 非变体分类带 parent_id 必须被拒（旧行为：只要父存在就放行 → 被当子变体级联删）
+  assert.ok(/parent_id 只用于服装/.test(src), '非变体分类不得接受 parent_id');
+  assert.ok(/BAD_ASSET_PARENT/.test(src), 'db 层的非变体父守卫要翻成 400');
+});
+
+test('工具 schema：create_asset / generate_asset_from_reference 暴露 parent_id（否则变体写入只能撞 DB 错误）', () => {
+  const props = (n) => TOOL_DEFINITIONS.find((t) => t.function.name === n).function.parameters.properties;
+  // 之前 schema 的 category 枚举含 costume/age，却没有 parent_id → 模型没法把变体绑到角色，
+  // 只能写出无父变体（被 db 层 BAD_VARIANT_PARENT 拒绝，且是模型看不懂的 DB 错误、无法补救）
+  assert.ok(props('create_asset').parent_id, 'create_asset 必须声明 parent_id');
+  assert.ok(props('generate_asset_from_reference').parent_id, 'generate_asset_from_reference 必须声明 parent_id');
+});
+
+test('项目路由：自定义宽高区间（BAD_PROJECT_DIM）必须翻 400，不能漏成 500', () => {
+  // 区间校验在 db 层（UI/内置 Agent/外部 harness 三条写入路径共用一份）；
+  // 两条项目路由若不认 BAD_PROJECT_DIM，就会把「入参错误」报成 500，用户拿不到可读原因。
+  for (const segs of [['app', 'api', 'projects', 'route.js'], ['app', 'api', 'projects', '[id]', 'route.js']]) {
+    const src = fs.readFileSync(path.join(__dirname, '..', ...segs), 'utf8');
+    assert.ok(/e\.code === 'BAD_PROJECT_DIM'/.test(src), segs.join('/') + ' 必须把 BAD_PROJECT_DIM 翻成 400');
+  }
+});
+
+test('项目删除：先给本项目活动任务打停止标记再删（否则任务继续跑、把孤儿行写回已删项目）', () => {
+  // 任务行会随 Projects.remove 一起删掉，而进程里那条任务不会停（停止注册表按 jobId 在内存里）：
+  // 它会继续出图/出片，把 chapters/shots/assets 重新插回一个「已不存在的项目」——界面看不到也停不掉。
+  const src = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'route.js'), 'utf8');
+  const stop = src.indexOf('stopJob(j.id)');
+  const remove = src.indexOf('Projects.remove(id)');
+  assert.ok(stop > 0, '删除项目必须先停本项目活动任务');
+  assert.ok(/status === 'running' \|\| j\.status === 'queued'/.test(src), 'running 与 queued 都算活动任务');
+  assert.ok(/interruptTask\(loadConfig\(\)\)/.test(src), '执行中的任务要主动打断 ComfyUI（与 /stop、/cancel 同一口径）');
+  assert.ok(remove > stop, '停止必须发生在删除之前');
+  assert.ok(/stopped: active\.map/.test(src), '接口要回报实际停了哪几条任务');
+});
+
+test('nameMatches: 规范化后精确相等（短名不被同场更长角色名误命中）', () => {
+  assert.equal(nameMatches('小明', '小明'), true);
+  // canonical 名带身份后缀 / 舞台提示：对白说话人是「小明」，角色资产名是「小明（少年）」
+  assert.equal(nameMatches('小明', '小明（少年）'), true);
+  assert.equal(nameMatches('小明（少年）', '小明'), true);
+  assert.equal(nameMatches('林默（站在路口）', '林默'), true);
+  // 互为子串的名字必须判为不同人：「明」不因对白里「小明」说话而被当成说话人
+  assert.equal(nameMatches('小明', '明'), false);
+  assert.equal(nameMatches('明', '小明'), false);
+  assert.equal(nameMatches('李', '小李'), false);
+  // 空值不匹配（避免「匿名角色」互相匹配上）
+  assert.equal(nameMatches('', '小明'), false);
+  assert.equal(nameMatches('小明', ''), false);
+  assert.equal(nameMatches(null, undefined), false);
+});
+
+test('短名串扰：音色归属与分镜面板都走 nameMatches（源码守卫）', () => {
+  // refs.js 的 speaks / ShotsTab 的说话角色展示都不导出（前者要 DB，后者是 JSX），用源码守卫钉住
+  const refs = fs.readFileSync(path.join(__dirname, '..', 'lib', 'core', 'refs.js'), 'utf8');
+  assert.ok(/nameMatches\(s, c\.name\)/.test(refs), 'refs.js 的说话人判定必须用 nameMatches');
+  assert.ok(!/includes\(c\.name\)/.test(refs), 'refs.js 不应再用 includes 双向包含匹配');
+  const shots = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ShotsTab.jsx'), 'utf8');
+  assert.ok(/nameMatches\(sp, c\.name\)/.test(shots), 'ShotsTab 的说话角色判定必须与后端同口径');
+  assert.ok(!/includes\(c\.name\)/.test(shots), 'ShotsTab 不应再用 includes 双向包含匹配');
+});
+
+test('textMentions: 短名不被同场更长角色名吞掉（换装/年龄变体归属）', () => {
+  const names = ['小明', '明'];
+  assert.equal(textMentions('小明换上新衣', '小明', names), true);
+  assert.equal(textMentions('小明换上新衣', '明', names), false);   // 唯一一次「明」是「小明」的一部分
+  assert.equal(textMentions('明换上新衣', '明', names), true);      // 单独出现，确实提到
+  assert.equal(textMentions('小明与明都换了衣裳', '明', names), true); // 有一处没被覆盖
+  assert.equal(textMentions('换上新衣', '明', names), false);
+  assert.equal(textMentions('明：好的', '明', ['小明']), true);
+  assert.equal(textMentions('', '明', names), false);
+  assert.equal(textMentions('小明换上新衣', '', names), false);
+  // canonical 名带身份后缀时，文本里通常只写简称：必须按「规范化后的更长名」去找覆盖，
+  // 否则「小明（少年）」盖不住「明」，短名又被误判（真提交一次错误的图生图）。
+  assert.equal(textMentions('小明换上新衣', '明', ['小明（少年）', '明']), false);
+  assert.equal(nameMatches('小明（少年）', '小明'), true); // 规范化只剥后缀，不是变同一人
+  assert.equal(textMentions('小明（少年）换上新衣', '明', ['小明（少年）', '明']), false);
+  assert.equal(textMentions('明换上新衣', '明', ['小明（少年）', '明']), true);
+  assert.equal(textMentions('小红换上新衣', '明', ['小明（少年）', '明']), false);
+});
+
+test('提交生成：失败必须抛给调用方（不再吞错后照弹「已提交」）+ 分阶段加载失败要可见', () => {
+  const pv = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ProjectView.jsx'), 'utf8');
+  assert.ok(/await api\.post\('\/api\/projects\/' \+ id \+ '\/run'/.test(pv), 'run 仍要提交 /run');
+  // run 的函数体里不能有 catch：一旦吞掉失败，调用方拿不到信号就会照弹「已提交…生成」
+  const runBody = pv.slice(pv.indexOf('async function run(chapter)'), pv.indexOf('async function stop('));
+  assert.ok(runBody.length > 0 && !/catch/.test(runBody), 'ProjectView.run 不该吞掉 /run 的失败（调用方会照弹「已提交…生成」）');
+  const cv = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ChaptersView.jsx'), 'utf8');
+  assert.ok(/await onRun\(title\)/.test(cv), '章节卡片的「生成」必须走带 catch 的 submitRun');
+  assert.ok(!/onRun\(c\.title\)/.test(cv), '不该再有裸 onRun(c.title) 的入口（错误会变成未处理拒绝、点了没反应）');
+  const co = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ChapterOps.jsx'), 'utf8');
+  assert.ok(/stageLoadErr/.test(co), '分阶段待办拉取失败要有提示，不能永远停在「加载中…」');
+});
+
+test('短名串扰：换装/年龄归属都走 textMentions（源码守卫）', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'tools.js'), 'utf8');
+  assert.ok(!/charIds\.length === 1 \|\| text\.includes\(char\.name\)/.test(src), 'tools.js 不应再用 text.includes(char.name) 判角色归属');
+  assert.equal((src.match(/textMentions\(text, char\.name, charNames\)/g) || []).length, 2, '换装与年龄两条归属路径都必须用 textMentions');
+});
+
 test('extractJson: 带围栏与噪音', () => {
   const fence = BT.repeat(3);
   assert.deepEqual(extractJson('前置' + fence + 'json\n{"a":1}\n' + fence + '后置'), { a: 1 });
@@ -375,6 +696,28 @@ test('slugify / ratioToSize', () => {
 test('资产分类含服装 costume', () => {
   assert.ok(ASSET_CATEGORIES.some((c) => c.id === 'costume'));
   assert.equal(PROJECT_ASSET_SUBDIRS.costume, 'costumes');
+});
+
+test('uploadMediaKind: 分类优先 + 扩展名兜底（gif 归图片、音频扩展名归音频）', () => {
+  // 分类优先：voice/music/sfx 是音频、video 是视频
+  assert.equal(uploadMediaKind({ category: 'voice' }), 'audio');
+  assert.equal(uploadMediaKind({ category: 'music' }), 'audio');
+  assert.equal(uploadMediaKind({ category: 'sfx' }), 'audio');
+  assert.equal(uploadMediaKind({ category: 'video' }), 'video');
+  assert.equal(uploadMediaKind({ category: 'character' }), 'image');
+  assert.equal(uploadMediaKind({ category: 'video', ext: '.png' }), 'video', '分类优先于扩展名');
+  // 扩展名兜底：上传框不限类型，只看 category 会把 mp3 塞进 image_path
+  assert.equal(uploadMediaKind({ category: 'other', ext: '.mp3' }), 'audio');
+  assert.equal(uploadMediaKind({ category: 'character', ext: '.wav' }), 'audio');
+  assert.equal(uploadMediaKind({ ext: '.MP3' }), 'audio', '扩展名大小写不敏感');
+  assert.equal(uploadMediaKind({ category: 'other', ext: '.mp4' }), 'video');
+  assert.equal(uploadMediaKind({ category: 'other', ext: '.mkv' }), 'video');
+  // gif 是图片：<video> 放不出 gif，references 上传路由也把 gif 当图片
+  assert.equal(uploadMediaKind({ category: 'character', ext: '.gif' }), 'image');
+  assert.equal(uploadMediaKind({ category: 'other', ext: '.gif' }), 'image');
+  assert.equal(uploadMediaKind({ ext: '.png' }), 'image');
+  assert.equal(uploadMediaKind({}), 'image');
+  assert.equal(uploadMediaKind(), 'image');
 });
 
 test('imageToDataUrl: png 编码与拒绝分支', () => {
@@ -394,6 +737,24 @@ test('imageToDataUrl: png 编码与拒绝分支', () => {
   // 超大（> maxBytes）
   assert.equal(imageToDataUrl(png, { maxBytes: 3 }), null);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('UPLOAD_MAX_BYTES: 三档上传上限，视频 > 音频 > 图片且都装得进内存', () => {
+  // 上传路由把整个请求体读进内存（且默认监听 0.0.0.0）：没有上限时一个误选的大文件
+  // 就能把进程撑爆 OOM，所以每一档都必须存在且足够小。
+  assert.deepEqual(Object.keys(UPLOAD_MAX_BYTES).sort(), ['audio', 'image', 'video']);
+  assert.equal(UPLOAD_MAX_BYTES.image, 20 * 1024 * 1024, '图片 20MB');
+  assert.ok(UPLOAD_MAX_BYTES.audio > UPLOAD_MAX_BYTES.image, '音频上限大于图片');
+  assert.ok(UPLOAD_MAX_BYTES.video > UPLOAD_MAX_BYTES.audio, '视频上限大于音频');
+  assert.ok(UPLOAD_MAX_BYTES.video <= 512 * 1024 * 1024, '视频档也要能安全读进内存');
+  // 上限必须覆盖 uploadMediaKind 的全部取值，否则 route 取到 undefined → 永远超限
+  for (const kind of ['image', 'audio', 'video']) assert.ok(Number.isFinite(UPLOAD_MAX_BYTES[kind]));
+});
+
+test('SKILL_ZIP_MAX_BYTES: 技能包上传也要有上限（同一类 OOM 面）', () => {
+  // /api/skills/upload 同样把整个请求体读进内存再解压，没有上限时一个大文件即 OOM。
+  assert.equal(SKILL_ZIP_MAX_BYTES, 20 * 1024 * 1024);
+  assert.ok(SKILL_ZIP_MAX_BYTES >= 5 * 1024 * 1024, '正常技能包（几十 KB～几 MB）不能被误拦');
 });
 
 test('buildVisionUserMessage: 多模态 content 组装', () => {
@@ -494,6 +855,20 @@ test('installSkillsFromZip: 拒绝 zip-slip 越界路径', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('installSkillsFromZip: 拒绝全点/尾点分量（Windows 路径归一化会把它们当 .. 解析）', () => {
+  const dir = tmpSkillsDir();
+  // Win32 会剥掉每个路径分量结尾的点与空格：'...' / '.. ' 这类分量会被文件系统当成 '..'，
+  // 拼出的路径就跳出了目标目录。只拦「精确等于 ..」是不够的。
+  for (const evil of ['a/.../evil/SKILL.md', 'a/.. /evil/SKILL.md', '... /SKILL.md']) {
+    const zip = new AdmZip();
+    zip.addFile('SKILL.md', Buffer.from('---\nname: evil\ndescription: E\n---\n# E', 'utf8'));
+    zip.getEntries()[0].entryName = evil;
+    assert.throws(() => installSkillsFromZip(zip.toBuffer(), { targetDir: dir }), /不安全路径/, evil);
+  }
+  assert.ok(!fs.existsSync(path.join(path.dirname(dir), 'evil')));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('installSkillsFromZip: 无 SKILL.md 时抛错', () => {
   const dir = tmpSkillsDir();
   const buf = zipOf({ 'readme.txt': 'hello' });
@@ -555,19 +930,77 @@ test('阶段表：4 项且 each带 need/ck', () => {
   assert.equal(STAGE_MAP.tts.ck, null, '音色阶段 CK 均可（实测 CK 下 TTS 无问题）');
 });
 
-test('ckBroken: 关 CK 一律不坏；开 CK 按 comfy-kitchen 版本判', () => {
+test('ckBroken: 关 CK 一律不坏；开 CK 按 comfy-kitchen 版本判（≥0.2.36 才是坏版本）', () => {
   assert.equal(ckBroken({ ckAttention: false, ckKitchen: '0.2.36' }), false);
   assert.equal(ckBroken({ ckAttention: false, ckKitchen: '9.9.9' }), false);
   assert.equal(ckBroken(null), false);
-  // 已知坏区间
+  // 坏版本下限 = 0.2.36：报告 §6 的版本定位显示 #207/#208 在 0.2.35 之后才落地、随 0.2.36 打包
   assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.36' }), true);
-  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.35' }), true);
-  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.1.99' }), true);
-  // 修好的版本自动放行（上游修好后改 CK_BAD_MAX 即可，其余代码不用动）
-  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.37' }), false);
-  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '1.0.0' }), false);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.36.1' }), true, '同版本号带后缀也算命中');
+  // 0.2.35 及更早走的是 #207 之前的旧 mask 路径，不受影响 —— 拦住它们是误伤（会白丢 2.7x 速度）
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.35' }), false);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.1.99' }), false);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.34' }), false);
+  // 上游至今没有修复版本 → 比 0.2.36 新的一律保守判坏（宁可拦住，也别默默出一批废图）；
+  // 上游修好后要提高下限，或改成「下限 + 最后一个坏版本」的区间。
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.37' }), true);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '1.0.0' }), true);
   // 读不到版本 -> 保守判坏
   assert.equal(ckBroken({ ckAttention: true, ckKitchen: '' }), true);
+  // 带后缀的版本号读不准（逐段 Number() 会把 rc1 变 NaN、再被当成 0，于是 0.2.37rc1 被读成 0.2.0
+  // 而放行）-> 一律保守判坏，绝不因为「解析不出来」就把可能坏掉的版本放行
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.37rc1' }), true, 'rc 后缀不能被读成 0.2.0');
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.36+cu124' }), true);
+  assert.equal(ckBroken({ ckAttention: true, ckKitchen: '0.2.35rc1' }), true, '读不准宁可拦住（误伤的代价只是少 2.7x 速度，反了就是一批废图）');
+});
+
+test('llmChat: 未配 api_key 也能用无鉴权端点（与 preflight 同口径），配了才带 Authorization', async () => {
+  const http = await import('node:http');
+  const { llmChat } = await import('../lib/core/index.js');
+  const seen = [];
+  const srv = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      seen.push({ auth: req.headers.authorization || '', body });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '好' } }] }));
+    });
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + srv.address().port;
+  try {
+    // 本地 llama.cpp 这类端点本来就不发鉴权头：此前 llmChat 无条件要求 apiKey，
+    // 结果「preflight 通过、每个 LLM 阶段都报未配置 api_key」。
+    const r1 = await llmChat({ baseUrl: base, model: 'm', apiKey: '' }, [{ role: 'user', content: 'x' }]);
+    assert.equal(r1.content, '好');
+    assert.equal(seen[0].auth, '', '没配 api_key 不该发 Authorization 头');
+    await llmChat({ baseUrl: base, model: 'm', apiKey: 'sk-test' }, [{ role: 'user', content: 'x' }]);
+    assert.equal(seen[1].auth, 'Bearer sk-test');
+    // Base URL 才是必须配的（模型名/键可留空，交给端点自己报错）
+    await assert.rejects(() => llmChat({ baseUrl: '', model: 'm', apiKey: 'k' }, [{ role: 'user', content: 'x' }]), /未配置 LLM Base URL/);
+  } finally {
+    srv.closeAllConnections?.();
+    srv.close();
+  }
+});
+
+test('llmChat: 假死（TCP 挂着不响应）报「超时」而不是「无法连接」', async () => {
+  const http = await import('node:http');
+  const { llmChat } = await import('../lib/core/index.js');
+  // 只收请求、永不响应：模拟 LLM 在跑但卡住（模型加载/排队）
+  const srv = http.createServer(() => {});
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + srv.address().port;
+  try {
+    await assert.rejects(
+      () => llmChat({ baseUrl: base, model: 'm', apiKey: '' }, [{ role: 'user', content: 'x' }], { timeoutMs: 300 }),
+      /LLM 响应超时/,
+    );
+  } finally {
+    srv.closeAllConnections?.();
+    srv.close();
+  }
 });
 
 test('renderDisabled：渲染工具被跳过且不抛错（防 Agent 反复重试）', async () => {
@@ -743,6 +1176,22 @@ test('watchdogStep: 截断后可恢复（截断→工具→截断→截断不熔
 
 // —— 主动查询任务状态（不干等分钟级超时兜底） ——
 
+test('runFfmpeg：合并途中被停止 → 杀掉子进程，不再空等整次合并跑完', async () => {
+  const out = path.join(os.tmpdir(), 'ic-ffmpeg-abort-' + Date.now() + '.mp4');
+  let aborted = false;
+  setTimeout(() => { aborted = true; }, 300);
+  const t0 = Date.now();
+  try {
+    await assert.rejects(
+      () => runFfmpeg(['-y', '-f', 'lavfi', '-i', 'testsrc=duration=600:size=640x360:rate=25', '-c:v', 'libx264', '-preset', 'slow', out], { isAborted: () => aborted, timeoutMs: 60000 }),
+      /已停止/,
+    );
+    assert.ok(Date.now() - t0 < 15000, '停止后必须很快退出（长章节合并可达数分钟）');
+  } finally {
+    try { fs.unlinkSync(out); } catch {}
+  }
+});
+
 test('generate: 主动查询——任务从 ComfyUI 队列消失则主动失败（不干等 timeoutMs）', async () => {
   const orig = global.fetch;
   global.fetch = async (url) => {
@@ -759,6 +1208,32 @@ test('generate: 主动查询——任务从 ComfyUI 队列消失则主动失败�
     );
   } finally {
     global.fetch = orig;
+  }
+});
+
+test('generate: 提交失败（ComfyUI 校验失败）时必须关掉 WebSocket，不泄漏长连接', async () => {
+  const origFetch = global.fetch;
+  const origWS = global.WebSocket;
+  const sockets = [];
+  class FakeWS {
+    constructor() { this.closed = false; this.onmessage = null; this.onerror = null; this.onclose = null; sockets.push(this); }
+    close() { this.closed = true; }
+  }
+  global.WebSocket = FakeWS;
+  // 提交阶段就失败（校验失败是最典型的一种）：原先 ws 建连在 try 内、queuePrompt 在 try 外，
+  // 这里一抛错就没人关这条连接；上层对同一分镜还会重试多次，泄漏随失败数线性累积。
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/prompt')) return { ok: true, json: async () => ({ error: { type: 'prompt_outputs_failed_validation' }, node_errors: { '3': { errors: ['bad'] } } }) };
+    return { ok: true, json: async () => ({}) };
+  };
+  try {
+    await assert.rejects(() => generate('http://127.0.0.1:1', { n1: {} }, { timeoutMs: 5000, pollMs: 2 }), /校验失败/);
+    assert.equal(sockets.length, 1, '应建立过一条 WS');
+    assert.equal(sockets[0].closed, true, '提交失败时 WS 必须被关闭');
+  } finally {
+    global.fetch = origFetch;
+    global.WebSocket = origWS;
   }
 });
 
@@ -808,6 +1283,60 @@ test('runExclusiveVideo: 不看服务状态——没有任务在跑时立即执�
   } finally { global.fetch = orig; }
 });
 
+test('holdsRenderSlot: 只有真正占着渲染槽位的任务为真（行内任务/排队中/已结束都为假）', async () => {
+  assert.equal(holdsRenderSlot(''), false);
+  assert.equal(holdsRenderSlot(undefined), false, 'jobId 缺失不应抛错');
+  assert.equal(holdsRenderSlot('never-ran'), false, '没跑过的任务不占槽位');
+  assert.ok(globalThis.__infiniteCreationVideoGate.holders instanceof Set, '持有者集合也要挂 globalThis（Next dev 每个 route 一份模块）');
+
+  // 占满全部槽位（本地默认 1）：持有者算占用，后面的任务只能排队——排队 ≠ 占用
+  const limit = concurrencyLimit(loadConfig());
+  const releases = [];
+  const blockers = [];
+  for (let i = 0; i < limit; i++) {
+    const blocked = new Promise((r) => { releases.push(r); });
+    blockers.push(runExclusiveVideo(() => blocked, () => false, { jobId: 'r-block-' + i }));
+  }
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(holdsRenderSlot('r-block-0'), true, '拿到槽位即视为占用（取消它才该打断 ComfyUI）');
+
+  let ran = false;
+  const queued = runExclusiveVideo(async () => { ran = true; }, () => false, { jobId: 'r-wait' });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(holdsRenderSlot('r-wait'), false, '排队中还没拿到槽位，不得当成占用（否则取消排队任务会误打断前排）');
+  assert.equal(ran, false, '槽位被占满时不得开跑');
+
+  releases.forEach((r) => r());
+  await Promise.all([...blockers, queued]);
+  assert.equal(ran, true);
+  assert.equal(holdsRenderSlot('r-block-0'), false, '释放槽位后必须为假');
+  assert.equal(holdsRenderSlot('r-wait'), false, '跑完也必须为假');
+});
+
+test('取消/删除任务：只有占着渲染槽位的任务才打断 ComfyUI（行内任务不再误杀别人的渲染）', () => {
+  // 行内任务（runInlineJob：llm 参考图分析 / export 按章导出）在请求内同步执行、不进闸门、
+  // 也没人读它的停止标记，但状态同样是 running。旧代码用「状态是 running」决定 /interrupt，
+  // 于是取消/删除它们会把**当时真正在跑的渲染任务**（全局槽位串行，可能是另一个项目的整片生成）
+  // 打断成 failed。这里钉住「用 holdsRenderSlot 决定是否打断」+「行内任务如实拒绝」。
+  const read = (...segs) => fs.readFileSync(path.join(__dirname, '..', ...segs), 'utf8');
+  const cancel = read('app', 'api', 'projects', '[id]', 'jobs', '[jobId]', 'cancel', 'route.js');
+  assert.ok(/holdsRenderSlot\(jobId\)/.test(cancel), '取消：running 要看是否真占槽位');
+  assert.ok(/不占渲染队列/.test(cancel), '取消行内任务要如实拒绝（409），不能假成功');
+  assert.ok(cancel.indexOf('holdsRenderSlot(jobId)') < cancel.indexOf('await interruptTask(cfg)'), '判断必须发生在打断之前');
+
+  const del = read('app', 'api', 'projects', '[id]', 'jobs', '[jobId]', 'route.js');
+  assert.ok(/holdsRenderSlot\(jobId\)/.test(del), '删除任务记录：行内任务同步执行中不得删记录（会成为看不见的孤儿）');
+  assert.ok(del.indexOf('holdsRenderSlot(jobId)') < del.indexOf('await interruptTask(cfg)'), '判断必须发生在打断之前');
+
+  const stop = read('app', 'api', 'projects', '[id]', 'stop', 'route.js');
+  assert.ok(/jobs\.some\(\(j\) => holdsRenderSlot\(j\.id\)\)/.test(stop), '/stop 只在本项目确实占槽位时才打断');
+  assert.ok(stop.indexOf('holdsRenderSlot(j.id)') < stop.indexOf('await interruptTask(cfg)'), '判断必须发生在打断之前');
+
+  const project = read('app', 'api', 'projects', '[id]', 'route.js');
+  assert.ok(/active\.some\(\(j\) => holdsRenderSlot\(j\.id\)\)/.test(project), '删项目同上（否则删一个只有行内任务的项目会打断别的项目）');
+  assert.ok(project.indexOf('holdsRenderSlot(j.id)') < project.indexOf('await interruptTask(loadConfig())'), '判断必须发生在打断之前');
+});
+
 test('variantReusable / variantPrompt: 变体内容或提示词改过就必须重做，并用用户改过的提示词', () => {
   const done = (over) => ({ image_path: 'a.png', status: 'done', description: '校服', prompt: 'P', prompt_used: 'P', ...over });
   // 内容与提示词都没变 → 复用（幂等，避免每次写分镜都重渲染一遍衣橱）
@@ -850,4 +1379,135 @@ test('inferVoiceBaseline: 推断不出性别（中性/冲突）返回空串，�
   assert.equal(inferVoiceBaseline('路人甲', '没有性别标志的剪影'), '');
   // 性别词冲突（如「男主角的女友」同时含男女）：保守返回空，避免给错性别
   assert.equal(inferVoiceBaseline('某角色', '男主角的女友，温柔'), '');
+});
+
+test('guardToolCall: 危险命令只扫非正文参数（创作文本不该被误拦）', () => {
+  // 台词/画面描述里出现命令字样：本项目没有任何能执行命令的工具，这类拦截只会误伤合法写入
+  const prose = guardToolCall('set_storyboard', {
+    shots: [{ idx: 1, chapter: '第1章', visual: '他敲下 rm -rf / 清空服务器', dialogue: '张工：快执行 chmod 777！', sub_shots: 'git reset --hard' }],
+  });
+  assert.equal(prose.blocked, false, '创作正文里的命令字样不该拦');
+
+  // 非正文字段/未知字段仍然照常扫描（默认检查，防御性不下降）
+  assert.equal(guardToolCall('some_tool', { command: 'rm -rf /tmp/x', note: 'y' }).blocked, true);
+  assert.equal(guardToolCall('set_storyboard', { shots: [{ idx: 1, visual: 'x' }], cmd: 'sudo su -' }).blocked, true);
+});
+
+test('guardToolCall: 路径穿越仍按路径类参数拦截（与正文无关）', () => {
+  assert.equal(guardToolCall('edit_asset_image', { file_path: '../../etc/passwd' }).blocked, true);
+  assert.equal(guardToolCall('edit_asset_image', { reference_image_path: '/etc/passwd' }).blocked, true);
+  // Windows 形态的绝对路径/盘符相对路径：运行平台是 win32，只认 POSIX 等于守卫形同虚设
+  assert.equal(guardToolCall('edit_asset_image', { file_path: 'C:\\Windows\\win.ini' }).blocked, true);
+  assert.equal(guardToolCall('edit_asset_image', { file_path: 'C:../x' }).blocked, true);
+  assert.equal(guardToolCall('edit_asset_image', { file_path: '\\\\server\\share\\x' }).blocked, true);
+  // 路径穿越只在路径类参数上判：普通文本里出现 ../ 不算（例如正文提及相对路径）
+  assert.equal(guardToolCall('set_storyboard', { shots: [{ visual: '她从 ../ 的岔路口走来' }] }).blocked, false);
+});
+
+// ==================== 第 6 轮审计：停止语义 ====================
+// generate 会开 WebSocket 订阅 ComfyUI 事件；单测里没有 ComfyUI，用哑实现顶掉（只用它的 close/onmessage）。
+class DummyWS { constructor() {} close() {} set onmessage(_) {} }
+
+test('generate：已停止时不再提交任务（提交出去的项目 /interrupt 管不到，会被 ComfyUI 挨个执行）', async () => {
+  const calls = [];
+  const origFetch = globalThis.fetch, origWS = globalThis.WebSocket;
+  globalThis.WebSocket = DummyWS;
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url: String(url), method: opts?.method || 'GET', body: String(opts?.body || '') });
+    return new Response('{"prompt_id":"pid-pre"}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(() => generate('http://127.0.0.1:9', {}, { isAborted: () => true }), /任务已停止/);
+    assert.equal(calls.filter((c) => c.url.includes('/prompt')).length, 0, '已停止就不该再 POST /prompt');
+  } finally {
+    globalThis.fetch = origFetch;
+    globalThis.WebSocket = origWS;
+  }
+});
+
+test('generate：运行中被停止 → 既打断当前项，也删掉自己还没执行的队列项', async () => {
+  const calls = [];
+  const origFetch = globalThis.fetch, origWS = globalThis.WebSocket;
+  globalThis.WebSocket = DummyWS;
+  let aborted = false;
+  globalThis.fetch = async (url, opts) => {
+    const u = String(url);
+    calls.push({ url: u, method: opts?.method || 'GET', body: String(opts?.body || '') });
+    if (u.includes('/prompt')) return new Response('{"prompt_id":"pid-run"}', { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.endsWith('/queue') && (opts?.method || 'GET') === 'GET') return new Response('{"queue_running":[],"queue_pending":[]}', { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    // 提交成功那一刻就置位停止标记：走「提交后立即检查 → abort()」这条路
+    await assert.rejects(
+      () => generate('http://127.0.0.1:9', {}, { isAborted: () => aborted, onSubmitted: () => { aborted = true; }, pollMs: 5 }),
+      /任务已停止/,
+    );
+    assert.ok(calls.some((c) => c.url.endsWith('/interrupt')), '必须打断正在执行的那一张');
+    const del = calls.find((c) => c.url.endsWith('/queue') && c.method === 'POST');
+    assert.ok(del, '/interrupt 只打断当前项，排队项必须按 prompt_id 删掉');
+    assert.match(del.body, /pid-run/);
+  } finally {
+    globalThis.fetch = origFetch;
+    globalThis.WebSocket = origWS;
+  }
+});
+
+test('deleteQueued：空 id 不发请求；有 id 才 POST /queue {"delete":[...]}（ComfyUI server.py post_queue）', async () => {
+  const calls = [];
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url: String(url), method: opts?.method || 'GET', body: String(opts?.body || '') });
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await deleteQueued('http://127.0.0.1:9', []);
+    assert.equal(calls.length, 0, '没有 id 时不该打 ComfyUI');
+    await deleteQueued('http://127.0.0.1:9', ['a', '', null, 'b']);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'POST');
+    assert.match(calls[0].url, /\/queue$/);
+    assert.deepEqual(JSON.parse(calls[0].body), { delete: ['a', 'b'] });
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
+test('素材分类下拉：与写入端值域同源，且不遗漏 age（下拉缺 age 会建不出/改不了年龄变体）', () => {
+  const ids = CATEGORIES.map(([k]) => k);
+  assert.deepEqual(ids, ASSET_CATEGORIES.map((c) => c.id), '下拉分类必须与 lib/shared 的值域完全一致');
+  assert.ok(ids.includes('age'), '下拉必须能选「年龄/时期」（原来手写清单漏了 age）');
+  assert.deepEqual(CATEGORIES.map(([, l]) => l), ASSET_CATEGORIES.map((c) => c.label), '显示名不得与 ASSET_CATEGORIES 漂移');
+  // 下拉是 [id, label] 成对结构，Tab/SelectItem 都按它对解构
+  for (const c of CATEGORIES) assert.equal(c.length, 2, '分类项必须是 [id, label] 两元组');
+});
+
+// —— 分支审计（dev7 相对 origin/main）的回归：写入契约与执行顺序 ——
+
+test('set_storyboard：工具描述与「章节必须存在」的校验同口径（模型按描述传参不能必错）', () => {
+  // 校验（tools.js hSetStoryboard）只认章节标题或 id，但描述一直写着「chapter 传章节号」：
+  // 模型照描述传 "1" / "2" 会让**整批**分镜被拒（一条都不落库）。描述必须给出可用的取值形态。
+  const sb = TOOL_DEFINITIONS.find((t) => t.function.name === 'set_storyboard');
+  assert.ok(sb, '找不到 set_storyboard 工具定义');
+  assert.match(sb.function.description, /chapter 传章节标题或章节 id/, '描述要写明可传标题或 id');
+  assert.doesNotMatch(sb.function.description, /chapter 传章节号/, '不能再写「章节号」——校验不接受纯序号');
+});
+
+test('资产图阶段：批量出图排在换装/年龄兜底之前（兜底是图生图，要先有角色 canonical 图）', () => {
+  // 兜底（hChangeOutfit / hChangeAge）在角色 canonical 图不存在时直接抛「角色参考图不存在」。
+  // 它原先排在批量出图之前 → 新项目首次跑资产图阶段时每个变体都失败（只落进 notes），要再跑
+  // 一次才生效；顺序反了不报错，所以只能钉住源码顺序。
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'stages.js'), 'utf8');
+  const stage = src.slice(src.indexOf('async image(ctx)'));
+  const batch = stage.indexOf("'generate_assets_batch'");
+  const prov = stage.indexOf('resolveShotProvisions');
+  assert.ok(batch > -1 && prov > -1, '资产图阶段应同时包含批量出图与换装/年龄兜底');
+  assert.ok(batch < prov, '必须先批量出图，再跑换装/年龄兜底');
+});
+
+test('任务列表：运行中的行内任务（llm/export）不渲染「删除」（后端明确 409，按钮必然报错）', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ProjectView.jsx'), 'utf8');
+  const delLine = src.split('\n').find((l) => l.includes('>删除</Button>'));
+  assert.ok(delLine, '找不到任务列表的删除按钮');
+  assert.match(delLine, /CANCELLABLE/, '删除按钮必须排除「后端拒绝删除的运行中行内任务」');
 });

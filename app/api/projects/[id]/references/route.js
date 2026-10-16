@@ -2,16 +2,16 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Projects, ReferenceImages, Assets, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger } from '@/lib/core/index.js';
+import { Projects, ReferenceImages, Assets, Chapters, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger, withWriteContext } from '@/lib/core/index.js';
 import { runInlineJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
-import { PROJECT_ASSET_SUBDIRS } from '@/lib/shared/index.js';
+import { PROJECT_ASSET_SUBDIRS, ASSET_CATEGORY_IDS, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES, isVariantAssetCategory } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
-const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+const IMAGE_EXTS = new Set(REFERENCE_IMAGE_EXTS);
 const IMAGE_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = REFERENCE_IMAGE_MAX_BYTES;
 const MAX_IMAGES = 9;
 
 // 用 LLM 视觉模型分析上传图片，返回 { name, category, description }；
@@ -19,7 +19,8 @@ const MAX_IMAGES = 9;
 async function analyzeUploadedImage(buf, extName) {
   try {
     const cfg = loadConfig();
-    if (!cfg.llm?.vision || !cfg.llm?.apiKey) return null;
+    // 与 llmChat 同口径：只要求「开了 vision 且配了 Base URL」——本地无鉴权端点没有 api_key。
+    if (!cfg.llm?.vision || !cfg.llm?.baseUrl) return null;
     const mimeType = IMAGE_MIME[extName];
     if (!mimeType) return null;
     const dataUrl = 'data:' + mimeType + ';base64,' + buf.toString('base64');
@@ -31,7 +32,10 @@ async function analyzeUploadedImage(buf, extName) {
     const info = extractJson(resp.content);
     const name = String(info.name || '').trim().slice(0, 40);
     if (!name) return null;
-    const category = PROJECT_ASSET_SUBDIRS[info.category] ? info.category : 'other';
+    // 服装/年龄是「挂在角色下的变体」，必须有父角色（见 Assets.create 的守卫 + lib/shared 说明）；
+    // 视觉分析这条链路没有「所属角色」可填，模型万一吐出 costume/age 一律退回 other，
+    // 免得在素材库里落一条永远不生效的变体、或让上传直接失败。
+    const category = (PROJECT_ASSET_SUBDIRS[info.category] && !isVariantAssetCategory(info.category)) ? info.category : 'other';
     const description = String(info.description || '').trim().slice(0, 200);
     return { name, category, description };
   } catch (e) {
@@ -63,6 +67,14 @@ export async function POST(req, { params }) {
   const name = String(fd.get('name') || '');
   const description = String(fd.get('description') || '');
   if (!file || typeof file.arrayBuffer !== 'function') return NextResponse.json({ error: '缺少文件' }, { status: 400 });
+  // chapter_id 来自表单，必须属于本项目：挂到别的项目的章节（或拼错/空串）会让这条参考图
+  // 在章节视图与生成上下文里都筛不到——不报错、也不参与任何生成，成了看不见的脏数据。
+  // （历史上「项目级参考图」用空 chapter_id 表示，迁移后已统一归入各项目第1章，故不再放行空值。）
+  if (!chapter_id) return NextResponse.json({ error: '缺少 chapter_id（参考图必须归属某章）' }, { status: 400 });
+  const chapterOf = Chapters.get(chapter_id);
+  if (!chapterOf || chapterOf.project_id !== id) return NextResponse.json({ error: '章节不存在' }, { status: 404 });
+  // 分类同样必须在值域内（素材库按 category 过滤）；放在读文件之前，避免为必然失败的请求写盘。
+  if (!ASSET_CATEGORY_IDS.includes(category)) return NextResponse.json({ error: '素材分类不存在：' + category }, { status: 400 });
   const buf = Buffer.from(await file.arrayBuffer());
   if (!buf.length) return NextResponse.json({ error: '缺少文件内容' }, { status: 400 });
   if (buf.length > MAX_BYTES) return NextResponse.json({ error: '图片超过 10MB' }, { status: 400 });
@@ -76,9 +88,9 @@ export async function POST(req, { params }) {
 
   ensureProjectDirs(id);
   // 视觉分析命名：优先用 LLM 生成的素材名，失败/未配置时回退原文件名。
-  // 仅在确实会调用 LLM（配置了 vision + apiKey）时记一条任务，使其出现在任务列表。
+  // 仅在确实会调用 LLM（配置了 vision + Base URL）时记一条任务，使其出现在任务列表。
   const cfgForAnalyze = loadConfig();
-  const willAnalyze = !!(cfgForAnalyze.llm?.vision && cfgForAnalyze.llm?.apiKey);
+  const willAnalyze = !!(cfgForAnalyze.llm?.vision && cfgForAnalyze.llm?.baseUrl);
   const analysis = willAnalyze
     ? await runInlineJob(
         { projectId: id, type: 'llm', checkpoint: { subject: name || orig || 'reference' }, onProgress: (p) => broadcast(p) },
@@ -90,25 +102,36 @@ export async function POST(req, { params }) {
   const analyzedCategory = (analysis && analysis.category) || 'other';
   const assetCategory = mode === 'library' ? ((category && category !== 'other') ? category : analyzedCategory) : category;
   const finalDescription = (analysis?.description || description || '').trim();
+  // 素材库模式会顺手把这条参考图建成一条素材，而服装/年龄变体必须挂在角色下（另有 db 守卫兜底）。
+  // 这条上传链路没有「所属角色」可选，用户显式选了变体分类就在这里 400（**写盘之前**），
+  // 否则：① db 守卫抛出的错误码没人翻译 → 500；② 文件已经落盘，留下没有 DB 行的孤儿图片。
+  // 模型推断出的变体已在 analyzeUploadedImage 里退回 other，所以这里只会命中用户的显式选择。
+  if (mode === 'library' && isVariantAssetCategory(assetCategory)) {
+    return NextResponse.json({ error: '服装/年龄是挂在角色下的变体，参考图上传无法指定「所属角色」：请到素材库用「＋ 新建资产」并选好所属角色，或改选其它分类' }, { status: 400 });
+  }
   const relDir = mode === 'library' ? ('assets/' + (PROJECT_ASSET_SUBDIRS[assetCategory] || 'other') + '/') : 'references/';
   const rel = relDir + slugify(baseName) + '_' + uid().slice(0, 8) + extName;
   const abs = resolveProjectPath(id, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, buf);
 
-  let asset = null;
-  if (mode === 'library') {
-    asset = Assets.create(id, { category: assetCategory, name: baseName, description: finalDescription });
-    Assets.update(asset.id, { image_path: rel, source: 'uploaded', status: 'done' });
-  }
-  const reference = ReferenceImages.create(id, {
-    chapter_id,
-    asset_id: asset ? asset.id : '',
-    name: baseName,
-    image_path: rel,
-    mode,
-    category: assetCategory,
-    description: finalDescription,
+  // 素材/参考图两条 DB 写入放进同一写上下文：整批可回滚（文件不随回滚删除，见 changelog 说明）
+  const { asset, reference } = await withWriteContext('POST /api/projects/:id/references', async () => {
+    let asset = null;
+    if (mode === 'library') {
+      asset = Assets.create(id, { category: assetCategory, name: baseName, description: finalDescription });
+      Assets.update(asset.id, { image_path: rel, source: 'uploaded', status: 'done' });
+    }
+    const reference = ReferenceImages.create(id, {
+      chapter_id,
+      asset_id: asset ? asset.id : '',
+      name: baseName,
+      image_path: rel,
+      mode,
+      category: assetCategory,
+      description: finalDescription,
+    });
+    return { asset, reference };
   });
   return NextResponse.json({ reference, asset });
 }

@@ -287,8 +287,7 @@ pnpm test   # node --test tests/unit.test.mjs
 
 ## 致谢
 - 感谢开发者 [happymy](https://github.com/happymy) 为此项目提供了AMD+GGUF适配的解决方案以及解决项目中存在的部分bug
-- 感谢开发者 [binonxia](https://github.com/binonxia) 发现并修复了项目中的bug
-
+- 感谢以下开发者为项目做出的巨大贡献：[ghshhf](https://github.com/ghshhf)、[binonxia](https://github.com/binonxia)
 
 ## Star 历史
 

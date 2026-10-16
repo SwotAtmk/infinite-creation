@@ -288,8 +288,7 @@ This project was independently completed by an individual developer. Feedback, b
 ## Acknowledgements
 
 - Thanks to developer [happymy](https://github.com/happymy) for providing the AMD + GGUF adaptation solution and fixing some bugs in the project.
-- Thank you to the developer [binonxia]（ https://github.com/binonxia ）Discovered and fixed bugs in the project
-
+- We would like to express our gratitude to the following developers for their contributions to the project: [ghshhf](https://github.com/ghshhf), [binonxia](https://github.com/binonxia)
 
 ## Star History
 

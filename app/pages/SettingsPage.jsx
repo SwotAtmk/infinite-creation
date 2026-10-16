@@ -72,11 +72,18 @@ export default function SettingsPage({ onBack }) {
         </RadioGroup>
 
         {(cfg.comfyui.provider || 'native') === 'native' && (
-          <div className="row">
-            <Input size="sm" className="flex-1" value={cfg.comfyui.baseUrl} onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, baseUrl: e.target.value } })} />
-            <Button size="sm" onPress={testComfy}>测试连接</Button>
-            {test && <span className="muted">{test}</span>}
-          </div>
+          <>
+            <p className="muted" style={{ marginTop: 4 }}>
+              获取一键部署配套 ComfyUI 工作流：
+              <a href="https://pan.quark.cn/s/9748d626c346?pwd=7NcR" target="_blank" rel="noopener noreferrer">https://pan.quark.cn/s/9748d626c346?pwd=7NcR</a>
+              ，使用夸克网盘打开链接即可获取。
+            </p>
+            <div className="row">
+              <Input size="sm" className="flex-1" value={cfg.comfyui.baseUrl} onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, baseUrl: e.target.value } })} />
+              <Button size="sm" onPress={testComfy}>测试连接</Button>
+              {test && <span className="muted">{test}</span>}
+            </div>
+          </>
         )}
 
         {(cfg.comfyui.provider || 'native') === 'runninghub' && (

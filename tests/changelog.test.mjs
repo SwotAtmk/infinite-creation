@@ -981,6 +981,29 @@ test('背景音乐：排队期间被停止，资产不能永远停在「生成�
   Projects.remove(p.id);
 });
 
+test('背景音乐：重生成被停止时保留已有音频（不能把上一版可用产物一起作废）', async () => {
+  const { startMusicJob, stopJob } = await import('../lib/agent/job-runner.js');
+  const p = mkProject('音乐保留项目');
+  const a = Assets.create(p.id, { category: 'music', name: '旧BGM', prompt: '舒缓的钢琴' });
+  // 上一版音频是可用产物：列表里还在播，「应用到」按钮也靠 status==='done' 才显示
+  Assets.update(a.id, { audio_path: 'assets/music/old.mp3', status: 'done' });
+  Assets.update(a.id, { status: 'generating' });
+  const gate = globalThis.__infiniteCreationVideoGate;
+  const before = gate.slots;
+  gate.slots = 99;
+  try {
+    const job = startMusicJob({ projectId: p.id, assetId: a.id });
+    stopJob(job.id);
+    assert.equal(await waitJob(job.id), 'cancelled');
+    const after = Assets.get(a.id);
+    assert.equal(after.status, 'done', '有旧音频时必须回到 done，否则「应用到」按钮消失、旧音频也用不上了');
+    assert.equal(after.audio_path, 'assets/music/old.mp3', '旧音频不能被作废');
+  } finally {
+    gate.slots = before;
+  }
+  Projects.remove(p.id);
+});
+
 test('apply_chapter_music：单章合并失败不中断其余章节', async () => {
   const p = mkProject('应用BGM批量项目');
   Chapters.create(p.id, { title: '第2章' });

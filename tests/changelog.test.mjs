@@ -14,7 +14,7 @@ process.env.IC_DATA_DIR = TMP;
 
 const core = await import('../lib/core/index.js');
 const shared = await import('../lib/shared/index.js');
-const { createToolRuntime, runTool, resolveShotProvisions } = await import('../lib/agent/tools.js');
+const { createToolRuntime, runTool, resolveShotProvisions, upsertMusicAsset } = await import('../lib/agent/tools.js');
 const {
   Projects, Chapters, Shots, Assets, Jobs, listChanges, countChanges, rollbackLogs, getChange,
   withWriteContext, rawGet, pickShotFields, pickChapterFields, idxTakenBy, validateShotContent, tx, DB_PATH, chapterStats, projectDir,
@@ -880,6 +880,18 @@ test('换装兜底：LLM 阶段（renderDisabled）不渲染，推迟到「资�
   assert.deepEqual(after.find((s) => s.idx === 2).costume_ids, [costume.id], '换装自「事件之后」的镜头起生效');
   assert.deepEqual(after.find((s) => s.idx === 1).costume_ids, [], '沐浴事件本身的镜头仍用角色原图');
   assert.match(prov.text, /自动换装/);
+  Projects.remove(p.id);
+});
+
+test('素材库：同名音乐资产复用（重跑不堆重复条目）', () => {
+  const p = mkProject('音乐资产复用项目');
+  const ctx = createToolRuntime({ projectId: p.id });
+  const a1 = upsertMusicAsset(ctx, '第1章背景音乐', { audio_path: 'assets/music/a.mp3', status: 'done' });
+  const a2 = upsertMusicAsset(ctx, '第1章背景音乐', { audio_path: 'assets/music/b.mp3', status: 'done' });
+  assert.equal(a1, a2, '同名复用同一条资产');
+  const list = Assets.list(p.id, 'music');
+  assert.equal(list.length, 1);
+  assert.equal(list[0].audio_path, 'assets/music/b.mp3', '复用时原地更新音频');
   Projects.remove(p.id);
 });
 

@@ -214,6 +214,21 @@ test('resolveHardwareConfig: 模式切换工作流预设与显存释放默认值
   assert.equal(resolveHardwareConfig({ hardware: { mode: 'weird' } }).hardware.mode, 'nvidia');
 });
 
+test('resolveHardwareConfig: generation 被写成非对象时退回默认值（不把 loadConfig 弄崩）', () => {
+  // config.json 被手改成 "generation": null / "x" / 5 时，deepMerge 会原样保留该值；
+  // 旧代码紧接着往它身上写 freeAfterEvery → TypeError。而 loadConfig 每个请求都要跑，
+  // 于是全部路由 500、PUT /api/config 也 500（脏配置只该退回默认值，不该让应用不可用）。
+  for (const bad of [null, 'x', 5, [], true]) {
+    const r = resolveHardwareConfig({ generation: bad });
+    assert.ok(r.generation && typeof r.generation === 'object', 'generation 必须是对象：' + JSON.stringify(bad));
+    assert.equal(typeof r.generation.freeAfterEvery, 'number', 'freeAfterEvery 必须是数字：' + JSON.stringify(bad));
+    assert.equal(r.generation.videoTimeoutMinutes, 90, '其余字段退回默认值：' + JSON.stringify(bad));
+  }
+  // 正常的对象配置不受影响（含旧键迁移）
+  assert.equal(resolveHardwareConfig({ generation: { videoConcurrency: 3 } }).generation.videoConcurrency, 3);
+  assert.equal(resolveHardwareConfig({ generation: { videoFreeAfterEvery: 5 } }).generation.freeAfterEvery, 5);
+});
+
 test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前后端共用同一份常量）', () => {
   assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.nvidia), true);
   assert.equal(isPresetWorkflows(SHARED_HW_PRESETS.amd), true);

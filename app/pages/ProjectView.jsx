@@ -61,7 +61,9 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
   // 已被用户删除的任务 id：其运行器的终态 WS 事件不再弹通知（任务记录已删）
   const removedJobIdsRef = useRef(new Set());
   const [chapters, setChapters] = useState([]);
-  const [cursor, setCursor] = useState(0);
+  // 分镜页的「当前章节」按 **章节 id** 记，不记下标：章节可拖拽排序/删除/新增，
+  // 存下标时排序一次就会让用户看着 A 章的名字、实际渲染 B 章的分镜（下标还指向旧位置）。
+  const [cursorId, setCursorId] = useState('');
   // 项目加载失败（id 不存在 / 项目被别的标签页删掉）：此前没有 catch，Promise.all 的拒绝无人处理，
   // 界面永远停在「项目加载中…」，连「返回」按钮都没有。
   const [loadError, setLoadError] = useState('');
@@ -80,7 +82,9 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
     }
     if (seq !== loadSeqRef.current) return; // 有更新的请求在飞，丢弃本次（旧）结果
     setLoadError('');
-    setProject(p); setJobs(j); setChapters(c); setCursor((x) => (x < 0 ? 0 : Math.min(x, Math.max(c.length - 1, 0))));
+    setProject(p); setJobs(j); setChapters(c);
+    // 章节 id 仍存在就保持选中（排序/改名都不影响），否则退回第一章
+    setCursorId((x) => (c.some((ch) => ch.id === x) ? x : (c[0] ? c[0].id : '')));
     // 出现新任务就把任务列表展开，让用户提交后立刻看到（无论它瞬间完成/失败）
     if (firstJobsLoadRef.current) firstJobsLoadRef.current = false;
     else if (j.some((x) => !seenJobIdsRef.current.has(x.id))) setQueueOpen(true);
@@ -282,11 +286,11 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
           <div className="flex flex-col gap-3">
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
               <span className="muted">章节</span>
-              <Select size="sm" className="w-52" aria-label="选择章节" selectedKeys={selectKeys(String(cursor))} onSelectionChange={(k) => setCursor(Number(pickKey(k)) || 0)}>
-                {chapters.map((c, i) => <SelectItem key={String(i)}>{c.title}</SelectItem>)}
+              <Select size="sm" className="w-52" aria-label="选择章节" selectedKeys={selectKeys(cursorId)} onSelectionChange={(k) => setCursorId(pickKey(k))}>
+                {chapters.map((c) => <SelectItem key={c.id}>{c.title}</SelectItem>)}
               </Select>
             </div>
-            <ShotsTab projectId={id} chapter={chapters[cursor]?.title || ''} running={running} jobs={jobs} onRefresh={loadProject} />
+            <ShotsTab projectId={id} chapter={chapters.find((c) => c.id === cursorId)?.title || ''} running={running} jobs={jobs} onRefresh={loadProject} />
           </div>
         )}
         {pview === 'music' && <MusicTab projectId={id} chapters={chapters} running={running} onRefresh={loadProject} />}

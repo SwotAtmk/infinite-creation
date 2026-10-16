@@ -455,6 +455,19 @@ test('参考图白名单：前端选择器与后端校验共用一份（含无 M
   assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
 });
 
+test('界面小修：分镜空态按筛选结果、章节游标记 id、参考图上传按条摘除（源码守卫）', () => {
+  const shots = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ShotsTab.jsx'), 'utf8');
+  assert.ok(/!shown\.length && <p/.test(shots), '分镜空态必须按筛选后的 shown 判断');
+  assert.ok(!/!shots\.length &&/.test(shots), '不该再用未筛选的 shots.length 判空态（按章筛选时会永远不提示）');
+  const pv = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ProjectView.jsx'), 'utf8');
+  assert.ok(/const \[cursorId, setCursorId\]/.test(pv), '章节游标必须记 id');
+  assert.ok(!/setCursor\(/.test(pv), '不能再存章节下标（排序/删除后会指向别的章节）');
+  assert.ok(/setCursorId\(\(x\) => \(c\.some\(\(ch\) => ch\.id === x\)/.test(pv), '章节列表变化后要按 id 保持选中、否则退回第一章');
+  assert.ok(/<SelectItem key=\{c\.id\}>/.test(pv), '章节下拉的 key 应该是章节 id');
+  const cv = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ChaptersView.jsx'), 'utf8');
+  assert.ok(/setRefs\(\(prev\) => prev\.filter\(\(x\) => x\.key !== it\.key\)\)/.test(cv), '上传成功的参考图要立刻从待上传列表摘掉（否则重试会重复上传）');
+});
+
 test('背景音乐：只提交任务就不能宣称「已合成」；全部章节失败要让任务失败（源码守卫）', () => {
   const mt = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'MusicTab.jsx'), 'utf8');
   assert.ok(!/已应用背景音乐并重新合成成片/.test(mt), 'apply 只是提交后台任务，不能宣称已经重新合成完成');

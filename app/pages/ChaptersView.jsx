@@ -92,9 +92,10 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
 
   async function uploadRefs() {
     if (!editing) return;
-    // 上传失败必须让用户看到原因（如「参考图片最多 9 张」）：此前没有 catch，
-    // 抛出的错误成为未处理的 Promise 拒绝，按钮点了没反应、原因也丢了。
+    // 逐条上传、成功一条就从待上传列表里摘掉：此前一条失败会把**已经传成功的**也留在列表里，
+    // 用户再点一次就重复上传（素材库里多出重复参考图）；报错也没说是哪个文件。
     try {
+      let done = 0;
       for (const it of refs) {
         const fd = new FormData();
         fd.append('file', it.file);
@@ -105,13 +106,16 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
         const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
-          throw new Error(j.error || ('参考图上传失败 HTTP ' + res.status));
+          const why = j.error || ('上传失败 HTTP ' + res.status);
+          throw new Error('「' + (it.file.name || '参考图') + '」' + why + (done ? '；前 ' + done + ' 张已上传成功，可直接继续传剩下的' : ''));
         }
+        done += 1;
+        // 按 key 精确移除（同名文件也不会误删别的待上传项）
+        setRefs((prev) => prev.filter((x) => x.key !== it.key));
       }
-      setRefs([]);
       loadRefs();
-      toast.success('参考素材已上传');
-    } catch (e) { toast.error(e.message); }
+      toast.success(done ? '参考素材已上传 ' + done + ' 张' : '参考素材已上传');
+    } catch (e) { toast.error(e.message); loadRefs(); }
   }
   async function delRef(rid) {
     try { await api.del('/api/projects/' + projectId + '/references/' + rid); loadRefs(); } catch (e) { alert(e.message); }

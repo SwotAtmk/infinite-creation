@@ -471,3 +471,30 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 一处如实记录：探针造的「活动任务」是直接播的 DB 行（不真跑渲染），因此 `interruptTask` 在本机没有监听 8188 时是连接被拒 + 被 `try/catch` 吞掉——「删项目会停掉活动任务」的**判定链**由探针验证，`interruptTask` 的**效果**沿用 `/stop`/`/cancel` 已有的实机结论。
 
 
+
+## 十八、第十一轮：停止/取消改按「谁真的占着 ComfyUI」判定（2026-10-16，dev7）
+
+第九、十轮修的是「写入端静默无效」；本轮的问题是**判据本身用错**：把「任务状态是 `running`」当成「该任务占着 ComfyUI」，于是四条停止/取消路径都变成了对**全局** `/interrupt` 的无条件调用。
+
+行内任务（`runInlineJob`：`llm` 参考图分析、`export` 按章导出）在请求内同步执行、不进渲染闸门、也没有任何代码读它的停止标记，但它的状态同样是 `running`。而 `/interrupt` 是 ComfyUI 全局的——打断的是「当时正在执行的那一项」。渲染闸门按**全局**槽位串行（本地默认 `videoConcurrency=1`），所以那一刻正在跑的很可能就是**另一个项目**的整片生成：取消一条参考图分析任务，会把别人正在生成的镜头打断成 `failed`。
+
+### 修掉的（1 个原子提交，覆盖 4 条路径 + 闸门）
+
+| 提交 | 级别 | 问题 | 修复 |
+|------|------|------|------|
+| `3092334` | 高 | **取消/删除行内任务会误杀别人的渲染任务**：`POST /jobs/:jobId/cancel`、`DELETE /jobs/:jobId`、`POST /stop`、`DELETE /projects/:id` 都用「状态是 running」决定是否 `/interrupt`（第四条是上一轮新加的，照抄了同一判据）。行内任务不占槽位，打断的是当时真正在跑的渲染任务（很可能是别的项目的整片生成）→ 那条任务以 failed 收场。附带两处「假成功」：对行内任务取消会返回 `ok` 但它照样跑完（没人读停止标记）；删除行内任务记录会把「还在同步执行」的任务变成看不见的孤儿（记录没了、活照跑，产物照写） | 闸门（`job-runner.js`）新增 `holdsRenderSlot(jobId)`：`gate.holders` 集合与槽位同挂 `globalThis`，`acquire()` 里加、`finally` 里删，就是「此刻谁真的占着 ComfyUI」。四条路径全部改成「确有任务占槽位时才 `/interrupt`」；`/cancel` 与 `DELETE /jobs/:jobId` 对行内任务**如实返回 409**（界面本来就不给取消按钮，API 此前却返回 ok，属假成功）；`DELETE /jobs/:jobId` 也因此不再删掉正在同步执行的记录 |
+
+### 本轮核对过、判定「不改」的项
+
+- **行内任务仍然不响应停止**：`/export` 的 ffmpeg 合并没有中断点，参考图视觉分析是一次 LLM 调用，给它们加取消要改 ffmpeg 子进程与 LLM 客户端两层。本轮只保证「取消它不会伤到别人」，不扩这一层（与既有的「`/export` 与整片合并不响应停止」同属一条已知限制）。
+- **界面 `ProjectView.jsx` 的 `CANCELLABLE` 是一份手写清单**（10 个走闸门的类型，恰好与 `Jobs.create` 的 12 个类型一一对应）。没有改成「后端下发可取消标记」：后端现在已是权威判据（界面若漂移，最多少一个按钮；后端若漂移，会误杀别人的任务），改造成本不值。
+- **删项目时若只有行内任务在跑，它们不会被停**（停不掉）：导出可能因项目目录被删而失败，归入上面那条已知限制。
+
+### 第十一轮验证口径
+
+- 单测：**178/178**（上一轮 176 + 新增 2）。新增用例：① `holdsRenderSlot` **行为**用例——持有槽位期间为真、排队中为假、释放后为假、`jobId` 缺失不抛错、`gate.holders` 确实挂在 `globalThis` 上；② 四条路由的**源码守卫**——必须用 `holdsRenderSlot` 判定、判断必须发生在 `/interrupt` 之前、行内任务必须如实拒绝。
+- 反向验证（两条，各自只翻红对应用例，均还原后 178/178）：① 闸门 `acquire()` 不再把 `jobId` 记进 `holders` → 行为用例红；② 取消路由退回「裸 `running` 就打断」→ 源码守卫红。
+- 实机探针：新增 `ic-r11-inline-cancel-probe.mjs` **18/18**。手法补上了上一轮欠的那块观测能力：`config.json` 的 `comfyui.baseUrl` 本来就是 `http://127.0.0.1:8188`，探针在该端口起一个**只记录请求的存根**（本机此刻没有 ComfyUI 在跑，**不动任何配置**），于是「谁被 `/interrupt`」变成可数的证据——新代码下取消行内任务、删除行内任务记录、`/stop`、删项目四条路径一个 `/interrupt` 都没有；随后把取消路由**临时改回旧判据**再打一次同一操作，存根立刻收到 `POST /interrupt`（返回码也从 409 变回 200），旧代码误杀别人的渲染任务被实机复现；改回后再次恢复 409 且不再打断。
+- 回归：上一轮全套探针重跑全绿（audit-e2e 88/0、refguard 15/0、r4 6/0、r4-probe2 6/0、malformed 5/0、r6-llm 5/0、r7-upload 20/0、r7-skills 5/0、range「失败 0 项」、r8-parent 31/0、r9-skills 7/0、r9-rollback 11/0、r10-delstop 11/0、r10-bind 11/0）。改到 `lib/agent/job-runner.js` 后重启过 dev 实例；`gate.holders` 用 `gate.holders = gate.holders || new Set()` 补默认值，兼容 dev 模式下被复用的旧 `gate` 对象（上一轮留的实例不会再出现「有槽位、无持有者集合」）。
+
+

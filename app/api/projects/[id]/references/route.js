@@ -19,7 +19,8 @@ const MAX_IMAGES = 9;
 async function analyzeUploadedImage(buf, extName) {
   try {
     const cfg = loadConfig();
-    if (!cfg.llm?.vision || !cfg.llm?.apiKey) return null;
+    // 与 llmChat 同口径：只要求「开了 vision 且配了 Base URL」——本地无鉴权端点没有 api_key。
+    if (!cfg.llm?.vision || !cfg.llm?.baseUrl) return null;
     const mimeType = IMAGE_MIME[extName];
     if (!mimeType) return null;
     const dataUrl = 'data:' + mimeType + ';base64,' + buf.toString('base64');
@@ -84,9 +85,9 @@ export async function POST(req, { params }) {
 
   ensureProjectDirs(id);
   // 视觉分析命名：优先用 LLM 生成的素材名，失败/未配置时回退原文件名。
-  // 仅在确实会调用 LLM（配置了 vision + apiKey）时记一条任务，使其出现在任务列表。
+  // 仅在确实会调用 LLM（配置了 vision + Base URL）时记一条任务，使其出现在任务列表。
   const cfgForAnalyze = loadConfig();
-  const willAnalyze = !!(cfgForAnalyze.llm?.vision && cfgForAnalyze.llm?.apiKey);
+  const willAnalyze = !!(cfgForAnalyze.llm?.vision && cfgForAnalyze.llm?.baseUrl);
   const analysis = willAnalyze
     ? await runInlineJob(
         { projectId: id, type: 'llm', checkpoint: { subject: name || orig || 'reference' }, onProgress: (p) => broadcast(p) },

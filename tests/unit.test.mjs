@@ -605,6 +605,19 @@ test('项目路由：自定义宽高区间（BAD_PROJECT_DIM）必须翻 400，�
   }
 });
 
+test('项目删除：先给本项目活动任务打停止标记再删（否则任务继续跑、把孤儿行写回已删项目）', () => {
+  // 任务行会随 Projects.remove 一起删掉，而进程里那条任务不会停（停止注册表按 jobId 在内存里）：
+  // 它会继续出图/出片，把 chapters/shots/assets 重新插回一个「已不存在的项目」——界面看不到也停不掉。
+  const src = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'route.js'), 'utf8');
+  const stop = src.indexOf('stopJob(j.id)');
+  const remove = src.indexOf('Projects.remove(id)');
+  assert.ok(stop > 0, '删除项目必须先停本项目活动任务');
+  assert.ok(/status === 'running' \|\| j\.status === 'queued'/.test(src), 'running 与 queued 都算活动任务');
+  assert.ok(/interruptTask\(loadConfig\(\)\)/.test(src), '执行中的任务要主动打断 ComfyUI（与 /stop、/cancel 同一口径）');
+  assert.ok(remove > stop, '停止必须发生在删除之前');
+  assert.ok(/stopped: active\.map/.test(src), '接口要回报实际停了哪几条任务');
+});
+
 test('nameMatches: 规范化后精确相等（短名不被同场更长角色名误命中）', () => {
   assert.equal(nameMatches('小明', '小明'), true);
   // canonical 名带身份后缀 / 舞台提示：对白说话人是「小明」，角色资产名是「小明（少年）」

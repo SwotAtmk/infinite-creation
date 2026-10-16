@@ -917,6 +917,28 @@ test('素材库：同名音乐资产复用（重跑不堆重复条目）', () =>
   Projects.remove(p.id);
 });
 
+test('背景音乐：排队期间被停止，资产不能永远停在「生成中」', async () => {
+  const { startMusicJob, stopJob } = await import('../lib/agent/job-runner.js');
+  const p = mkProject('音乐停止项目');
+  const a = Assets.create(p.id, { category: 'music', name: '测试BGM', prompt: '舒缓的钢琴' });
+  // 路由发起任务前就把资产置成了 generating，只有工具内部会改成 done/failed
+  Assets.update(a.id, { status: 'generating' });
+  // 占住视频槽位 → 音乐任务只能排队（排队期间被停止时工具根本不会跑）
+  const gate = globalThis.__infiniteCreationVideoGate;
+  const before = gate.slots;
+  gate.slots = 99;
+  try {
+    const job = startMusicJob({ projectId: p.id, assetId: a.id });
+    assert.equal(Jobs.get(job.id).status, 'queued');
+    stopJob(job.id);
+    assert.equal(await waitJob(job.id), 'cancelled');
+    assert.equal(Assets.get(a.id).status, 'failed', '工具没跑起来，资产必须从 generating 复位，否则音乐列表永远显示「生成中」且无法重试');
+  } finally {
+    gate.slots = before;
+  }
+  Projects.remove(p.id);
+});
+
 test('apply_chapter_music：单章合并失败不中断其余章节', async () => {
   const p = mkProject('应用BGM批量项目');
   Chapters.create(p.id, { title: '第2章' });

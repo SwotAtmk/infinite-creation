@@ -867,16 +867,47 @@ test('Assets.usageOf：能看出子变体与被分镜引用（用途切换/删�
   const ch = withWriteContext('POST /api/projects/:id/assets', () => Assets.create(p.id, { category: 'character', name: '甲' }));
   const costume = withWriteContext('POST /api/projects/:id/assets', () => Assets.create(p.id, { category: 'costume', name: '甲-礼服', parent_id: ch.id }));
   const prop = withWriteContext('POST /api/projects/:id/assets', () => Assets.create(p.id, { category: 'prop', name: '剑' }));
+  const voice = withWriteContext('POST /api/projects/:id/assets', () => Assets.create(p.id, { category: 'voice', name: '甲的旁白' }));
   assert.deepEqual(Assets.usageOf(ch.id), { children: 1, shotIds: [] }, '角色挂着 1 个服装变体');
   assert.deepEqual(Assets.usageOf(prop.id), { children: 0, shotIds: [] }, '没被引用的道具干净');
   const s = withWriteContext('PUT /api/projects/:id/chapters/:cid/storyboard', () => Shots.create(p.id, { chapter: '第1章', idx: 1, visual: 'A', character_ids: [ch.id], costume_ids: [costume.id] }));
   assert.deepEqual(Assets.usageOf(ch.id), { children: 1, shotIds: [s.id] });
   assert.deepEqual(Assets.usageOf(costume.id), { children: 0, shotIds: [s.id] }, '变体本身无子，但有分镜引用');
-  Shots.update(s.id, { audio_ids: [prop.id] });
-  assert.deepEqual(Assets.usageOf(prop.id), { children: 0, shotIds: [s.id] }, 'audio_ids 里的引用同样算占用');
+  Shots.update(s.id, { audio_ids: [voice.id] });
+  assert.deepEqual(Assets.usageOf(voice.id), { children: 0, shotIds: [s.id] }, 'audio_ids 里的引用同样算占用');
   Shots.remove(s.id);
   assert.deepEqual(Assets.usageOf(ch.id), { children: 1, shotIds: [] }, '分镜删掉后不再算被引用');
   Projects.remove(p.id);
+});
+
+test('分镜素材绑定：写入时丢弃「不存在 / 分类不符 / 跨项目」的 id（界面整条写回不会因此被卡住）', () => {
+  const p = mkProject('绑定归一化项目');
+  const ch = Assets.create(p.id, { category: 'character', name: '甲' });
+  const scene = Assets.create(p.id, { category: 'scene', name: '街道' });
+  const voice = Assets.create(p.id, { category: 'voice', name: '甲的旁白' });
+  // create：错类（场景塞进 character_ids）与不存在的 id 都不进库，字段对得上的照常落库
+  const s = Shots.create(p.id, { chapter: '第1章', idx: 1, visual: 'A', character_ids: [ch.id, scene.id, 'no-such'], scene_ids: [scene.id] });
+  assert.deepEqual(Shots.get(s.id).character_ids, [ch.id]);
+  assert.deepEqual(Shots.get(s.id).scene_ids, [scene.id]);
+
+  // 删素材会留下悬空 id（shots 的绑定不随素材删除清理），而界面保存写的是**整条数组**：
+  // 旧行为把这些 id 原样写回库（读回去的 API 数据看着像绑上了），且用户没有任何入口能删掉它。
+  Assets.remove(ch.id);
+  const after = Shots.update(s.id, { character_ids: [ch.id], audio_ids: [voice.id, ch.id] });
+  assert.deepEqual(after.character_ids, [], '悬空 id 被丢掉');
+  assert.deepEqual(after.audio_ids, [voice.id], '混进音频字段的角色 id 同样丢掉');
+
+  // 跨项目的 id（拿错 projectId 复制）同理丢掉
+  const p2 = mkProject('绑定归一化项目2');
+  const ch2 = Assets.create(p2.id, { category: 'character', name: '乙' });
+  assert.deepEqual(Shots.update(s.id, { character_ids: [ch2.id] }).character_ids, []);
+
+  // 只改别的字段（没提绑定字段）时不动存量：历史脏 id 不连累无关编辑
+  core.getDb().prepare('UPDATE shots SET character_ids = ? WHERE id = ?').run(JSON.stringify([ch2.id]), s.id);
+  assert.deepEqual(Shots.update(s.id, { camera: '推近' }).character_ids, [ch2.id], '没提该字段就不动它');
+
+  // 归一化只发生在 db 写入层，回滚（原生 SQL 复原整行）不受影响
+  Projects.remove(p.id); Projects.remove(p2.id);
 });
 
 test('回滚：不存在的 log_id/batch_id 报错，不假装「回滚成功」', () => {

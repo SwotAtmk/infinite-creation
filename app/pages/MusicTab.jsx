@@ -16,7 +16,10 @@ export default function MusicTab({ projectId, chapters, running, onRefresh }) {
   const [genOpen, setGenOpen] = useState(false);
   const [genAssetId, setGenAssetId] = useState(null); // null=新建，否则编辑/重生成该资产
   const [genForm, setGenForm] = useState({ name: '', caption: '', lyrics: '', max_duration: '' });
-  const [detailAsset, setDetailAsset] = useState(null);
+  // 详情弹窗只记 id、值从 assets 现取：以前存整个对象快照，弹窗打开后轮询/生成写回的
+  // 新状态（生成中→完成、新写入的 audio_path）永远反映不到弹窗里，用户看着「生成中」停在原地。
+  const [detailId, setDetailId] = useState(null);
+  const detailAsset = detailId ? assets.find((a) => a.id === detailId) || null : null;
   const [applyTarget, setApplyTarget] = useState(null);
   const [applySelection, setApplySelection] = useState([]);
   const [busy, setBusy] = useState(null);
@@ -91,7 +94,9 @@ export default function MusicTab({ projectId, chapters, running, onRefresh }) {
     setBusy('正在应用背景音乐并合成成片…');
     try {
       await api.post('/api/projects/' + projectId + '/music/apply', { music_id: applyTarget, chapters: applySelection });
-      toast.success('已应用背景音乐并重新合成成片，可到「🎞 成片」页预览');
+      // 这里只提交了任务：逐章写 music_path + ffmpeg 合并在后台跑，单章失败会记在任务详情里
+      // （全部章节失败时任务会记为失败）。不能提前宣称「已重新合成成片」。
+      toast.success('已提交背景音乐应用，逐章进度与失败原因见「运行日志」，合成完成后可在「🎞 成片」页预览');
       setApplyTarget(null);
       setApplySelection([]);
       load();
@@ -137,7 +142,7 @@ export default function MusicTab({ projectId, chapters, running, onRefresh }) {
                       : <div className="muted" style={{ fontSize: 12 }}>{isGenerating ? '生成中…' : '（无音频文件）'}</div>}
                     <span className="muted">{a.category}</span>
                     <div className="row" style={{ gap: 4, marginTop: 2 }}>
-                      <Button size="sm" variant="flat" onPress={() => setDetailAsset(a)}>详情</Button>
+                      <Button size="sm" variant="flat" onPress={() => setDetailId(a.id)}>详情</Button>
                       {!isGenerating && <Button size="sm" variant="flat" onPress={() => openEdit(a)}>编辑</Button>}
                       {st === 'failed' && <Button size="sm" variant="flat" color="warning" isDisabled={running} onPress={() => retryGenerate(a)}>重新生成</Button>}
                       {st === 'done' && a.audio_path && <Button size="sm" color="primary" isDisabled={running} onPress={() => openApply(a.id)}>应用到</Button>}
@@ -175,7 +180,7 @@ export default function MusicTab({ projectId, chapters, running, onRefresh }) {
       </Modal>
 
       {/* 详情弹窗 */}
-      <Modal isOpen={!!detailAsset} backdrop="blur" onClose={() => setDetailAsset(null)}>
+      <Modal isOpen={!!detailAsset} backdrop="blur" onClose={() => setDetailId(null)}>
         <ModalContent>
           {() => (
             <>
@@ -193,7 +198,7 @@ export default function MusicTab({ projectId, chapters, running, onRefresh }) {
                 </div>
               </ModalBody>
               <ModalFooter>
-                <Button size="sm" variant="flat" onPress={() => setDetailAsset(null)}>关闭</Button>
+                <Button size="sm" variant="flat" onPress={() => setDetailId(null)}>关闭</Button>
               </ModalFooter>
             </>
           )}

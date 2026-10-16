@@ -455,6 +455,16 @@ test('参考图白名单：前端选择器与后端校验共用一份（含无 M
   assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
 });
 
+test('背景音乐：只提交任务就不能宣称「已合成」；全部章节失败要让任务失败（源码守卫）', () => {
+  const mt = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'MusicTab.jsx'), 'utf8');
+  assert.ok(!/已应用背景音乐并重新合成成片/.test(mt), 'apply 只是提交后台任务，不能宣称已经重新合成完成');
+  assert.ok(/已提交背景音乐应用/.test(mt), 'apply 的成功提示必须说明「已提交」并把进度指向运行日志');
+  assert.ok(!/setDetailAsset/.test(mt), '详情弹窗不能存整个对象快照（轮询/生成写回的新状态反映不到弹窗）');
+  assert.ok(/const detailAsset = detailId \? assets\.find/.test(mt), '详情内容必须按 id 从最新 assets 派生');
+  const tools = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'tools.js'), 'utf8');
+  assert.ok(/results\.every\(\(r\) => r\.error\)/.test(tools), '全部章节失败时必须报失败，不能静默记 done');
+});
+
 test('isVariantAssetCategory: 只有服装/年龄算「挂在角色下的变体」', () => {
   assert.equal(isVariantAssetCategory('costume'), true);
   assert.equal(isVariantAssetCategory('age'), true);

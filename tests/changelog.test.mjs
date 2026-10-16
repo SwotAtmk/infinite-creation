@@ -794,6 +794,19 @@ test('回滚：不存在的 log_id/batch_id 报错，不假装「回滚成功」
 });
 
 // ==================== 第 3 轮审计：写入契约 ====================
+test('narration：内置 Agent 与外部写入 API 同口径，可写旁白', async () => {
+  const p = mkProject('分镜旁白项目');
+  const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
+  // narration 是 shots 表的正文列（外部写入 API 的 SHOT_STRING_FIELDS 一直收它）：
+  // 内置 Agent 漏了它时，模型按系统提示写旁白会整批 400。
+  await runTool(ctx, 'set_storyboard', { shots: [{ idx: 1, visual: '画面', narration: '她想起那年冬天。' }] });
+  const s = Shots.list(p.id)[0];
+  assert.equal(s.narration, '她想起那年冬天。');
+  await runTool(ctx, 'update_shot', { shot_id: s.id, narration: '改过的旁白。' });
+  assert.equal(Shots.get(s.id).narration, '改过的旁白。');
+  Projects.remove(p.id);
+});
+
 test('素材分类：值域外的分类必须拒绝（否则界面与批量生成都扫不到这一行）', () => {
   const p = mkProject('素材分类项目');
   assert.throws(() => Assets.create(p.id, { category: '不存在的分类', name: 'x' }), /素材分类不存在/);

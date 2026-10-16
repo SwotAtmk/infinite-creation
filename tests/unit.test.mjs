@@ -14,7 +14,7 @@ import {
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
@@ -500,6 +500,12 @@ test('UPLOAD_MAX_BYTES: 三档上传上限，视频 > 音频 > 图片且都装�
   assert.ok(UPLOAD_MAX_BYTES.video <= 512 * 1024 * 1024, '视频档也要能安全读进内存');
   // 上限必须覆盖 uploadMediaKind 的全部取值，否则 route 取到 undefined → 永远超限
   for (const kind of ['image', 'audio', 'video']) assert.ok(Number.isFinite(UPLOAD_MAX_BYTES[kind]));
+});
+
+test('SKILL_ZIP_MAX_BYTES: 技能包上传也要有上限（同一类 OOM 面）', () => {
+  // /api/skills/upload 同样把整个请求体读进内存再解压，没有上限时一个大文件即 OOM。
+  assert.equal(SKILL_ZIP_MAX_BYTES, 20 * 1024 * 1024);
+  assert.ok(SKILL_ZIP_MAX_BYTES >= 5 * 1024 * 1024, '正常技能包（几十 KB～几 MB）不能被误拦');
 });
 
 test('buildVisionUserMessage: 多模态 content 组装', () => {

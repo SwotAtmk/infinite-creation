@@ -458,6 +458,16 @@ test('参考图白名单：前端选择器与后端校验共用一份（含无 M
   assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
 });
 
+test('设置页：配置拉取失败不能永久停在「配置加载中…」（源码守卫）', () => {
+  const sp = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'SettingsPage.jsx'), 'utf8');
+  // 原先只 catch 弹一次 toast：cfg 一直是 null → 页面永远停在加载态、也没有「返回」按钮，
+  // 用户既看不到原因也退不出去（只能刷浏览器）。
+  assert.ok(/setLoadErr\(e\.message/.test(sp), '拉取配置失败要把原因记下来');
+  assert.ok(/配置加载失败：\{loadErr\}/.test(sp), '失败态要把原因显示出来');
+  assert.ok(/onPress=\{loadConfig\}>重试/.test(sp), '失败态要有「重试」');
+  assert.ok(/onPress=\{onBack\}>返回/.test(sp), '失败态要有「返回」出口');
+});
+
 test('运行日志：完整日志按「目标任务 id」取，不随 jobs 数组引用反复重取（源码守卫）', () => {
   const ct = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ConsoleTab.jsx'), 'utf8');
   // jobs 每次 loadProject 都是新数组（运行中 2.5s 一次 + 每条 WS 消息），当依赖会让

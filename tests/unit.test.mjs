@@ -1493,3 +1493,15 @@ test('set_storyboard：工具描述与「章节必须存在」的校验同口径
   assert.doesNotMatch(sb.function.description, /chapter 传章节号/, '不能再写「章节号」——校验不接受纯序号');
 });
 
+test('资产图阶段：批量出图排在换装/年龄兜底之前（兜底是图生图，要先有角色 canonical 图）', () => {
+  // 兜底（hChangeOutfit / hChangeAge）在角色 canonical 图不存在时直接抛「角色参考图不存在」。
+  // 它原先排在批量出图之前 → 新项目首次跑资产图阶段时每个变体都失败（只落进 notes），要再跑
+  // 一次才生效；顺序反了不报错，所以只能钉住源码顺序。
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'stages.js'), 'utf8');
+  const stage = src.slice(src.indexOf('async image(ctx)'));
+  const batch = stage.indexOf("'generate_assets_batch'");
+  const prov = stage.indexOf('resolveShotProvisions');
+  assert.ok(batch > -1 && prov > -1, '资产图阶段应同时包含批量出图与换装/年龄兜底');
+  assert.ok(batch < prov, '必须先批量出图，再跑换装/年龄兜底');
+});
+

@@ -1187,6 +1187,37 @@ test('非变体分类不得带 parent_id（否则会被当子变体级联删、�
   Projects.remove(p.id);
 });
 
+test('改分类离开变体分类（costume/age → 其它）必须清掉 parent_id，否则会被当子变体级联删', () => {
+  const p = mkProject('变体改分类项目');
+  const ch = Assets.create(p.id, { category: 'character', name: '小明' });
+  const c = Assets.create(p.id, { category: 'costume', name: '城里旧衣', parent_id: ch.id });
+  assert.equal(Assets.usageOf(ch.id).children, 1, '变体应计入 children');
+
+  // 服装 → 道具：已经不是变体，父指针必须一并清掉。
+  // 旧行为留着它：parent_id 只对变体有意义，留着就会让这条道具被 Assets.remove 当子变体
+  // 级联删（删角色时道具一起消失），并被 usageOf 计成 children（删除确认里冒出假「子变体」）。
+  const prop = Assets.update(c.id, { category: 'prop' });
+  assert.equal(prop.category, 'prop');
+  assert.equal(prop.parent_id, '');
+  assert.equal(Assets.usageOf(ch.id).children, 0, '不再是变体就不该计进 children');
+  assert.deepEqual(Assets.usageOf(ch.id).shotIds, []);
+
+  // 变体之间互改（服装 ↔ 年龄）必须保留父：那是同一个角色的两个变体
+  const c2 = Assets.create(p.id, { category: 'costume', name: '礼服', parent_id: ch.id });
+  assert.equal(Assets.update(c2.id, { category: 'age' }).parent_id, ch.id);
+
+  // 非变体 → 变体仍走「必须有父」守卫，不能靠改分类绕开
+  assert.throws(() => Assets.update(prop.id, { category: 'costume' }), (e) => e.code === 'BAD_VARIANT_PARENT');
+  assert.equal(Assets.get(prop.id).category, 'prop', '被拒的改分类不许改库');
+
+  // 只改名字（没主动动 category）不该连累存量：父指针维持原样
+  const legacy = Assets.create(p.id, { category: 'prop', name: '旧道具' });
+  core.getDb().prepare('UPDATE assets SET parent_id = ? WHERE id = ?').run(ch.id, legacy.id);
+  Assets.update(legacy.id, { name: '旧道具（改名）' });
+  assert.equal(Assets.get(legacy.id).parent_id, ch.id, '没提 category 就不动它');
+  Projects.remove(p.id);
+});
+
 test('参考素材上传：走渲染后端分派层（RunningHub 下必须传到云端并用平台 fileName）', async () => {
   const p = mkProject('参考素材后端分派项目');
   const abs = path.join(projectDir(p.id), 'assets/character/x.png');

@@ -489,6 +489,19 @@ test('textMentions: 短名不被同场更长角色名吞掉（换装/年龄变�
   assert.equal(textMentions('小明换上新衣', '', names), false);
 });
 
+test('提交生成：失败必须抛给调用方（不再吞错后照弹「已提交」）+ 分阶段加载失败要可见', () => {
+  const pv = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ProjectView.jsx'), 'utf8');
+  assert.ok(/await api\.post\('\/api\/projects\/' \+ id \+ '\/run'/.test(pv), 'run 仍要提交 /run');
+  // run 的函数体里不能有 catch：一旦吞掉失败，调用方拿不到信号就会照弹「已提交…生成」
+  const runBody = pv.slice(pv.indexOf('async function run(chapter)'), pv.indexOf('async function stop('));
+  assert.ok(runBody.length > 0 && !/catch/.test(runBody), 'ProjectView.run 不该吞掉 /run 的失败（调用方会照弹「已提交…生成」）');
+  const cv = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ChaptersView.jsx'), 'utf8');
+  assert.ok(/await onRun\(title\)/.test(cv), '章节卡片的「生成」必须走带 catch 的 submitRun');
+  assert.ok(!/onRun\(c\.title\)/.test(cv), '不该再有裸 onRun(c.title) 的入口（错误会变成未处理拒绝、点了没反应）');
+  const co = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ChapterOps.jsx'), 'utf8');
+  assert.ok(/stageLoadErr/.test(co), '分阶段待办拉取失败要有提示，不能永远停在「加载中…」');
+});
+
 test('短名串扰：换装/年龄归属都走 textMentions（源码守卫）', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'tools.js'), 'utf8');
   assert.ok(!/charIds\.length === 1 \|\| text\.includes\(char\.name\)/.test(src), 'tools.js 不应再用 text.includes(char.name) 判角色归属');

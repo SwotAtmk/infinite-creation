@@ -138,7 +138,14 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
 
   useEffect(() => { loadProject(); }, [loadProject]);
 
-  async function run(chapter) { try { await api.post('/api/projects/' + id + '/run', chapter ? { chapter } : {}); setEvents([]); loadProject(); } catch (e) { toast.error(e.message); } }
+  // 提交生成：失败时把错误**抛给调用方**，不再自己吞掉。此前这里 catch 后只弹一次错误，
+  // 调用方（ChapterOps 的「生成/继续」、ChaptersView 的「生成」）拿不到失败信号，
+  // 于是紧接着又弹一条「已提交…生成」——用户看到自相矛盾的两条提示，还以为真的跑起来了。
+  async function run(chapter) {
+    await api.post('/api/projects/' + id + '/run', chapter ? { chapter } : {});
+    setEvents([]);
+    loadProject();
+  }
   async function stop() { try { await api.post('/api/projects/' + id + '/stop'); loadProject(); } catch (e) { toast.error(e.message); } }
   async function cancelJob(jid) { try { await api.post('/api/projects/' + id + '/jobs/' + jid + '/cancel'); loadProject(); } catch (e) { toast.error(e.message); } }
   // 删除任务记录（活动任务由后端先取消再删记录；不删素材/成片）

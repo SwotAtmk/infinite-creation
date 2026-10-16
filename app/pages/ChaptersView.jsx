@@ -78,7 +78,12 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
     } catch (e) { toast.error(e.message); } finally { setAdding(false); }
   }
   async function runAll() {
-    try { await onRun(null); } catch (e) { toast.error(e.message); }
+    await submitRun(null);
+  }
+  // 「生成/继续」的唯一入口：onRun（ProjectView.run）现在会把失败抛出来，这里统一提示，
+  // 成功才由各按钮自己继续（旧写法 onRun 吞掉错误 + 调用方照弹「已提交」= 假成功提示）。
+  async function submitRun(title) {
+    try { await onRun(title); } catch (e) { toast.error(e.message); }
   }
   async function removeChapter(c) {
     if (!(await toast.confirm('删除「' + c.title + '」及其分镜？此操作不可逆。', { danger: true }))) return;
@@ -194,7 +199,7 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
                       <Chip size="sm" variant="flat" color={statusColor(c.genStatus)}>{label[c.genStatus] || c.status}{c.shotCount > 0 ? ' · ' + c.doneCount + '/' + c.shotCount : ''}</Chip>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" color={running ? 'danger' : 'success'} variant="flat" className="flex-1" onPress={() => (running ? onStop() : onRun(c.title))}>
+                      <Button size="sm" color={running ? 'danger' : 'success'} variant="flat" className="flex-1" onPress={() => (running ? onStop() : submitRun(c.title))}>
                         {running ? '■ 停止' : '▶ 生成'}
                       </Button>
                       <Button size="sm" color="primary" variant="flat" className="flex-1" onPress={() => openEdit(c)}>编辑</Button>

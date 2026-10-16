@@ -498,3 +498,35 @@ CREATE INDEX IF NOT EXISTS idx_change_logs_project ON change_logs(project_id, ts
 - 回归：上一轮全套探针重跑全绿（audit-e2e 88/0、refguard 15/0、r4 6/0、r4-probe2 6/0、malformed 5/0、r6-llm 5/0、r7-upload 20/0、r7-skills 5/0、range「失败 0 项」、r8-parent 31/0、r9-skills 7/0、r9-rollback 11/0、r10-delstop 11/0、r10-bind 11/0）。改到 `lib/agent/job-runner.js` 后重启过 dev 实例；`gate.holders` 用 `gate.holders = gate.holders || new Set()` 补默认值，兼容 dev 模式下被复用的旧 `gate` 对象（上一轮留的实例不会再出现「有槽位、无持有者集合」）。
 
 
+
+## 十九、第十二～十三轮：干净轮 + 确认轮（2026-10-16，dev7）
+
+第十二轮（新一轮审计）与第十三轮（确认轮）**都没有发现需要修复的项**。按前几轮的约定把「核对过、判定不改」的新增项记录下来，免得下一轮重复挖。
+
+### 第十二轮核对过、判定不改
+
+| 位置 | 核对的事 | 判定 |
+|------|----------|------|
+| `chapters/[cid]/route.js` PATCH | 章节标题是**业务键**（分镜按 `shots.chapter` = 章节标题归属），而 `Chapters.update` 自己**不级联**改名 | 不改：级联在**路由层**（`withWriteContext` + `tx` 内逐条 `Shots.update` 把该章分镜一起改名并留档，`before.title !== updated.title` 才算改名）。已覆盖唯一的改名入口——内置 Agent 没有改章节标题的工具，界面「编辑章节」走的也是这条 PATCH。**注意**：日后若给 `Chapters.update` 添别的调用方能改 `title`，必须同时补级联 |
+| `lib/agent/tools.js` 章节工具 | 有没有工具能绕过路由改 title | 不改：只有 `list_chapters` / `set_storyboard` / `set_chapter_music` / `generate_chapter_videos` / `apply_chapter_music`，`Chapters.update` 在 Agent 里只写 `music_prompt` / `music_path` |
+| `assets/[aid]/upload` POST | 全仓唯一一处 `Assets.update` 却**没有** `withWriteContext` 的写路由 | 不改：它写的 `image_path` / `audio_path` / `voice_ref` / `status` 都在 `VOLATILE.asset` 里（渲染产物，本就不进变更日志）；只有 `source: 'uploaded'` 会"漏"一次留档，影响仅是「回滚不会把 source 改回 generated」，无业务后果 |
+| `activeJobOf`（`/run`、`/stages`、删章节、删分镜、整章重写分镜） | 判据是「本项目有 running/queued 任务」，**行内任务**（`llm` 参考图分析、`export` 按章导出）也算 | 不改（保守过度拦截）：`/run`、`/stages` 用宽口径是对的（本地 27B 权重与行内 LLM 任务会抢显存）；内容写入那三条在用户刚好导出/传参考图时会被挡几秒到几十秒，代价是「重试一次」，而放宽要先定义「哪些任务会回写内容行」的清单，引入的风险比收益大 |
+| `lib/core/runninghub.js` | `interruptTask(cfg)` 无 taskId 时云端是空操作 | 不改（既有设计）：RunningHub 的取消靠 `generate` 内部轮询到 `isAborted` 再 `runninghubCancel(taskId)`。第十一轮修的「取消行内任务误杀渲染任务」在云端本来就不成立（空操作吞掉），那条修的是原生 ComfyUI |
+
+### 第十三轮核对过、判定不改
+
+- `server.js` 的 `/files/*`：`path.resolve` + `path.relative(PROJECTS_DIR, abs)`，`..` 开头/绝对路径/空一律拒 → 目录穿越（含 `%2e%2e` 与 `GET //`）都被挡住；仍保留既有限制「不限返回体积」。
+- `lib/ws.js`：广播函数与停止注册表、渲染闸门同一手法挂 `globalThis`；`broadcast` 无广播者时空转，不抛。
+- `shots` 的 POST / PATCH：`idx` 是章内唯一键——显式给 `idx`（含「改 idx 顺带换章」时按**目标章节**判）都要过 `idxTakenBy`；`chapter` 必须已存在，否则 400，不产出界面上看不见的孤儿分镜。
+- `PUT /api/projects/:id/context`：`{key,content}` 与 `{bible,style,continuity}` 两种入参都支持，`continuity` 走追加式 JSON 数组；键来自 `lib/shared` 的 `CONTEXT_KEYS`（单一事实来源），落盘 `context/*.md` 与 DB 同步。
+- `lib/core/comfyui.js` 的 WS `onmessage`：`JSON.parse` 在 `try/catch` 内（畸形帧不会带崩进程）；`llm.js` 的 JSON 抽取失败由调用方重试兜底。
+
+### 确认轮（第十三轮）验证口径
+
+- 单测 **178/178**（与第十一轮一致，两轮无代码改动）。
+- 全套探针重跑全绿：audit-e2e 88/0、refguard 15/0、r4 6/0、r4-probe2 6/0、malformed 5/0、r6-llm 5/0、r7-upload 20/0、r7-skills 5/0、range「失败 0 项」、r8-parent 31/0、r9-skills 7/0、r9-rollback 11/0、r10-delstop 11/0、r10-bind 11/0、r11-inline-cancel 18/0。
+- 前端整图编译：`GET /` **200**（24524 字节）。
+- 临时项目清理：`ic-cleanup-projects.mjs` 前缀补 `IC-R11-` 后实删 **14/0**，真实库只剩用户项目「白衣审判」。
+- 十二、十三两轮均无代码改动 → `dev7` HEAD 停在第十一轮的 `f6e5cc0`（本轮共 2 个提交），仍无 upstream、未推送。
+
+

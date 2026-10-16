@@ -5,13 +5,13 @@ import path from 'node:path';
 import { Projects, ReferenceImages, Assets, Chapters, resolveProjectPath, slugify, uid, ensureProjectDirs, loadConfig, llmChat, extractJson, buildVisionUserMessage, logger, withWriteContext } from '@/lib/core/index.js';
 import { runInlineJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
-import { PROJECT_ASSET_SUBDIRS, ASSET_CATEGORY_IDS } from '@/lib/shared/index.js';
+import { PROJECT_ASSET_SUBDIRS, ASSET_CATEGORY_IDS, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
-const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+const IMAGE_EXTS = new Set(REFERENCE_IMAGE_EXTS);
 const IMAGE_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = REFERENCE_IMAGE_MAX_BYTES;
 const MAX_IMAGES = 9;
 
 // 用 LLM 视觉模型分析上传图片，返回 { name, category, description }；

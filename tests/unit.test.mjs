@@ -14,7 +14,7 @@ import {
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt } from '../lib/agent/tools.js';
@@ -431,6 +431,28 @@ test('dialogueSpeakerNames: 解析说话人 + 约束常量', () => {
   assert.deepEqual(dialogueSpeakerNames('小明:现在是3:30了'), ['小明']);
   assert.equal(MAX_SPEAKERS_PER_SHOT, 2);
   assert.equal(MAX_AUDIO_REFS, 3);
+});
+
+test('参考图白名单：前端选择器与后端校验共用一份（含无 MIME 的合法 png）', () => {
+  assert.equal(isReferenceImageName('a.png'), true);
+  assert.equal(isReferenceImageName('b.JPG'), true);
+  assert.equal(isReferenceImageName('c.jpeg'), true);
+  assert.equal(isReferenceImageName('d.webp'), true);
+  assert.equal(isReferenceImageName('e.gif'), true);
+  // 后端只认这五种：前端不该再把它们放进去（选中→上传→400）
+  assert.equal(isReferenceImageName('f.bmp'), false);
+  assert.equal(isReferenceImageName('g.avif'), false);
+  assert.equal(isReferenceImageName('h.svg'), false);
+  assert.equal(isReferenceImageName('没有扩展名'), false);
+  assert.equal(isReferenceImageName(''), false);
+  assert.equal(isReferenceImageName(null), false);
+  assert.equal(REFERENCE_IMAGE_MAX_BYTES, 10 * 1024 * 1024);
+  const route = fs.readFileSync(path.join(__dirname, '..', 'app', 'api', 'projects', '[id]', 'references', 'route.js'), 'utf8');
+  assert.ok(/REFERENCE_IMAGE_EXTS/.test(route) && /REFERENCE_IMAGE_MAX_BYTES/.test(route), '路由必须用共享白名单/上限');
+  assert.ok(!/const IMAGE_EXTS = new Set\(\['/.test(route), '路由不该再自带一份扩展名白名单');
+  const picker = fs.readFileSync(path.join(__dirname, '..', 'app', 'pages', 'ReferencePicker.jsx'), 'utf8');
+  assert.ok(/isReferenceImageName\(file\.name\)/.test(picker), '选择器必须与后端同口径判定');
+  assert.ok(!/file\.type\.startsWith\('image\/'\)/.test(picker), '选择器不该再按 MIME 前缀过滤（无 type 的合法 png 会被静默丢掉）');
 });
 
 test('isVariantAssetCategory: 只有服装/年龄算「挂在角色下的变体」', () => {

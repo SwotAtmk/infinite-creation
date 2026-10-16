@@ -776,3 +776,19 @@ test('Assets.usageOf：能看出子变体与被分镜引用（用途切换/删�
   assert.deepEqual(Assets.usageOf(ch.id), { children: 1, shotIds: [] }, '分镜删掉后不再算被引用');
   Projects.remove(p.id);
 });
+
+test('回滚：不存在的 log_id/batch_id 报错，不假装「回滚成功」', () => {
+  const p = mkProject('回滚空目标项目');
+  assert.throws(() => rollbackLogs({ projectId: p.id, logId: 'nope' }), (e) => e.code === 'BAD_TARGET', 'log_id 不存在 → BAD_TARGET');
+  assert.throws(() => rollbackLogs({ projectId: p.id, batchId: 'nope' }), (e) => e.code === 'BAD_TARGET', 'batch_id 不存在 → BAD_TARGET');
+  // 本项目存在的 log_id 但要撤的行已不属于本项目：仍按「查不到」处理
+  const other = mkProject('回滚空目标项目2');
+  const logOfOther = listChanges(other.id, { limit: 500 })[0];
+  assert.throws(() => rollbackLogs({ projectId: p.id, logId: logOfOther.id }), (e) => e.code === 'BAD_TARGET', '别的项目的日志 → BAD_TARGET');
+  // since_ts 没有内容变更是合法空结果，不报错
+  const r = rollbackLogs({ projectId: p.id, sinceTs: Date.now() + 60000 });
+  assert.deepEqual(r.applied, []);
+  assert.equal(r.blocked, false);
+  Projects.remove(p.id);
+  Projects.remove(other.id);
+});

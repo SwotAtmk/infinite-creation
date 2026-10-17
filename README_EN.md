@@ -194,12 +194,14 @@ Configuration is saved to `config.json` at the root (not committed). Generation 
 
 Before running this project for the first time, you must install ComfyUI. If you haven't, download and install it from the official ComfyUI site, or use the one-click install package I provide via the cloud-disk link (it includes all models and workflows used). My one-click package currently supports Windows only; Mac users are advised to install manually from the official site, download the models, and run through all the sample workflows.
 
+**Disclaimer for third-party services: The ComfyUI one click integration package was created by a third-party expert at my expense, and may contain some related issues related to third-party websites. Please carefully check to avoid being deceived and do not trust anyone who adds your contact information**
 ```txt
 I've shared "无限创作-ComfyUI一键安装部署" (Infinite Creation - ComfyUI one-click install) with you on Quark cloud disk. Click the link or copy the whole content and open the "Quark APP" to get it.
 /~c2d03b8qfM~:/
 Link: https://pan.quark.cn/s/ed2afd0f6a4f?pwd=GVZe
 Extraction code: GVZe
 ```
+It is recommended that those who have ComfyUI related technology can install and complete the relevant plugins and models themselves, and run the relevant workflows in the comfyui_originalw_workflows folder. Note: distinguish the workflows of Nvidia NVIDIA graphics cards and AMD graphics cards
 
 Before using this Agent project tool, it's recommended to manually run all workflows in ComfyUI first (i.e., run through every workflow in the `comfyui_original_workflows/` directory), after which the Agent project tool can perform fully automated generation.
 

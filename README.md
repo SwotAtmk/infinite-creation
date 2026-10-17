@@ -196,12 +196,14 @@ pnpm run build && pnpm start
 
 在首次运行项目前，必须先安装ComfyUI工具，如果没有安装的可以先到Comfyui官网下载安装，或者使用我提供的网盘链接一键安装包进行安装（一键安装包中包含所有工作流中用到的模型和工作流），我的一键安装包目前仅支持Windows系统，Mac系统建议到官网进行手动安装，并下载模型和跑通所有示例工作流。
 
+**第三方服务免责声明：ComfyUI一键整合包是我花钱请第三方大佬做的，可能会包含第三方网站的涉及一些相关问题，请仔细查验以免被骗，不要相信任何加你联系方式的人**
 ```txt
 我用夸克网盘给你分享了「无限创作-ComfyUI一键安装部署」，点击链接或复制整段内容，打开「夸克APP」即可获取。
 /~c2d03b8qfM~:/
 链接：https://pan.quark.cn/s/ed2afd0f6a4f?pwd=GVZe
 提取码：GVZe
 ```
+建议如果有ComfyUI相关技术的可以自行安装并补全相关插件和模型，跑通comfyui_original_workflows文件夹下的相关工作流，注意：区分英伟达NVIDIA显卡和AMD显卡的工作流
 
 在使用此Agent项目工具之前，建议你先使用ComfyUI手动跑一遍所有工作流（即：跑通comfyui_original_workflows/目录下的所有工作流）之后使用Agent项目工具就能进行全自动生成。
 

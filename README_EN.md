@@ -192,7 +192,7 @@ Configuration is saved to `config.json` at the root (not committed). Generation 
 
 ### Required ComfyUI Workflows and Models
 
-Before running this project for the first time, you must install ComfyUI. If you haven't, download and install it from the official ComfyUI site, or use the one-click install package I provide via the cloud-disk link (it includes all models and workflows used). My one-click package currently supports Windows only; Mac users are advised to install manually from the official site, download the models, and run through all the sample workflows.
+Before running the project for the first time, it is necessary to install the ComfyUI tool. If it is not installed, you can download and install it from the Comfyui official website, or use the one click installation package provided by me (the one click installation package contains all the models and workflows used in the workflow). Currently, the one click installation package only supports Windows systems. It is recommended to manually install it from the official website for Mac systems, download the model, and run all the example workflows.
 
 **Disclaimer for third-party services: The ComfyUI one click integration package was created by a third-party expert at my expense, and may contain some related issues related to third-party websites. Please carefully check to avoid being deceived and do not trust anyone who adds your contact information**
 ```txt

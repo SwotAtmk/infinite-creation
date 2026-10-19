@@ -1,31 +1,8 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
-import fs from 'node:fs';
-import path from 'node:path';
 import { NextResponse } from 'next/server';
-import { Chapters, Shots, Projects, extractFrame, resolveProjectPath, withWriteContext, chapterStats, pickChapterFields } from '@/lib/core/index.js';
+import { Chapters, Shots, Projects, ensureChapterPoster, withWriteContext, chapterStats, pickChapterFields } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
-
-// 懒生成章节首帧预览图（存在即复用）：从章节第一个已完成分镜的视频抽首帧存为 jpg
-// 同一章节的抽取只允许一个在跑：GET /chapters 会被前端高频轮询（WS 每条进度都刷新 + 运行期每 2.5s 一次），
-// 少了这道闸门，同一张 posters/<章节id>.jpg 会被多个请求并发抽取/写入，既同时起一堆 ffmpeg，
-// 又可能写出半截文件——而「存在即复用」会让这张坏图被永久缓存下来。
-const posterInflight = new Set();
-async function ensurePoster(projectId, chapterId, firstDoneShot) {
-  const rel = 'posters/' + chapterId + '.jpg';
-  const abs = resolveProjectPath(projectId, rel);
-  if (!abs) return '';
-  if (fs.existsSync(abs)) return rel;
-  if (posterInflight.has(abs)) return '';
-  posterInflight.add(abs);
-  try {
-    const videoAbs = resolveProjectPath(projectId, firstDoneShot.video_path);
-    if (!videoAbs || !fs.existsSync(videoAbs)) return '';
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    await extractFrame(videoAbs, abs);
-    return fs.existsSync(abs) ? rel : '';
-  } catch { return ''; } finally { posterInflight.delete(abs); }
-}
 
 export async function GET(_req, { params }) {
   const { id } = await params;
@@ -35,7 +12,7 @@ export async function GET(_req, { params }) {
   for (const c of chs) {
     const shots = all.filter((s) => s.chapter === c.title);
     const firstDone = shots.find((s) => s.status === 'done' && s.video_path);
-    const poster = firstDone ? await ensurePoster(id, c.id, firstDone) : '';
+    const poster = firstDone ? await ensureChapterPoster(id, c.id, firstDone) : '';
     // 进度摘要走 lib/core 的唯一实现：分镜的「生成中」状态是 generating，不是 running
     // （早先这里内联判 running，永远不命中 → 正在出视频的章节被显示成「待生成」）
     const st = chapterStats(id, c.title);

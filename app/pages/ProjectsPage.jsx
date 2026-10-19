@@ -1,18 +1,38 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spinner, Switch } from '@heroui/react';
 import { api } from '../api-client.js';
-import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor, VIDEO_RESOLUTIONS, VIDEO_RATIOS } from './shared';
+import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor, fileUrl, VIDEO_RESOLUTIONS, VIDEO_RATIOS } from './shared';
 import ReferencePicker from './ReferencePicker';
 import LoadingOverlay from './LoadingOverlay';
 import { useToast } from '../toast';
 
+// 删除（垃圾桶）图标
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
 // ============ 项目列表 ============
+const PAGE_SIZE = 10;
+
 export default function ProjectsPage({ onOpen }) {
   const toast = useToast();
   const [projects, setProjects] = useState([]);
   // 首次加载标记：数据回来之前不要显示「暂无项目」，否则用户会误以为项目丢了
   const [loading, setLoading] = useState(true);
+  // 瀑布流分页：hasMore 决定是否还有下一页，loadingMore 防止滚动时重复请求
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const pageRef = useRef(1);
+  const sentinelRef = useRef(null);
   const [form, setForm] = useState({ name: '', novel: '', style: '' });
   const [customStyle, setCustomStyle] = useState('');
   const [vision, setVision] = useState(false);
@@ -25,12 +45,45 @@ export default function ProjectsPage({ onOpen }) {
   const [enableBgm, setEnableBgm] = useState(true);
   // 创建项目进行中：显示全屏加载层提示等待并阻断重复点击
   const [busy, setBusy] = useState(null);
-  const load = useCallback(() => api.get('/api/projects')
-    .then(setProjects)
-    .catch((e) => toast.error(e.message))
-    .finally(() => setLoading(false)), []);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    pageRef.current = 1;
+    return api.get('/api/projects?page=1&pageSize=' + PAGE_SIZE)
+      .then((r) => {
+        setProjects(r.items || []);
+        setHasMore(!!r.hasMore);
+      })
+      .catch((e) => toast.error(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const next = pageRef.current + 1;
+    return api.get('/api/projects?page=' + next + '&pageSize=' + PAGE_SIZE)
+      .then((r) => {
+        pageRef.current = next;
+        setProjects((prev) => [...prev, ...(r.items || [])]);
+        setHasMore(!!r.hasMore);
+      })
+      .catch((e) => toast.error(e.message))
+      .finally(() => setLoadingMore(false));
+  }, [loadingMore, hasMore]);
+
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {}); }, []);
+
+  // 滚动到底部（哨兵元素进入视口）时加载下一页
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) loadMore();
+    }, { rootMargin: '200px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore]);
 
   async function uploadReferences(projectId, chapterId) {
     for (const it of refs) {
@@ -145,17 +198,46 @@ export default function ProjectsPage({ onOpen }) {
               <span className="muted">项目加载中…</span>
             </div>
           )}
-          {!loading && projects.map((p) => (
-            <div key={p.id} className="row justify-between py-2 border-b border-default-100">
-              <div className="flex items-center gap-2">
-                <button onClick={() => onOpen(p.id)} className="bg-transparent border-0 p-0 text-[15px] cursor-pointer text-primary"> {p.name}</button>
-                <span className="muted">资产 {p.assetCount} · 分镜 {p.shotCount} ·</span>
-                <Chip size="sm" variant="flat" color={statusColor(p.status)}>{p.status || 'idle'}</Chip>
-              </div>
-              <Button size="sm" color="danger" variant="flat" onPress={() => del(p.id)}>删除</Button>
+          {!loading && (
+            // 卡片高度一致（16:9 预览 + 单行信息），用行优先的 grid 排布：
+            // CSS columns 是「先填满一列再填下一列」，10 条会摊成 3/3/2/2 列，末尾两行留空；
+            // grid 按从左到右、从上到下铺满，只有最后一行的剩余位置是空的。
+            <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
+              {projects.map((p) => (
+                <div key={p.id} className="border border-default-200 rounded-xl overflow-hidden flex flex-col bg-default-50 hover:shadow-md transition-shadow">
+                  <div className="relative">
+                    <button onClick={() => onOpen(p.id)} className="block w-full p-0 bg-transparent border-0 cursor-pointer">
+                      {p.poster
+                        ? <img src={fileUrl(p.id, p.poster)} alt={p.name} className="w-full aspect-video object-cover bg-black" />
+                        : <div className="w-full aspect-video bg-default-200 flex items-center justify-center text-default-500 text-sm">暂无预览</div>}
+                    </button>
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      color="danger"
+                      variant="flat"
+                      className="absolute top-2 right-2 z-10"
+                      onPress={() => del(p.id)}
+                      title="删除"
+                    ><TrashIcon /></Button>
+                  </div>
+                  <div className="flex flex-col gap-2 p-3">
+                    <button onClick={() => onOpen(p.id)} className="bg-transparent border-0 p-0 text-left text-[15px] font-medium cursor-pointer text-foreground truncate">{p.name}</button>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="muted">资产 {p.assetCount} · 分镜 {p.shotCount}</span>
+                      <Chip size="sm" variant="flat" color={statusColor(p.status)}>{p.status || 'idle'}</Chip>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
           {!loading && !projects.length && <p className="muted">暂无项目</p>}
+          <div ref={sentinelRef} className="flex items-center justify-center gap-2 py-3">
+            {loadingMore && <Spinner size="sm" />}
+            {!loading && hasMore && <span className="muted">{loadingMore ? '加载中…' : '向下滚动加载更多'}</span>}
+            {!loading && !hasMore && projects.length > 0 && <span className="muted">已经到底啦，没有更多项目了</span>}
+          </div>
         </CardBody>
       </Card>
       <LoadingOverlay show={!!busy} text={busy} />

@@ -22,6 +22,7 @@ English | [中文](README.md)
 
 ## Roadmap
 - [Ongoing] Addressing BUGs in the project
+- [In progress] For home-grade GPUs with low VRAM, the blogger's testing equipment is limited. More users are needed to help with testing and provide feedback to the repository's Issues. Please contribute your insights! 🙏
 - [In progress] Integrate the function of automatically generating video subtitles
 - [In progress] Address and optimize issues such as tool invocation security and context compression in internal agents
 - [In Progress] Integrating external agents, divided into standard and professional editions. The professional edition calls external agents for processing, while the standard edition includes an integrated agent module
@@ -216,7 +217,7 @@ Before using this Agent project tool, it's recommended to manually run all workf
 Open the link: https://www.runninghub.ai?inviteCode=zjt69ib3
 Register now and you can receive 500 RH coins, which can be used to generate plenty of images and videos for free!
 ```
-- Open the browser and navigate to [https://www.runninghub.ai/call-api/bill-task?tab=keys&type=consumer](https://www.runninghub.ai/call-api/bill-task?tab=keys&type=consumer) to obtain the RunningHub Api-Key
+- Open the browser and navigate to [https://www.runninghub.ai/call-api/bill-task?tab=keys&type=consumer&inviteCode=zjt69ib3](https://www.runninghub.ai/call-api/bill-task?tab=keys&type=consumer&inviteCode=zjt69ib3) to obtain the RunningHub Api-Key
 ![r2.png](images/r2.png)
 
 - Configure RunningHub Api-Key

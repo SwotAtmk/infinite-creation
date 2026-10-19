@@ -20,6 +20,7 @@
 
 ## 项目计划
 - [持续进行] 解决项目中存在的BUG
+- [计划中] 适配低显存的家用级显卡，博主的测试设备有限，需要更多的用户帮忙测试并反馈到仓库中的Issues多多反馈🙏🏻
 - [计划中] 接入自动生成视频字幕的功能
 - [计划中] 解决并优化内部Agent存在的工具调用安全及上下文压缩等……问题
 - [计划中] 接入外部Agent，分为普通版和专业版，专业版调用外部Agent进行处理，普通版内置集成Agent模块
@@ -196,7 +197,7 @@ pnpm run build && pnpm start
 
 在首次运行项目前，必须先安装ComfyUI工具，如果没有安装的可以先到Comfyui官网下载安装，或者使用我提供的网盘链接一键安装包进行安装（一键安装包中包含所有工作流中用到的模型和工作流），一键安装包目前仅支持Windows系统，Mac系统建议到官网进行手动安装，并下载模型和跑通所有示例工作流。
 
-**第三方服务免责声明：ComfyUI一键整合包是我花钱请第三方大佬做的，可能会包含第三方网站的涉及一些相关问题，请仔细查验以免被骗，不要相信任何加你联系方式的人**
+**第三方服务免责声明：ComfyUI一键整合包是我花钱请第三方大佬做的，可能会包含第三方网站涉及的一些相关问题，请仔细查验以免被骗，不要相信任何加你联系方式的陌生人**
 ```txt
 我用夸克网盘给你分享了「Windows无限创作-ComfyUI一键安装部署」，点击链接或复制整段内容，打开「夸克APP」即可获取。
 /~c2d03b8qfM~:/
@@ -214,11 +215,9 @@ pnpm run build && pnpm start
 - 如果本地电脑配置比较低无法运行的话，可以选择使用云端算力免费试用
 
 **领取RunningHub免费云端算力试用**
-```text
-打开链接：[https://www.runninghub.cn?inviteCode=6to0etcb](https://www.runninghub.cn?inviteCode=6to0etcb) 
-现在注册还能领500RH币，可以免费生成不少图片和视频哦！
-```
-- 浏览器打开 [https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer](https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer) 获取RunningHub Api-Key
+> 打开链接：https://www.runninghub.cn?inviteCode=6to0etcb 现在注册还能领500RH币，可以免费生成不少图片和视频哦！
+
+- 浏览器打开 [https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer](https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer&inviteCode=6to0etcb) 获取RunningHub Api-Key
 ![r2.png](images/r2.png)
 
 - 配置RunningHub Api-Key

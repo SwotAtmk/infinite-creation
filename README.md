@@ -85,15 +85,15 @@ CPU：12th Gen Intel(R) Core(TM) i5-12400F
 # 截图演示
 
 1. 项目首页
-   ![项目首页](images/j1.png)
+   ![项目首页](images/j1.jpg)
 2. 章节管理
-   ![章节管理](images/j2.png)
+   ![章节管理](images/j2.jpg)
 3. 服务配置
-   ![服务配置](images/j3.png)
+   ![服务配置](images/j3.jpg)
 4. 技能管理
    ![技能管理](images/j4.png)
 5. 资产管理
-   ![资产管理](images/j5.png)
+   ![资产管理](images/j5.jpg)
 6. 运行日志
    ![运行日志](images/j6.png)
 7. 分镜审查

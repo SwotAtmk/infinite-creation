@@ -221,12 +221,17 @@ test('isPresetWorkflows: 仅当映射恰好等于某模式预设时为真（前�
   assert.equal(isPresetWorkflows(null), false);
 });
 
-test('comfyBaseUrl: native 返回原地址，runninghub 返回固定域名', () => {
+test('comfyBaseUrl: native 返回原地址，runninghub 返回固定域名，api 不显示本机地址', () => {
   assert.equal(comfyBaseUrl({ comfyui: { provider: 'native', baseUrl: 'http://127.0.0.1:8188' } }), 'http://127.0.0.1:8188');
   assert.equal(comfyBaseUrl({ comfyui: { provider: 'runninghub', apiKey: 'abc123', tier: 'standard' } }), 'https://www.runninghub.cn');
   assert.equal(comfyBaseUrl({ comfyui: { provider: 'runninghub', apiKey: 'abc123', tier: 'plus' } }), 'https://www.runninghub.cn');
   assert.equal(comfyBaseUrl({ comfyui: { provider: 'runninghub', apiKey: '', tier: 'standard' } }), 'https://www.runninghub.cn');
   assert.equal(comfyBaseUrl(null), 'http://127.0.0.1:8188');
+  // api 模式下 baseUrl 里残留的是本机地址，展示出来会让人误以为还在连本机显卡
+  const apiShown = comfyBaseUrl({ comfyui: { provider: 'api', baseUrl: 'http://127.0.0.1:8188' } });
+  assert.ok(!apiShown.includes('8188'), '云端模式不该显示本机端口，实际：' + apiShown);
+  assert.match(apiShown, /云端/);
+  assert.ok(!maskComfyBaseUrl({ comfyui: { provider: 'api', baseUrl: 'http://127.0.0.1:8188' } }).includes('8188'));
 });
 
 test('maskComfyBaseUrl: RunningHub 脱敏 apiKey，native 原样返回', () => {
@@ -851,3 +856,503 @@ test('inferVoiceBaseline: 推断不出性别（中性/冲突）返回空串，�
   // 性别词冲突（如「男主角的女友」同时含男女）：保守返回空，避免给错性别
   assert.equal(inferVoiceBaseline('某角色', '男主角的女友，温柔'), '');
 });
+
+// —— 云端商业 API 适配层（OpenAI 兼容生图/视频 + 小米 MiMo 配音）——
+const {
+  isCloudApi, cloudGenerate, cloudCheck, cloudLocalRef, cloudDownload, listModels,
+  outItem, abortedError, readMediaBase64, saveTempMedia, tolerantPick,
+  sizeForImageApi, withRetry,
+} = await import('../lib/core/cloud-api.js');
+const { sizeForVideoApi } = await import('../lib/core/cloud-video.js');
+
+// 假密钥 + fetch mock，绝不打真实网络（那是用户掏钱的接口）
+const imgCfg = () => ({ mediaApi: { image: { baseUrl: 'https://x.test/v1', apiKey: 'k', model: 'gpt-image-2.5' } } });
+const vidCfg = () => ({ mediaApi: { video: { baseUrl: 'https://x.test/v1', apiKey: 'k', model: 'grok-imagine-video-1.5-fast' } } });
+const ttsCfg = (over = {}) => ({
+  mediaApi: { tts: { baseUrl: 'https://x.test/v1', apiKey: 'k', model: 'mimo-v2.5-tts-voicedesign', voiceId: '', ...over } },
+});
+const jsonRes = (obj, status = 200) => ({ ok: status < 400, status, text: async () => JSON.stringify(obj) });
+const bufRes = (b, status = 200) => ({
+  ok: status < 400,
+  status,
+  arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength),
+  text: async () => b.toString('utf8'),
+});
+
+// 换上假 fetch，把每次调用的 url/init 记下来；返回 restore()
+function mockFetch(handler) {
+  const orig = global.fetch;
+  const calls = [];
+  global.fetch = async (url, init = {}) => {
+    const rec = { url: String(url), init, method: init.method || 'GET', headers: init.headers || {} };
+    if (typeof init.body === 'string') rec.body = JSON.parse(init.body);
+    else rec.body = init.body;
+    calls.push(rec);
+    return await handler(rec, calls.length - 1);
+  };
+  return { calls, restore: () => { global.fetch = orig; } };
+}
+
+test('isCloudApi: 仅 provider=api 走云端适配层', () => {
+  assert.equal(isCloudApi({ comfyui: { provider: 'api' } }), true);
+  assert.equal(isCloudApi({ comfyui: { provider: 'native' } }), false);
+  assert.equal(isCloudApi({ comfyui: { provider: 'runninghub' } }), false);
+  assert.equal(isCloudApi({}), false);
+  assert.equal(isCloudApi(undefined), false);
+});
+
+test('sizeForImageApi: 宽高比就近归档到 gpt-image 三档，非法尺寸回落 1:1', () => {
+  assert.equal(sizeForImageApi(1920, 1080), '1536x1024');
+  assert.equal(sizeForImageApi(1080, 1920), '1024x1536');
+  assert.equal(sizeForImageApi(1024, 1024), '1024x1024');
+  assert.equal(sizeForImageApi(0, 1080), '1024x1024');
+  assert.equal(sizeForImageApi(-100, 200), '1024x1024');
+  assert.equal(sizeForImageApi(NaN, NaN), '1024x1024');
+});
+
+test('sizeForVideoApi: 显式宽高优先于 aspect_ratio，480P 只在 480 档里挑，非法回落 1280x720', () => {
+  assert.equal(sizeForVideoApi(1920, 1080, '', ''), '1280x720');
+  assert.equal(sizeForVideoApi(1080, 1920, '', ''), '720x1280');
+  assert.equal(sizeForVideoApi(1024, 1024, '', ''), '1024x1024');
+  assert.equal(sizeForVideoApi(0, 0, '', '9:16'), '720x1280', '没给宽高时按 aspect_ratio');
+  assert.equal(sizeForVideoApi(0, 0, '480p', '16:9'), '854x480', '480P 档不能挑出 720P');
+  assert.equal(sizeForVideoApi(0, 0, '480P', '9:16'), '480x854');
+  assert.equal(sizeForVideoApi(0, 0, '', ''), '1280x720', '什么线索都没有按默认横屏');
+  assert.equal(sizeForVideoApi(NaN, NaN, '', '乱七八糟'), '1280x720');
+});
+
+test('tolerantPick: 点号路径按序找第一个非空值，空串/null 跳过，找不到返回 undefined', () => {
+  assert.equal(tolerantPick({ a: { b: 'v' } }, ['x.y', 'a.b']), 'v');
+  assert.equal(tolerantPick({ a: [{ c: 1 }] }, ['a.0.c']), 1, '数字段当数组下标');
+  assert.equal(tolerantPick({ a: '', b: 'fallback' }, ['a', 'b']), 'fallback', '空串算没命中');
+  assert.equal(tolerantPick({ a: { b: null } }, ['a.b']), undefined);
+  assert.equal(tolerantPick(null, ['a']), undefined);
+  assert.equal(tolerantPick({ a: 0 }, ['a']), 0, '数字 0 是有效值，不能被当空跳过');
+});
+
+test('outItem: 产物项结构精确固定（subfolder 空串 / type=output）', () => {
+  assert.deepEqual(
+    outItem({ filename: 'a.png', kind: 'images', fileUrl: 'https://x.test/a.png' }),
+    { filename: 'a.png', subfolder: '', type: 'output', kind: 'images', fileUrl: 'https://x.test/a.png' },
+  );
+});
+
+test('abortedError: 带 interrupted 标记，供调用方区分「中止」与「失败」', () => {
+  const e = abortedError();
+  assert.ok(e instanceof Error);
+  assert.equal(e.interrupted, true);
+});
+
+test('withRetry: 401/403 鉴权失败不重试（重试也没用，白扣钱）', async () => {
+  let n = 0;
+  const fail401 = async () => { n++; const e = new Error('nope'); e.status = 401; throw e; };
+  await assert.rejects(withRetry(fail401, { times: 3 }), /nope/);
+  assert.equal(n, 1, '401 只该试一次');
+  let m = 0;
+  await assert.rejects(withRetry(async () => { m++; throw new Error('boom'); }, { times: 1 }), /boom/);
+  assert.equal(m, 1, 'times=1 不该有第二次');
+});
+
+test('readMediaBase64: base64/dataUri/mime/bytes 与文件一致；文件不存在抛错并带路径', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ic_cloud_'));
+  try {
+    const p = path.join(dir, 'a.png');
+    const raw = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 1, 2, 3]);
+    fs.writeFileSync(p, raw);
+    const m = readMediaBase64(p);
+    assert.equal(m.base64, raw.toString('base64'));
+    assert.ok(m.dataUri.startsWith('data:image/png;base64,'), 'dataUri 前缀应带 png mime，实际：' + m.dataUri.slice(0, 40));
+    assert.equal(m.mime, 'image/png');
+    assert.equal(m.bytes, raw.length);
+    const missing = path.join(dir, 'nope.png');
+    assert.throws(() => readMediaBase64(missing), (e) => e.message.includes(missing), '报错信息应带缺失路径');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('saveTempMedia + cloudDownload: file:// 产物按字节取回（b64 图/配音没有远程 URL）', async () => {
+  const raw = Buffer.from([0x49, 0x44, 0x33, 0x04, 1, 2, 3]);
+  const url = saveTempMedia(raw, '.mp3');
+  assert.ok(url.startsWith('file://'), '应返回 file:// URL，实际：' + url);
+  assert.ok(url.endsWith('.mp3'));
+  assert.deepEqual(await cloudDownload(url), raw);
+});
+
+test('cloudDownload: 云端把错误 JSON 当文件返回时必须报错，不能落成坏产物', async () => {
+  const url = saveTempMedia(Buffer.from('{"error":"余额不足"}', 'utf8'), '.mp4');
+  await assert.rejects(cloudDownload(url), /非文件内容/);
+});
+
+test('cloudGenerate(t2i): POST /images/generations，body 用配置里的 model，t2i 不带 image 字段', async () => {
+  const m = mockFetch(async () => jsonRes({ id: 'img_1', data: [{ url: 'https://img.test/a.png' }] }));
+  try {
+    const submitted = [];
+    const r = await cloudGenerate(imgCfg(), { kind: 't2i' },
+      { positive_prompt: '一只猫', width: 1920, height: 1080 },
+      { onSubmitted: (id) => submitted.push(id) });
+    assert.equal(m.calls.length, 1, '同步返回图片时不该轮询');
+    assert.equal(m.calls[0].url, 'https://x.test/v1/images/generations');
+    assert.equal(m.calls[0].method, 'POST');
+    assert.equal(m.calls[0].headers.Authorization, 'Bearer k');
+    assert.equal(m.calls[0].body.model, 'gpt-image-2.5', 'model 必须来自配置');
+    assert.equal(m.calls[0].body.prompt, '一只猫');
+    assert.equal(m.calls[0].body.n, 1);
+    assert.equal(m.calls[0].body.size, '1536x1024');
+    assert.ok(!('image' in m.calls[0].body), 't2i 不应带参考图 image 字段');
+    assert.equal(r.prompt_id, 'img_1');
+    assert.equal(r.outputs[0].kind, 'images');
+    assert.equal(r.outputs[0].filename, 'img_1.png');
+    assert.equal(r.outputs[0].fileUrl, 'https://img.test/a.png');
+    assert.deepEqual(submitted, ['img_1'], 'onSubmitted 应以图片 id 调用');
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(t2i): 只回 b64_json 时落临时 png，cloudDownload 取回字节一致', async () => {
+  const raw = Buffer.from([0x89, 0x50, 0x4e, 0x47, 9, 8, 7]);
+  const m = mockFetch(async () => jsonRes({ data: [{ b64_json: raw.toString('base64') }] }));
+  try {
+    const r = await cloudGenerate(imgCfg(), { kind: 't2i' }, { positive_prompt: 'x', width: 1024, height: 1024 });
+    assert.ok(r.outputs[0].fileUrl.startsWith('file://'), 'b64 应落本地临时文件，实际：' + r.outputs[0].fileUrl);
+    assert.ok(r.outputs[0].fileUrl.endsWith('.png'));
+    assert.deepEqual(await cloudDownload(r.outputs[0].fileUrl), raw);
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(i2i): 先走 multipart /images/edits，参考图当文件传', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ic_i2i_'));
+  const raw = Buffer.from([1, 2, 3, 4, 5]);
+  const img = path.join(dir, 'ref.png');
+  fs.writeFileSync(img, raw);
+  const m = mockFetch(async () => jsonRes({ id: 'img_9', data: [{ url: 'https://img.test/b.png' }] }));
+  try {
+    const r = await cloudGenerate(imgCfg(), { kind: 'i2i' },
+      { positive_prompt: '把衣服换成红色', image: img, width: 1024, height: 1024 });
+    assert.equal(m.calls.length, 1, 'edits 成功就不该退回 generations');
+    assert.equal(m.calls[0].url, 'https://x.test/v1/images/edits');
+    const form = m.calls[0].body;
+    assert.ok(form instanceof FormData, 'edits 必须用 multipart 提交');
+    assert.equal(form.get('model'), 'gpt-image-2.5');
+    assert.equal(form.get('prompt'), '把衣服换成红色');
+    assert.equal(form.get('n'), '1');
+    assert.equal(form.get('size'), '1024x1024');
+    const blob = form.get('image');
+    assert.ok(blob instanceof Blob, '参考图应以 Blob 形式带上');
+    assert.equal(Buffer.from(await blob.arrayBuffer()).length, raw.length);
+    assert.equal(r.outputs[0].fileUrl, 'https://img.test/b.png');
+  } finally { m.restore(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('cloudGenerate(i2i): edits 不被支持（404）时退回 generations + data URI 参考图', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ic_i2i_'));
+  const img = path.join(dir, 'ref.png');
+  fs.writeFileSync(img, Buffer.from([1, 2, 3]));
+  const m = mockFetch(async (rec, i) => (i === 0
+    ? jsonRes({ error: { message: 'not found' } }, 404)
+    : jsonRes({ id: 'img_2', data: [{ url: 'https://img.test/c.png' }] })));
+  try {
+    const r = await cloudGenerate(imgCfg(), { kind: 'i2i' }, { positive_prompt: 'p', image: img, width: 1024, height: 1024 });
+    assert.equal(m.calls.length, 2);
+    assert.equal(m.calls[1].url, 'https://x.test/v1/images/generations');
+    assert.equal(m.calls[1].body.image, readMediaBase64(img).dataUri, '退回路径要把参考图当 data URI 直传');
+    assert.equal(r.outputs[0].fileUrl, 'https://img.test/c.png');
+  } finally { m.restore(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('cloudGenerate(i2i): 401 鉴权失败不退回（退回也是 401，白花一次请求）', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ic_i2i_'));
+  const img = path.join(dir, 'ref.png');
+  fs.writeFileSync(img, Buffer.from([1]));
+  const m = mockFetch(async () => jsonRes({ error: { message: 'invalid key' } }, 401));
+  try {
+    await assert.rejects(
+      cloudGenerate(imgCfg(), { kind: 'i2i' }, { positive_prompt: 'p', image: img }),
+      /401/,
+    );
+    assert.equal(m.calls.length, 1, '401 只该请求一次');
+  } finally { m.restore(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('cloudGenerate(i2i): 没有参考图直接报错，不发请求', async () => {
+  const m = mockFetch(async () => jsonRes({}));
+  try {
+    await assert.rejects(cloudGenerate(imgCfg(), { kind: 'i2i' }, { positive_prompt: 'p' }), /缺少参考图/);
+    assert.equal(m.calls.length, 0);
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(r2v): 创建→轮询→成片，prompt_id 为厂商任务 id，seconds 是字符串', async () => {
+  const raw = Buffer.from([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70]);
+  const m = mockFetch(async (rec, i) => {
+    if (i === 0) return jsonRes({ id: 'v1' });
+    if (rec.url === 'https://v.test/a.mp4') return bufRes(raw);
+    return jsonRes({ status: 'completed', url: 'https://v.test/a.mp4' });
+  });
+  try {
+    const submitted = [];
+    const r = await cloudGenerate(vidCfg(), { kind: 'r2v' },
+      { positive_prompt: '镜头推进', width: 1920, height: 1080 },
+      { pollMs: 1, onSubmitted: (id) => submitted.push(id) });
+    assert.equal(m.calls[0].url, 'https://x.test/v1/videos');
+    assert.equal(m.calls[0].body.model, 'grok-imagine-video-1.5-fast');
+    assert.equal(m.calls[0].body.prompt, '镜头推进');
+    assert.strictEqual(m.calls[0].body.seconds, '6', '缺省 6 秒，且必须是字符串');
+    assert.equal(m.calls[0].body.size, '1280x720');
+    assert.ok(!('input_reference' in m.calls[0].body), '无参考图＝纯文生视频，不该带 input_reference');
+    assert.equal(m.calls[1].url, 'https://x.test/v1/videos/v1');
+    assert.equal(r.prompt_id, 'v1');
+    assert.equal(r.outputs[0].kind, 'videos');
+    assert.equal(r.outputs[0].filename, 'v1.mp4');
+    assert.ok(r.outputs[0].fileUrl.startsWith('file://'), '直链成片也应落本地 file://');
+    assert.deepEqual(await cloudDownload(r.outputs[0].fileUrl), raw);
+    assert.deepEqual(submitted, ['v1']);
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(r2v): seconds 夹到 4~15；只有第一张参考图能当 input_reference（接口限制）', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ic_r2v_'));
+  const img1 = path.join(dir, 'a.png');
+  const img2 = path.join(dir, 'b.png');
+  fs.writeFileSync(img1, Buffer.from([1, 1, 1]));
+  fs.writeFileSync(img2, Buffer.from([2, 2, 2]));
+  const m = mockFetch(async (rec, i) => {
+    if (i === 0) return jsonRes({ id: 'v2' });
+    if (rec.url === 'https://v.test/b.mp4') return bufRes(Buffer.from([0, 0, 0, 1]));
+    return jsonRes({ status: 'succeeded', url: 'https://v.test/b.mp4' });
+  });
+  try {
+    await cloudGenerate(vidCfg(), { kind: 'r2v' }, {
+      positive_prompt: 'x', seconds: 30, width: 1080, height: 1920,
+      references: [
+        { type: 'image', filename: img1 },
+        { type: 'image', filename: img2 },
+        { type: 'audio', filename: path.join(dir, 'voice.mp3') },
+      ],
+    }, { pollMs: 1 });
+    const body = m.calls[0].body;
+    assert.strictEqual(body.seconds, '15', '超出上限要夹到 15');
+    assert.equal(body.size, '720x1280');
+    assert.equal(body.input_reference, readMediaBase64(img1).dataUri, 'input_reference 应为第一张图的 data URI');
+  } finally { m.restore(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('cloudGenerate(r2v): 查询不给 URL 时走 /content 下载字节落临时 mp4，且带鉴权头', async () => {
+  const raw = Buffer.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]);
+  const m = mockFetch(async (rec, i) => {
+    if (i === 0) return jsonRes({ id: 'v3' });
+    if (rec.url.endsWith('/content')) return bufRes(raw);
+    return jsonRes({ status: 'success' });
+  });
+  try {
+    const r = await cloudGenerate(vidCfg(), { kind: 'r2v' }, { positive_prompt: 'x' }, { pollMs: 1 });
+    const dl = m.calls.find((c) => c.url === 'https://x.test/v1/videos/v3/content');
+    assert.ok(dl, '应请求 /content');
+    assert.equal(dl.headers.Authorization, 'Bearer k', '取成片必须带鉴权头，否则中转站回 401');
+    assert.ok(r.outputs[0].fileUrl.startsWith('file://'), '成片应落本地临时文件，下游不再远程取');
+    assert.deepEqual(await cloudDownload(r.outputs[0].fileUrl), raw);
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(r2v): 查询直接给直链时也带鉴权取回落临时文件（直链可能也要密钥）', async () => {
+  const raw = Buffer.from([0, 0, 1, 2, 3, 4]);
+  const m = mockFetch(async (rec, i) => {
+    if (i === 0) return jsonRes({ id: 'v6' });
+    if (rec.url === 'https://cdn.test/v6.mp4') return bufRes(raw);
+    return jsonRes({ status: 'completed', url: 'https://cdn.test/v6.mp4' });
+  });
+  try {
+    const r = await cloudGenerate(vidCfg(), { kind: 'r2v' }, { positive_prompt: 'x' }, { pollMs: 1 });
+    const dl = m.calls.find((c) => c.url === 'https://cdn.test/v6.mp4');
+    assert.ok(dl, '应下载查询响应给的直链');
+    assert.equal(dl.headers.Authorization, 'Bearer k', '直链下载也要带鉴权头');
+    assert.ok(r.outputs[0].fileUrl.startsWith('file://'), '直链也应转成本地 file://，避免下游无鉴权下载');
+    assert.deepEqual(await cloudDownload(r.outputs[0].fileUrl), raw);
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(r2v): 任务 failed 抛错并上报 error 状态', async () => {
+  const m = mockFetch(async (rec, i) => (i === 0
+    ? jsonRes({ id: 'v4' })
+    : jsonRes({ status: 'failed', error: { message: '内容不合规' } })));
+  try {
+    const statuses = [];
+    await assert.rejects(
+      cloudGenerate(vidCfg(), { kind: 'r2v' }, { positive_prompt: 'x' }, { pollMs: 1, onStatus: (s) => statuses.push(s) }),
+      /内容不合规/,
+    );
+    assert.ok(statuses.some((s) => s.kind === 'error'), '失败必须上报 error，前端才有话可显示');
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(r2v): 用户停止 → interrupted 抛错，不算失败不上报 error', async () => {
+  const m = mockFetch(async (rec, i) => jsonRes(i === 0 ? { id: 'v5' } : { status: 'in_progress' }));
+  try {
+    const statuses = [];
+    const e = await cloudGenerate(vidCfg(), { kind: 'r2v' }, { positive_prompt: 'x' },
+      { pollMs: 1, isAborted: () => true, onStatus: (s) => statuses.push(s) }).then(() => null, (err) => err);
+    assert.ok(e, '应抛错');
+    assert.equal(e.interrupted, true, '必须带 interrupted 标记，否则会被当成生成失败');
+    assert.ok(!statuses.some((s) => s.kind === 'error'), '用户主动停止不该报 error');
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(tts): user 放音色描述、assistant 放台词（小米约定，不能颠倒）', async () => {
+  const raw = Buffer.from([0x49, 0x44, 0x33, 0x04, 5, 6]);
+  const m = mockFetch(async () => jsonRes({
+    id: 'tts_1',
+    choices: [{ message: { audio: { data: raw.toString('base64') } } }],
+  }));
+  try {
+    const r = await cloudGenerate(ttsCfg(), { kind: 'tts' },
+      { text: '你终于来了。', voice_description: '低沉磁性的中年男声' });
+    assert.equal(m.calls[0].url, 'https://x.test/v1/chat/completions');
+    assert.equal(m.calls[0].headers['api-key'], 'k', '两种鉴权头都要发');
+    assert.equal(m.calls[0].headers.Authorization, 'Bearer k');
+    const body = m.calls[0].body;
+    assert.equal(body.model, 'mimo-v2.5-tts-voicedesign');
+    assert.deepEqual(body.messages, [
+      { role: 'user', content: '低沉磁性的中年男声' },
+      { role: 'assistant', content: '你终于来了。' },
+    ]);
+    assert.deepEqual(body.audio, { format: 'mp3' }, 'voicedesign 靠文字造音色，不能传预设 voice');
+    assert.equal(r.prompt_id, 'tts_1');
+    assert.equal(r.outputs[0].kind, 'audio');
+    assert.equal(r.outputs[0].filename, 'tts_1.mp3');
+    assert.ok(r.outputs[0].fileUrl.startsWith('file://'), '音频在响应体里，应落临时文件给 file://');
+    assert.deepEqual(await cloudDownload(r.outputs[0].fileUrl), raw);
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(tts): 预设音色模型才带 audio.voice；voicedesign 即便填了 voiceId 也不带', async () => {
+  const audioB64 = Buffer.from([1, 2, 3]).toString('base64');
+  const grab = async (cfg) => {
+    const m = mockFetch(async () => jsonRes({ id: 't', choices: [{ message: { audio: { data: audioB64 } } }] }));
+    try {
+      await cloudGenerate(cfg, { kind: 'tts' }, { text: 'x', voice_description: 'y' });
+      return m.calls[0].body.audio;
+    } finally { m.restore(); }
+  };
+  assert.deepEqual(await grab(ttsCfg({ model: 'mimo-v2.5-tts', voiceId: 'voice_01' })),
+    { format: 'mp3', voice: 'voice_01' }, '预设音色模型应带上 voiceId');
+  assert.deepEqual(await grab(ttsCfg({ voiceId: 'voice_01' })),
+    { format: 'mp3' }, 'voicedesign 传 voice 会冲突，必须省掉');
+  assert.deepEqual(await grab(ttsCfg({ model: 'mimo-v2.5-tts', voiceId: '' })),
+    { format: 'mp3' }, '没填 voiceId 就不带，让厂商用默认');
+});
+
+test('cloudGenerate(tts): 没给音色描述时用中性播音腔兜底，不能让台词跑到 user 里', async () => {
+  const m = mockFetch(async () => jsonRes({ id: 't', choices: [{ message: { audio: { data: Buffer.from([1]).toString('base64') } } }] }));
+  try {
+    await cloudGenerate(ttsCfg(), { kind: 'tts' }, { text: '旁白台词' });
+    const msgs = m.calls[0].body.messages;
+    assert.match(msgs[0].content, /播音腔/, 'user 位应是兜底音色描述');
+    assert.equal(msgs[1].content, '旁白台词');
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(tts): 音频按十六进制返回时也能解（不能被 base64 误解成乱码）', async () => {
+  const raw = Buffer.from([0x49, 0x44, 0x33, 0x04, 0xff, 0xfb]);
+  const m = mockFetch(async () => jsonRes({ id: 'tts_h', choices: [{ message: { audio: { data: raw.toString('hex') } } }] }));
+  try {
+    const r = await cloudGenerate(ttsCfg(), { kind: 'tts' }, { text: 'x', voice_description: 'y' });
+    assert.deepEqual(await cloudDownload(r.outputs[0].fileUrl), raw, 'hex 音频应还原成原字节');
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate(tts): HTTP 200 但业务报错仍算失败；找不到音频字段也算失败', async () => {
+  const m1 = mockFetch(async () => jsonRes({ error: { message: '余额不足' } }));
+  try {
+    const statuses = [];
+    await assert.rejects(
+      cloudGenerate(ttsCfg(), { kind: 'tts' }, { text: 'x', voice_description: 'y' }, { onStatus: (s) => statuses.push(s) }),
+      /余额不足/,
+    );
+    assert.ok(statuses.some((s) => s.kind === 'error'));
+  } finally { m1.restore(); }
+
+  const m2 = mockFetch(async () => jsonRes({ id: 't', choices: [{ message: { content: '只有文字没有音频' } }] }));
+  try {
+    await assert.rejects(cloudGenerate(ttsCfg(), { kind: 'tts' }, { text: 'x', voice_description: 'y' }), /找不到音频字段/);
+  } finally { m2.restore(); }
+});
+
+test('cloudGenerate(tts): 用户停止 → 请求都不发，抛 interrupted', async () => {
+  const m = mockFetch(async () => jsonRes({}));
+  try {
+    const e = await cloudGenerate(ttsCfg(), { kind: 'tts' }, { text: 'x' }, { isAborted: () => true })
+      .then(() => null, (err) => err);
+    assert.equal(e?.interrupted, true);
+    assert.equal(m.calls.length, 0, '已停止就不该再花钱发请求');
+  } finally { m.restore(); }
+});
+
+test('cloudGenerate: 未配置的任务类型直接报错，不静默返回空产物', async () => {
+  await assert.rejects(cloudGenerate(imgCfg(), { kind: 'unknown_kind' }, {}), /不支持的云端任务类型/);
+});
+
+test('cloudCheck: 真去各档拉模型清单，任何一段连不上都不算连接成功', async () => {
+  const full = {
+    mediaApi: {
+      image: { baseUrl: 'https://img.test/v1', apiKey: 'ik' },
+      video: { baseUrl: 'https://vid.test/v1', apiKey: 'vk' },
+      tts: { baseUrl: 'https://tts.test/v1', apiKey: 'tk' },
+    },
+  };
+  const m = mockFetch(async (rec) => {
+    if (rec.url.startsWith('https://vid.test')) return jsonRes({ error: 'bad key' }, 401);
+    return jsonRes({ data: [{ id: 'a' }, { id: 'b' }] });
+  });
+  try {
+    const r = await cloudCheck(full);
+    assert.equal(r.ok, false, 'Key 被拒的那段还在，就不能报成功');
+    assert.match(r.error, /1 段连不上/);
+    const byId = Object.fromEntries(r.groups.map((g) => [g.id, g]));
+    assert.equal(byId.image.state, 'ok');
+    assert.equal(byId.image.text, '2 个模型');
+    assert.equal(byId.video.state, 'fail');
+    assert.match(byId.video.text, /Key 不对或被拒/, '厂商报错要翻成大白话');
+    assert.equal(m.calls.length, 3, '三段各拉一次');
+    assert.equal(m.calls[0].headers.Authorization, 'Bearer ik');
+  } finally { m.restore(); }
+});
+
+test('cloudCheck: 三段都没填时提示去填，一个请求都不发', async () => {
+  const m = mockFetch(async () => jsonRes({ data: [] }));
+  try {
+    const r = await cloudCheck({});
+    assert.equal(r.ok, false);
+    assert.match(r.error, /都没填/, '要说人话，用户才知道去哪儿填');
+    assert.equal(m.calls.length, 0);
+    const half = await cloudCheck({ mediaApi: { image: { baseUrl: 'https://img.test/v1', apiKey: 'ik' } } });
+    assert.equal(half.ok, true, '只填了一段也算连上');
+    assert.equal(half.groups.find((g) => g.id === 'video').text, '未填写');
+  } finally { m.restore(); }
+});
+
+test('listModels: 各档取自己的 baseUrl/Key，data[] 与 models[] 两种返回形状都认', async () => {
+  const m = mockFetch(async (rec) => (
+    rec.url.startsWith('https://tts.test')
+      ? jsonRes({ models: ['mimo-v2.6-pro', 'mimo-v2.5-tts'] })
+      : jsonRes({ data: [{ id: 'gpt-image-2-1k' }, { id: 'gpt-image-2-4k' }] })
+  ));
+  try {
+    const cfg = {
+      mediaApi: {
+        image: { baseUrl: 'https://img.test/v1/', apiKey: 'ik' },
+        tts: { baseUrl: 'https://tts.test/v1', apiKey: 'tk' },
+      },
+    };
+    assert.deepEqual(await listModels(cfg, 'image'), ['gpt-image-2-1k', 'gpt-image-2-4k']);
+    assert.deepEqual(await listModels(cfg, 'tts'), ['mimo-v2.6-pro', 'mimo-v2.5-tts']);
+    assert.equal(m.calls[0].url, 'https://img.test/v1/models', 'baseUrl 尾部斜杠要去重，别拼成 //models');
+    await assert.rejects(listModels(cfg, 'video'), /还没填 Base URL/);
+    await assert.rejects(listModels({ mediaApi: { image: { baseUrl: 'https://img.test/v1' } } }, 'image'), /还没填 API Key/);
+  } finally { m.restore(); }
+});
+
+test('cloudLocalRef: api 模式不上传，原样返回本地绝对路径', () => {
+  assert.equal(cloudLocalRef('/tmp/a.png'), '/tmp/a.png');
+  const winPath = 'C:\\pics\\b.png';
+  assert.equal(cloudLocalRef(winPath), winPath);
+});
+

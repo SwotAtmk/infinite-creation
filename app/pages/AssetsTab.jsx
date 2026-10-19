@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Button, Input, Select, SelectItem, Textarea, Card, CardBody, Tabs, Tab, Chip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
 import { CATEGORIES, fileUrl, selectKeys, pickKey, statusColor } from './shared';
+import LoadingOverlay from './LoadingOverlay';
 import { useToast } from '../toast';
 
 // ============ 资产库 ============
@@ -19,6 +20,7 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
   const [preview, setPreview] = useState(null);
   const [outfits, setOutfits] = useState({});
   const [ages, setAges] = useState({});
+  const [busy, setBusy] = useState(null);
   const fileRef = useRef(null);
   const load = useCallback(() => api.get('/api/projects/' + projectId + '/assets').then(setAssets).catch((e) => toast.error(e.message)), [projectId]);
   useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [load]);
@@ -44,15 +46,18 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
   }
   // 保存：仅把声音限制写入资产，不触发生成
   async function saveVoice() {
+    setBusy('正在保存声音限制…');
     try {
       await api.patch('/api/projects/' + projectId + '/assets/' + voice.id, { voice_desc: voice.voice_desc });
       toast.success('已保存声音限制');
       setVoice(null);
       load();
     } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
   // 重新生成：先同步声音限制，再用新限制提交音色设计（朗读内容沿用现有兜底逻辑）
   async function regenVoice() {
+    setBusy('正在提交音色设计…');
     try {
       await api.patch('/api/projects/' + projectId + '/assets/' + voice.id, { voice_desc: voice.voice_desc });
       await api.post('/api/projects/' + projectId + '/assets/' + voice.id + '/design-voice', { voice_description: voice.voice_desc });
@@ -61,10 +66,12 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
       load();
       onRefresh && onRefresh();
     } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
   function pickUpload(a) { setUploadTarget(a.id); if (fileRef.current) fileRef.current.click(); }
   async function doUpload(aid, file) {
     if (!file) return;
+    setBusy('正在上传/替换素材…');
     try {
       const buf = await file.arrayBuffer();
       const res = await fetch('/api/projects/' + projectId + '/assets/' + aid + '/upload', {
@@ -78,19 +85,24 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
       }
       load();
     } catch (e) { toast.error('上传失败：' + e.message); }
+    finally { setBusy(null); }
   }
 
   async function create() {
+    setBusy('正在新建资产…');
     try {
       await api.post('/api/projects/' + projectId + '/assets', form);
       setForm({ ...form, name: '', description: '' });
       setCreateOpen(false);
       load();
     } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
   async function del(a) {
     if (!(await toast.confirm('删除资产「' + a.name + '」？此操作不可逆。', { danger: true }))) return;
+    setBusy('正在删除资产…');
     try { await api.del('/api/projects/' + projectId + '/assets/' + a.id); toast.success('已删除「' + a.name + '」'); load(); } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
   async function regenImage(a, mode) {
     try {
@@ -123,7 +135,9 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
     } catch (e) { toast.error(e.message); }
   }
   async function saveEdit() {
+    setBusy('正在保存资产…');
     try { await api.patch('/api/projects/' + projectId + '/assets/' + edit.id, { name: edit.name, description: edit.description, prompt: edit.prompt }); toast.success('已保存'); setEdit(null); load(); } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
 
   if (loading) {
@@ -354,6 +368,8 @@ export default function AssetsTab({ projectId, jobs = [], onRefresh }) {
           )}
         </ModalContent>
       </Modal>
+
+      <LoadingOverlay show={!!busy} text={busy} />
     </div>
   );
 }

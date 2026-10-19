@@ -77,7 +77,7 @@ export default function EditProject({ project, onClose, onSaved }) {
               <p className="muted" style={{ marginTop: 8 }}>章节与小说原文在「章节管理」页编辑；素材在「素材库」页管理（全项目共用）。</p>
             </ModalBody>
             <ModalFooter>
-              <Button size="sm" color="primary" isDisabled={saving} onPress={save}>保存</Button>
+              <Button size="sm" color="primary" isLoading={saving} isDisabled={saving} onPress={save}>保存</Button>
               <Button size="sm" variant="flat" onPress={onClose}>取消</Button>
             </ModalFooter>
           </>

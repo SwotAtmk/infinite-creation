@@ -4,6 +4,7 @@ import { Button, Input, Card, CardBody, Textarea, Chip, Modal, ModalContent, Mod
 import { api } from '../api-client.js';
 import ReferencePicker from './ReferencePicker';
 import ChapterOps from './ChapterOps';
+import LoadingOverlay from './LoadingOverlay';
 import { fileUrl, statusColor } from './shared';
 import { useToast } from '../toast';
 
@@ -24,16 +25,18 @@ function GripIcon() {
 // ============ 章节管理（合并原「章节管理」+「生成内容」） ============
 export default function ChaptersView({ projectId, chapters, onRefresh, running, runningChapter, onRun, onStop, onGoLogs }) {
   const toast = useToast();
-  const [adding, setAdding] = useState(false);
   // 本地顺序副本：拖拽排序时即时更新，drop 后再写回后端 seq
   const [order, setOrder] = useState(chapters);
   const [dragIndex, setDragIndex] = useState(null);
   const [overIndex, setOverIndex] = useState(null);
-  // 编辑弹窗
+  // 新建/编辑章节共用一个弹窗：creating=true 表示新建，editing 非空表示编辑
+  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [editNovel, setEditNovel] = useState('');
   const [editDirty, setEditDirty] = useState(false);
+  // 保存/删除等耗时操作进行中：显示全屏加载层并阻断重复点击
+  const [busy, setBusy] = useState(null);
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
   const [savedRefs, setSavedRefs] = useState([]);
@@ -64,9 +67,16 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
     if (stopping && !running) setStopping(false);
   }, [running, stopping]);
 
-  // 参考素材按章节归属：仅展示当前编辑章节（chapter_id = editing.id）的参考素材
+  // 参考素材按章节归属：仅展示当前编辑章节（chapter_id = editing.id）的参考素材；新建时无已保存素材
   const chapterRefs = editing ? savedRefs.filter((r) => r.chapter_id === editing.id) : [];
 
+  function openCreate() {
+    setCreating(true);
+    setEditTitle('');
+    setEditNovel('');
+    setEditDirty(false);
+    setRefs([]);
+  }
   function openEdit(c) {
     setEditing(c);
     setEditTitle(c.title || '');
@@ -75,24 +85,31 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
     setRefs([]);
   }
 
-  async function saveEdit() {
-    if (!editing) return;
+  // 新建/编辑统一入口：先保存章节（新建 POST / 编辑 PATCH），再上传待上传的参考素材。
+  // 参考素材上传失败不会丢章节：章节已保存成功时提示「章节已保存，但部分参考素材…」，弹窗保持打开以便修正。
+  async function saveChapter() {
+    const isNew = !!creating;
+    if (!isNew && !editing) return;
+    setBusy(isNew ? '正在创建章节…' : '正在保存章节…');
     try {
-      await api.patch('/api/projects/' + projectId + '/chapters/' + editing.id, { title: editTitle, novel: editNovel });
-      toast.success('已保存「' + editTitle + '」');
-      setEditDirty(false);
+      let cid = editing ? editing.id : null;
+      if (isNew) {
+        // 标题留空交给后端自动命名（第N章）；显式传空标题会被 pickChapterFields 拒绝
+        const payload = { novel: editNovel };
+        if ((editTitle || '').trim()) payload.title = editTitle.trim();
+        const c = await api.post('/api/projects/' + projectId + '/chapters', payload);
+        cid = c.id;
+      } else {
+        await api.patch('/api/projects/' + projectId + '/chapters/' + cid, { title: editTitle, novel: editNovel });
+      }
+      if (refs.length && cid) await uploadRefs(cid);
+      toast.success(isNew ? '已创建章节' : '已保存「' + editTitle + '」');
+      setCreating(false);
       setEditing(null);
+      setEditDirty(false);
       onRefresh();
     } catch (e) { toast.error(e.message); }
-  }
-  async function addChapter() {
-    if (adding) return;
-    setAdding(true);
-    try {
-      await api.post('/api/projects/' + projectId + '/chapters', {});
-      toast.success('已新增章节');
-      onRefresh();
-    } catch (e) { toast.error(e.message); } finally { setAdding(false); }
+    finally { setBusy(null); }
   }
   async function runAll() {
     await submitRun(null);
@@ -111,35 +128,35 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
   }
   async function removeChapter(c) {
     if (!(await toast.confirm('删除「' + c.title + '」及其分镜？此操作不可逆。', { danger: true }))) return;
+    setBusy('正在删除章节…');
     try { await api.del('/api/projects/' + projectId + '/chapters/' + c.id); toast.success('已删除「' + c.title + '」'); onRefresh(); } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
 
-  async function uploadRefs() {
-    if (!editing) return;
-    // 逐条上传、成功一条就从待上传列表里摘掉：此前一条失败会把**已经传成功的**也留在列表里，
-    // 用户再点一次就重复上传（素材库里多出重复参考图）；报错也没说是哪个文件。
-    try {
-      let done = 0;
-      for (const it of refs) {
-        const fd = new FormData();
-        fd.append('file', it.file);
-        fd.append('mode', it.mode);
-        fd.append('category', it.category || 'other');
-        fd.append('chapter_id', editing.id);
-        fd.append('description', it.description || '');
-        const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          const why = j.error || ('上传失败 HTTP ' + res.status);
-          throw new Error('「' + (it.file.name || '参考图') + '」' + why + (done ? '；前 ' + done + ' 张已上传成功，可直接继续传剩下的' : ''));
-        }
-        done += 1;
-        // 按 key 精确移除（同名文件也不会误删别的待上传项）
-        setRefs((prev) => prev.filter((x) => x.key !== it.key));
+  // 上传本章参考素材到指定章节：逐条上传、成功一条就从待上传列表里摘掉。
+  // 此前一条失败会把**已经传成功的**也留在列表里，用户再点一次就重复上传（素材库里多出重复参考图）；
+  // 报错也没说是哪个文件。这里返回成功张数，失败时抛出（含已成功张数的提示）。
+  async function uploadRefs(chapterId) {
+    let done = 0;
+    for (const it of refs) {
+      const fd = new FormData();
+      fd.append('file', it.file);
+      fd.append('mode', it.mode);
+      fd.append('category', it.category || 'other');
+      fd.append('chapter_id', chapterId);
+      fd.append('description', it.description || '');
+      const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        const why = j.error || ('上传失败 HTTP ' + res.status);
+        throw new Error('「' + (it.file.name || '参考图') + '」' + why + (done ? '；前 ' + done + ' 张已上传成功，可直接继续传剩下的' : ''));
       }
-      loadRefs();
-      toast.success(done ? '参考素材已上传 ' + done + ' 张' : '参考素材已上传');
-    } catch (e) { toast.error(e.message); loadRefs(); }
+      done += 1;
+      // 按 key 精确移除（同名文件也不会误删别的待上传项）
+      setRefs((prev) => prev.filter((x) => x.key !== it.key));
+    }
+    loadRefs();
+    return done;
   }
   async function delRef(rid) {
     try { await api.del('/api/projects/' + projectId + '/references/' + rid); loadRefs(); } catch (e) { alert(e.message); }
@@ -182,7 +199,7 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
           <div className="row justify-between">
             <h2 className="text-lg font-semibold m-0">章节管理</h2>
             <div className="row" style={{ gap: 8 }}>
-              <Button color="primary" size="sm" isLoading={adding} onPress={addChapter}>＋ 新增章节</Button>
+              <Button color="primary" size="sm" onPress={openCreate}>＋ 新增章节</Button>
               <Button size="sm" variant="flat" isDisabled={running || !chapters.length} onPress={runAll}>▶ 生成全部章节</Button>
             </div>
           </div>
@@ -250,15 +267,17 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
         </CardBody>
       </Card>
 
-      {/* 编辑章节弹窗 */}
-      <Modal isOpen={!!editing} size="2xl" backdrop="blur" onClose={() => setEditing(null)}>
+      {/* 新建 / 编辑章节弹窗 */}
+      <Modal isOpen={creating || !!editing} size="2xl" backdrop="blur" onClose={() => { if (!busy) { setCreating(false); setEditing(null); } }}>
         <ModalContent>
           {() => (
             <>
-              <ModalHeader className="pb-2"><h2 className="m-0 text-lg font-semibold">编辑章节{editing ? ' · ' + editing.title : ''}</h2></ModalHeader>
+              <ModalHeader className="pb-2">
+                <h2 className="m-0 text-lg font-semibold">{creating ? '新建章节' : '编辑章节' + (editing ? ' · ' + editing.title : '')}</h2>
+              </ModalHeader>
               <ModalBody>
                 <div className="flex flex-col gap-3">
-                  <Input size="sm" label="章节标题" value={editTitle} onChange={(e) => { setEditTitle(e.target.value); setEditDirty(true); }} placeholder="章节标题" />
+                  <Input size="sm" label="章节标题" value={editTitle} onChange={(e) => { setEditTitle(e.target.value); setEditDirty(true); }} placeholder={creating ? '留空自动命名为「第N章」' : '章节标题'} />
                   <div>
                     <h3 className="text-sm m-0" style={{ marginBottom: 6 }}>本章小说原文</h3>
                     <Textarea size="sm" minRows={6} value={editNovel} onChange={(e) => { setEditNovel(e.target.value); setEditDirty(true); }} placeholder="粘贴或编辑本章原文…" />
@@ -272,16 +291,11 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
                     onDeleteSaved={delRef}
                     allowAdd={vision}
                   />
-                  {vision && refs.length > 0 && (
-                    <div className="row justify-end">
-                      <Button color="primary" size="sm" onPress={uploadRefs}>上传本章参考素材</Button>
-                    </div>
-                  )}
                 </div>
               </ModalBody>
               <ModalFooter>
-                <Button variant="flat" onPress={() => setEditing(null)}>取消</Button>
-                <Button color="primary" isDisabled={!editDirty} onPress={saveEdit}>保存本章</Button>
+                <Button variant="flat" isDisabled={!!busy} onPress={() => { setCreating(false); setEditing(null); }}>取消</Button>
+                <Button color="primary" isLoading={!!busy} isDisabled={creating ? false : (!editDirty && !refs.length)} onPress={saveChapter}>保存本章</Button>
               </ModalFooter>
             </>
           )}
@@ -301,6 +315,8 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
           )}
         </ModalContent>
       </Modal>
+
+      <LoadingOverlay show={!!busy} text={busy} />
     </div>
   );
 }

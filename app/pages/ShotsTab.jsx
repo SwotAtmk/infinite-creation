@@ -73,6 +73,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
 
   async function regen(shotId, render = true) {
     const fb = (feedback[shotId] || '').trim();
+    setBusy('正在提交重新生成…');
     try {
       await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb || undefined, render });
       toast.success(render ? '已提交重生成' : '已提交：仅 LLM 改写提示词，不渲染视频');
@@ -80,6 +81,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       load();
       onRefresh && onRefresh();
     } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
   // 左侧反馈框有值 → 需要 LLM，弹窗确认；留空 → 直接渲染视频
   function onRegen(shotId) {
@@ -143,22 +145,26 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
     if (p.mode === 'replace' && p.replaceAssetId) next = cur.map((id) => (id === p.replaceAssetId ? assetId : id));
     else next = cur.includes(assetId) ? cur : [...cur, assetId];
     setMaterialPicker(null);
+    setBusy('正在更新素材…');
     try {
       await api.patch('/api/projects/' + projectId + '/shots/' + p.shotId, { [field]: next });
       toast.success('素材已更新');
       load();
     } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
   async function removeMaterial(shotId, category, assetId) {
     const shot = shots.find((s) => s.id === shotId);
     const field = MATERIAL_FIELD[category];
     if (!shot || !field) return;
     const next = asArr(shot[field]).filter((id) => id !== assetId);
+    setBusy('正在移除素材…');
     try {
       await api.patch('/api/projects/' + projectId + '/shots/' + shotId, { [field]: next });
       toast.success('素材已移除');
       load();
     } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
 
   if (loading) {

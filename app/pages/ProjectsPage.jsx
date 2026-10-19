@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spinner } from '@heroui/react';
+import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spinner, Switch } from '@heroui/react';
 import { api } from '../api-client.js';
-import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor } from './shared';
+import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor, VIDEO_RESOLUTIONS, VIDEO_RATIOS } from './shared';
 import ReferencePicker from './ReferencePicker';
 import LoadingOverlay from './LoadingOverlay';
 import { useToast } from '../toast';
@@ -17,6 +17,12 @@ export default function ProjectsPage({ onOpen }) {
   const [customStyle, setCustomStyle] = useState('');
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
+  // 视频参数（新建项目时设置，默认与后端一致）
+  const [res, setRes] = useState('480P');
+  const [ratio, setRatio] = useState('16:9');
+  const [cw, setCw] = useState('');
+  const [ch, setCh] = useState('');
+  const [enableBgm, setEnableBgm] = useState(true);
   // 创建项目进行中：显示全屏加载层提示等待并阻断重复点击
   const [busy, setBusy] = useState(null);
   const load = useCallback(() => api.get('/api/projects')
@@ -46,7 +52,15 @@ export default function ProjectsPage({ onOpen }) {
     setBusy('正在创建项目…');
     try {
       const style = resolveStyle(form.style, customStyle);
-      const p = await api.post('/api/projects', { ...form, style });
+      const p = await api.post('/api/projects', {
+        ...form,
+        style,
+        video_resolution: res,
+        video_aspect_ratio: ratio,
+        video_width: Number(cw) || 0,
+        video_height: Number(ch) || 0,
+        enable_bgm: enableBgm,
+      });
       // 项目已经落库（POST 成功）：后面的取章节 / 传参考图失败，不能让用户以为「创建失败」——
       // 此前这类失败只弹一条 toast，列表不刷新、也不进项目，用户会再点一次「创建并打开」，
       // 于是同一个项目建了两遍（Projects.create 不限制重名）。先刷新列表，再单独兜参考图这一步。
@@ -65,7 +79,9 @@ export default function ProjectsPage({ onOpen }) {
   }
   async function del(id) {
     if (!(await toast.confirm('删除该项目及其所有素材？', { danger: true }))) return;
+    setBusy('正在删除项目…');
     try { await api.del('/api/projects/' + id); toast.success('已删除'); load(); } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
   }
 
   return (
@@ -91,6 +107,28 @@ export default function ProjectsPage({ onOpen }) {
             )}
           </div>
           <Textarea size="sm" placeholder="粘贴小说原文或一句话描述故事" value={form.novel} onChange={(e) => setForm({ ...form, novel: e.target.value })} />
+          <div className="row" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            <span className="muted">分辨率</span>
+            <Select size="sm" className="w-36" aria-label="分辨率" selectedKeys={selectKeys(res)} onSelectionChange={(k) => setRes(pickKey(k))}>
+              {VIDEO_RESOLUTIONS.map(([v, l]) => <SelectItem key={v}>{l}</SelectItem>)}
+            </Select>
+            <span className="muted">比例</span>
+            <Select size="sm" className="w-28" aria-label="比例" selectedKeys={selectKeys(ratio)} onSelectionChange={(k) => setRatio(pickKey(k))}>
+              {VIDEO_RATIOS.map((r) => <SelectItem key={r}>{r}</SelectItem>)}
+            </Select>
+            {res === 'custom' && (
+              <>
+                <span className="muted">宽</span>
+                <Input size="sm" type="number" min="64" step="32" value={cw} onChange={(e) => setCw(e.target.value)} placeholder="1024" className="w-24" />
+                <span className="muted">高</span>
+                <Input size="sm" type="number" min="64" step="32" value={ch} onChange={(e) => setCh(e.target.value)} placeholder="576" className="w-24" />
+              </>
+            )}
+          </div>
+          <div className="row" style={{ alignItems: 'center', gap: 8 }}>
+            <Switch size="sm" isSelected={enableBgm} onValueChange={setEnableBgm}>生成背景音乐</Switch>
+            <span className="muted" style={{ fontSize: 12 }}>开启后，视频阶段会自动生成纯音乐背景音乐并合成到成片。</span>
+          </div>
           {vision && <ReferencePicker items={refs} onChange={setRefs} />}
           <div>
             <Button color="primary" isDisabled={!form.name || !form.novel.trim()} onPress={create}>创建并打开</Button>

@@ -13,6 +13,7 @@ export default function SettingsPage({ onBack }) {
   const toast = useToast();
   const [cfg, setCfg] = useState(null);
   const [loadErr, setLoadErr] = useState('');
+  const [saving, setSaving] = useState(false);
   const [test, setTest] = useState('');
   const [llmTest, setLlmTest] = useState('');
   const [comfyInfo, setComfyInfo] = useState(null);
@@ -31,7 +32,9 @@ export default function SettingsPage({ onBack }) {
     try { setComfyInfo(await api.post('/api/comfyui/test', { comfyui })); } catch { setComfyInfo({ ok: false, error: '连接失败' }); }
   }
   async function save() {
+    setSaving(true);
     try { setCfg(await api.put('/api/config', cfg)); toast.success('已保存'); } catch (e) { toast.error(e.message); }
+    finally { setSaving(false); }
   }
   async function testComfy() {
     try { const r = await api.post('/api/comfyui/test', { comfyui: cfg.comfyui }); setComfyInfo(r); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }
@@ -238,7 +241,7 @@ export default function SettingsPage({ onBack }) {
           </>
         )}
         <div className="mt-2">
-          <Button size="sm" color="primary" onPress={save}>保存配置</Button>
+          <Button size="sm" color="primary" isLoading={saving} isDisabled={saving} onPress={save}>保存配置</Button>
         </div>
 
         <h3 className="text-base font-semibold" style={{ marginTop: 24 }}>技能库<span className="muted">（全局 · 所有项目共用）</span></h3>

@@ -12,6 +12,7 @@ import WorkflowsTab from './WorkflowsTab';
 export default function SettingsPage({ onBack }) {
   const toast = useToast();
   const [cfg, setCfg] = useState(null);
+  const [savedCfg, setSavedCfg] = useState(null);
   const [loadErr, setLoadErr] = useState('');
   const [saving, setSaving] = useState(false);
   const [test, setTest] = useState('');
@@ -23,7 +24,7 @@ export default function SettingsPage({ onBack }) {
   const loadConfig = useCallback(() => {
     setLoadErr('');
     api.get('/api/config')
-      .then((c) => { setCfg(c); detectComfy(c.comfyui); })
+      .then((c) => { setCfg(c); setSavedCfg(c); detectComfy(c.comfyui); })
       .catch((e) => setLoadErr(e.message || '未知错误'));
     api.get('/api/workflows').then(setWorkflows).catch(() => {});
   }, []);
@@ -33,8 +34,23 @@ export default function SettingsPage({ onBack }) {
   }
   async function save() {
     setSaving(true);
-    try { setCfg(await api.put('/api/config', cfg)); toast.success('已保存'); } catch (e) { toast.error(e.message); }
+    try {
+      const s = await api.put('/api/config', cfg);
+      setCfg(s); setSavedCfg(s);
+      toast.success('已保存');
+      return true;
+    } catch (e) { toast.error(e.message); return false; }
     finally { setSaving(false); }
+  }
+  // 返回前若有未保存的修改，先提示是否保存，避免用户直接离开丢失配置
+  async function handleBack() {
+    if (cfg !== savedCfg) {
+      const ok = await toast.confirm('配置有未保存的修改，保存后再返回？', { confirmLabel: '保存并返回', cancelLabel: '取消' });
+      if (!ok) return;
+      const saved = await save();
+      if (!saved) return;
+    }
+    onBack();
   }
   async function testComfy() {
     try { const r = await api.post('/api/comfyui/test', { comfyui: cfg.comfyui }); setComfyInfo(r); setTest(r.ok ? ('连接成功 · ' + r.system + ' · ' + r.device) : ('连接失败：' + r.error)); } catch (e) { setTest('失败：' + e.message); }
@@ -84,7 +100,7 @@ export default function SettingsPage({ onBack }) {
       <CardBody className="gap-2">
         <div className="row justify-between">
           <h2 className="m-0">设置</h2>
-          <Button size="sm" variant="flat" onPress={onBack}>返回</Button>
+          <Button size="sm" variant="flat" onPress={handleBack}>返回</Button>
         </div>
 
         <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>ComfyUI 服务</h3>
@@ -148,14 +164,15 @@ export default function SettingsPage({ onBack }) {
           <span style={{ flex: 'none' }}>API Key</span>
           <Input size="sm" className="flex-1" placeholder="API Key" type="password" value={cfg.llm.apiKey} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, apiKey: e.target.value } })} />
         </div>
-        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
-          <Button size="sm" onPress={testLlm}>测试连接</Button>
-          {llmTest && <span className="muted">{llmTest}</span>}
-        </div>
         <Checkbox size="sm" isSelected={!!cfg.llm.vision} onValueChange={(v) => setCfg({ ...cfg, llm: { ...cfg.llm, vision: v } })}>
           支持图片输入（多模态/视觉模型）
         </Checkbox>
         <p className="muted" style={{ marginTop: 4 }}>开启后，写分镜/图生图提示词时会把参考图提交给大模型；请确认所用模型确实支持视觉输入。</p>
+        <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+          <Button size="sm" onPress={testLlm}>测试连接</Button>
+          {llmTest && <span className="muted">{llmTest}</span>}
+        </div>
+      
         <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
           <span style={{ flex: 'none' }}>提示词改写语言</span>
           <Select size="sm" className="w-64" aria-label="提示词改写语言" selectedKeys={selectKeys(cfg.llm.rewriteLanguage || 'same')} onSelectionChange={(k) => setCfg({ ...cfg, llm: { ...cfg.llm, rewriteLanguage: pickKey(k) } })}>

@@ -14,15 +14,18 @@ export default function ChapterOps({ projectId, chapter, running, runningChapter
   const [pending, setPending] = useState({});
   const [picked, setPicked] = useState(() => new Set());
   const [stageErr, setStageErr] = useState('');
+  const [stageLoadErr, setStageLoadErr] = useState('');
   // 提交类操作进行中：显示全屏加载层提示等待并阻断重复点击，操作结束（成功或失败）后自动消失
   const [busy, setBusy] = useState(null);
 
   // 待办数刷新：进入/离开运行态 + 运行期间每 4s 拉一次。
   useEffect(() => {
     let alive = true;
+    // 拉取失败必须让用户看见：stageList 保持 null、一直显示「分阶段运行加载中…」，
+    // 用户只会以为界面卡住（项目被删、实例重启都会命中），而错误其实可以照原样说明。
     const load = () => api.get('/api/projects/' + projectId + '/stages')
-      .then((d) => { if (alive) { setStageList(d.stages); setPending(d.pending || {}); } })
-      .catch(() => {});
+      .then((d) => { if (alive) { setStageList(d.stages); setPending(d.pending || {}); setStageLoadErr(''); } })
+      .catch((e) => { if (alive) setStageLoadErr('分阶段运行加载失败：' + ((e && e.message) || e)); });
     load();
     if (!running) return () => { alive = false; };
     const t = setInterval(load, 4000);
@@ -101,10 +104,14 @@ export default function ChapterOps({ projectId, chapter, running, runningChapter
       </p>
 
       {stageList === null ? (
-        <div className="border-t border-default-200 pt-3 flex items-center justify-center gap-2.5 py-6">
-          <Spinner size="sm" />
-          <span className="muted">分阶段运行加载中…</span>
-        </div>
+        stageLoadErr
+          ? <p className="m-0 text-danger">{stageLoadErr}</p>
+          : (
+            <div className="border-t border-default-200 pt-3 flex items-center justify-center gap-2.5 py-6">
+              <Spinner size="sm" />
+              <span className="muted">分阶段运行加载中…</span>
+            </div>
+          )
       ) : (
         <div className="border-t border-default-200 pt-3 flex flex-col gap-2">
           <div className="flex flex-col gap-2">

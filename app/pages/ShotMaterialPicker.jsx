@@ -1,28 +1,47 @@
 'use client';
 import { useRef, useState } from 'react';
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button } from '@heroui/react';
+import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Select, SelectItem } from '@heroui/react';
 import { api } from '../api-client.js';
-import { fileUrl } from './shared';
+import { fileUrl, selectKeys, pickKey } from './shared';
 import { useToast } from '../toast';
 
 const LABEL = { character: '角色', scene: '场景', prop: '道具', costume: '服装', age: '年龄', audio: '音频' };
 const AUDIO_CATEGORIES = ['voice', 'music', 'sfx'];
 
-export default function ShotMaterialPicker({ projectId, assets, category, mode, replaceAssetId, assignedIds = [], onPick, onCancel }) {
+export default function ShotMaterialPicker({ projectId, assets, category, mode, replaceAssetId, assignedIds = [], charIds = [], onPick, onCancel }) {
   const toast = useToast();
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const isAudio = category === 'audio';
-  const list = (assets || []).filter((a) => (isAudio ? AUDIO_CATEGORIES.includes(a.category) : a.category === category));
+  // 服装/年龄是挂在角色下的变体：只有在「所属角色也在本镜」时生成才会用到它 —— refs.js 按
+  // parent_id 把它替换成该角色的参考图，镜头里没有这个角色就整条跳过（静默无效：占着引用位、
+  // 界面上显示已绑定，成片里却什么也没发生）。所以这里：
+  //   ① 「所属角色」只能是本镜已绑定的角色（原先本镜没有角色时回退成「全部角色」，
+  //      于是能建/选到本镜根本用不上的变体）；
+  //   ② 已有变体列表也只列本镜角色的变体（列出来点了不生效，比不列更让人困惑）；
+  //   ③ 本镜没有角色时不给上传（按钮禁用 + 提示先绑角色）。
+  const isVariant = category === 'costume' || category === 'age';
+  const characters = (assets || []).filter((a) => a.category === 'character');
+  const shotChars = (charIds || []).map((id) => characters.find((c) => c.id === id)).filter(Boolean);
+  const shotCharIds = new Set(shotChars.map((c) => c.id));
+  const parentChoices = shotChars;
+  const [parentId, setParentId] = useState(() => (isVariant && parentChoices.length === 1 ? parentChoices[0].id : ''));
+  const list = (assets || []).filter((a) => {
+    if (isAudio) return AUDIO_CATEGORIES.includes(a.category);
+    if (a.category !== category) return false;
+    if (isVariant) return shotCharIds.has(a.parent_id);
+    return true;
+  });
   const disabledIds = (assignedIds || []).filter((id) => id !== replaceAssetId);
 
   async function upload(file) {
     const name = await toast.prompt('新素材名称', { defaultValue: (file.name || '').replace(/\.[^.]+$/, ''), placeholder: '素材名称' });
     if (!name) return;
+    if (isVariant && !parentId) { toast.error('请先选择该服装/年龄变体所属的角色'); return; }
     setBusy(true);
     try {
       const assetCategory = isAudio ? 'voice' : category;
-      const a = await api.post('/api/projects/' + projectId + '/assets', { category: assetCategory, name });
+      const a = await api.post('/api/projects/' + projectId + '/assets', isVariant ? { category: assetCategory, name, parent_id: parentId } : { category: assetCategory, name });
       const buf = await file.arrayBuffer();
       const res = await fetch('/api/projects/' + projectId + '/assets/' + a.id + '/upload', {
         method: 'POST',
@@ -43,8 +62,15 @@ export default function ShotMaterialPicker({ projectId, assets, category, mode, 
             <ModalBody>
               <div className="row justify-between">
                 <span className="muted">从素材库选择已有「{LABEL[category] || category}」，或上传新{isAudio ? '音频' : '图'}</span>
-                <Button size="sm" isDisabled={busy} onPress={() => fileRef.current && fileRef.current.click()}>＋ 上传新素材</Button>
+                <Button size="sm" isDisabled={busy || (isVariant && !parentChoices.length)} onPress={() => fileRef.current && fileRef.current.click()}>＋ 上传新素材</Button>
               </div>
+              {isVariant && (
+                <Select size="sm" label="所属角色（上传新素材时必须指定）" selectedKeys={selectKeys(parentId)} onSelectionChange={(k) => setParentId(pickKey(k))}>
+                  {parentChoices.map((c) => <SelectItem key={c.id}>{c.name}</SelectItem>)}
+                </Select>
+              )}
+              {isVariant && !parentChoices.length && <p className="muted" style={{ margin: 0 }}>该分镜还没有绑定角色：服装/年龄变体只有在「所属角色也在本镜」时才会生效，请先在分镜里绑定角色（角色卡「＋ 角色」），再来添加该角色的服装/年龄。</p>}
+              {isVariant && parentChoices.length > 0 && <p className="muted" style={{ margin: 0, fontSize: 12 }}>只显示本镜角色（{parentChoices.map((c) => c.name).join('、')}）的服装/年龄——其它角色的变体挂在本镜不会生效。</p>}
               <input ref={fileRef} type="file" accept={isAudio ? 'audio/*' : 'image/*'} style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) upload(f); }} />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 10, maxHeight: 320, overflow: 'auto' }}>

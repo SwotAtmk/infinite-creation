@@ -51,11 +51,13 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
   }, [projectId]);
   useEffect(() => { loadRefs(); }, [loadRefs]);
 
-  // 一旦有任务真正跑起来（runningChapter 更新为任意章节），就结束提交加载态：
+  // 一旦有任务真正跑起来，就结束提交加载态：
   // 要么是本章任务开始 → 按钮转「停止」；要么是别的章节在跑（提交被 409 拒绝）→ 恢复「生成」。
+  // 判据同时看 running（项目里已有活动任务）与 runningChapter（其中带章节的那个）：
+  // 任务可能先落在「排队中」，此时 runningChapter 还是 null。
   useEffect(() => {
-    if (submitting && runningChapter) setSubmitting(null);
-  }, [runningChapter, submitting]);
+    if (submitting && (running || runningChapter)) setSubmitting(null);
+  }, [running, runningChapter, submitting]);
 
   // 停止请求发出后，等任务真正停下（running 变 false）再清除停止加载态。
   useEffect(() => {
@@ -93,15 +95,19 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
     } catch (e) { toast.error(e.message); } finally { setAdding(false); }
   }
   async function runAll() {
-    try { await onRun(null); } catch (e) { toast.error(e.message); }
+    await submitRun(null);
   }
-  async function handleRun(c) {
-    setSubmitting(c.title);
-    await onRun(c.title); // onRun 内部已 toast 错误；加载态由 runningChapter 变化驱动清除
+  // 「生成/继续」的唯一入口：onRun（ProjectView.run）会把失败抛出来，这里统一提示，
+  // 成功才由各按钮自己继续（旧写法 onRun 吞掉错误 + 调用方照弹「已提交」= 假成功提示）。
+  // 提交期间进入加载态：任务真正跑起来（running / runningChapter 更新）后由上面的 useEffect 清除；
+  // 提交失败则在这里当场清除，避免按钮永远转圈。
+  async function submitRun(title) {
+    setSubmitting(title);
+    try { await onRun(title); } catch (e) { toast.error(e.message); setSubmitting(null); }
   }
   async function handleStop() {
     setStopping(true);
-    await onStop(); // onStop 内部已 toast 错误；停止态由 running 消失驱动清除
+    try { await onStop(); } catch (e) { toast.error(e.message); setStopping(false); }
   }
   async function removeChapter(c) {
     if (!(await toast.confirm('删除「' + c.title + '」及其分镜？此操作不可逆。', { danger: true }))) return;
@@ -110,9 +116,10 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
 
   async function uploadRefs() {
     if (!editing) return;
-    // 上传失败必须让用户看到原因（如「参考图片最多 9 张」）：此前没有 catch，
-    // 抛出的错误成为未处理的 Promise 拒绝，按钮点了没反应、原因也丢了。
+    // 逐条上传、成功一条就从待上传列表里摘掉：此前一条失败会把**已经传成功的**也留在列表里，
+    // 用户再点一次就重复上传（素材库里多出重复参考图）；报错也没说是哪个文件。
     try {
+      let done = 0;
       for (const it of refs) {
         const fd = new FormData();
         fd.append('file', it.file);
@@ -123,13 +130,16 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
         const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
-          throw new Error(j.error || ('参考图上传失败 HTTP ' + res.status));
+          const why = j.error || ('上传失败 HTTP ' + res.status);
+          throw new Error('「' + (it.file.name || '参考图') + '」' + why + (done ? '；前 ' + done + ' 张已上传成功，可直接继续传剩下的' : ''));
         }
+        done += 1;
+        // 按 key 精确移除（同名文件也不会误删别的待上传项）
+        setRefs((prev) => prev.filter((x) => x.key !== it.key));
       }
-      setRefs([]);
       loadRefs();
-      toast.success('参考素材已上传');
-    } catch (e) { toast.error(e.message); }
+      toast.success(done ? '参考素材已上传 ' + done + ' 张' : '参考素材已上传');
+    } catch (e) { toast.error(e.message); loadRefs(); }
   }
   async function delRef(rid) {
     try { await api.del('/api/projects/' + projectId + '/references/' + rid); loadRefs(); } catch (e) { alert(e.message); }
@@ -224,7 +234,7 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
                         className="flex-1"
                         isLoading={(submitting === c.title && runningChapter !== c.title) || (runningChapter === c.title && stopping)}
                         isDisabled={(running && runningChapter !== c.title) || (runningChapter === c.title && stopping)}
-                        onPress={() => (runningChapter === c.title ? handleStop() : handleRun(c))}
+                        onPress={() => (runningChapter === c.title ? handleStop() : submitRun(c.title))}
                       >
                         {runningChapter === c.title ? '■ 停止' : '▶ 生成'}
                       </Button>

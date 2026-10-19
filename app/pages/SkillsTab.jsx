@@ -12,7 +12,10 @@ export default function SkillsTab() {
   const fileRef = useRef(null);
   const load = useCallback(() => api.get('/api/skills').then(setSkills).catch((e) => toast.error(e.message)), []);
   useEffect(() => { load(); }, [load]);
-  async function rescan() { await api.post('/api/skills/rescan'); load(); }
+  async function rescan() {
+    // 失败必须让用户看到：此前没有 catch，拒绝成为未处理 Promise，按钮点了完全没反应
+    try { await api.post('/api/skills/rescan'); load(); } catch (e) { toast.error('重新扫描失败：' + e.message); }
+  }
   function pickZip() { if (fileRef.current) fileRef.current.click(); }
   async function doUploadZip(file) {
     if (!file) return;

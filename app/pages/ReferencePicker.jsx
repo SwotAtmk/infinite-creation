@@ -1,7 +1,17 @@
 'use client';
 import { useRef, useState } from 'react';
 import { Card, CardBody, Button, Input, Select, SelectItem, Modal, ModalContent, ModalBody, ModalFooter } from '@heroui/react';
-import { CATEGORIES, fileUrl, selectKeys, pickKey } from './shared';
+import { fileUrl, selectKeys, pickKey } from './shared';
+import { REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES, isReferenceImageName, isVariantAssetCategory, ASSET_CATEGORIES, ASSET_CATEGORY_LABEL } from '../../lib/shared/index.js';
+import { useToast } from '../toast';
+
+// 参考图上传/编辑里能选的素材分类：服装/年龄是「挂在角色下的变体」，必须有父角色，
+// 而这条链路没有「所属角色」可填 —— 后端会 400（见 references 路由），所以这里也不给选项。
+// 存量里已经是这种分类的行仍要能显示出来，否则下拉会空白（故传入当前值兜底）。
+const LIB_CATEGORIES = ASSET_CATEGORIES.filter((c) => !isVariantAssetCategory(c.id)).map((c) => [c.id, c.label]);
+function libCategoryOptions(cur) {
+  return isVariantAssetCategory(cur) ? [[cur, ASSET_CATEGORY_LABEL[cur] || cur], ...LIB_CATEGORIES] : LIB_CATEGORIES;
+}
 
 // ============ 参考图片素材列表（统一：已上传素材 + 待上传本地文件） ============
 // items: 待上传的本地文件 [{ key, file, mode: 'reference'|'library', category, description, previewUrl }]
@@ -13,15 +23,24 @@ let seq = 0;
 function nextKey() { seq += 1; return 'ref_' + Date.now() + '_' + seq; }
 
 export default function ReferencePicker({ projectId, items, onChange, saved = [], onUpdateSaved, onDeleteSaved, allowAdd = true }) {
+  const toast = useToast();
   const fileRef = useRef(null);
   const [preview, setPreview] = useState(null); // { url, name } 点击放大预览
 
   function addFiles(fileList) {
     const next = [];
+    const badExt = [];
+    const tooBig = [];
     for (const file of fileList || []) {
-      if (!file.type || !file.type.startsWith('image/')) continue;
+      // 白名单与后端同一份（lib/shared）：只看扩展名，不看 file.type ——
+      // 有些来源的 png 没有 MIME type，按 type 过滤会把它们静默丢掉；
+      // 而 image/bmp、image/avif 之类又会被放行、上传后才 400。
+      if (!isReferenceImageName(file.name)) { badExt.push(file.name); continue; }
+      if (file.size > REFERENCE_IMAGE_MAX_BYTES) { tooBig.push(file.name); continue; }
       next.push({ key: nextKey(), file, mode: 'reference', category: 'other', description: '', previewUrl: URL.createObjectURL(file) });
     }
+    if (badExt.length) toast.error('已跳过非支持格式：' + badExt.join('、') + '（仅支持 ' + REFERENCE_IMAGE_EXTS.map((e) => e.slice(1)).join('/') + '）');
+    if (tooBig.length) toast.error('已跳过超过 10MB 的文件：' + tooBig.join('、'));
     if (next.length) onChange([...(items || []), ...next]);
   }
 
@@ -52,7 +71,7 @@ export default function ReferencePicker({ projectId, items, onChange, saved = []
               ref={fileRef}
               type="file"
               multiple
-              accept="image/*"
+              accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif"
               style={{ display: 'none' }}
               onChange={(e) => { addFiles(e.target.files || []); e.target.value = ''; }}
             />
@@ -72,7 +91,7 @@ export default function ReferencePicker({ projectId, items, onChange, saved = []
                     </Select>
                     {r.mode === 'library' && (
                       <Select size="sm" className="w-28 min-w-0" aria-label="素材分类" selectedKeys={selectKeys(r.category)} onSelectionChange={(k) => onUpdateSaved && onUpdateSaved(r.id, { category: pickKey(k) })}>
-                        {CATEGORIES.map(([k, l]) => <SelectItem key={k}>{l}</SelectItem>)}
+                        {libCategoryOptions(r.category).map(([k, l]) => <SelectItem key={k}>{l}</SelectItem>)}
                       </Select>
                     )}
                     {onDeleteSaved && <Button size="sm" variant="flat" color="danger" onPress={() => onDeleteSaved(r.id)}>删除</Button>}
@@ -97,7 +116,7 @@ export default function ReferencePicker({ projectId, items, onChange, saved = []
                     </Select>
                     {it.mode === 'library' && (
                       <Select size="sm" className="w-28 min-w-0" aria-label="素材分类" selectedKeys={selectKeys(it.category)} onSelectionChange={(k) => patch(it.key, { category: pickKey(k) })}>
-                        {CATEGORIES.map(([k, l]) => <SelectItem key={k}>{l}</SelectItem>)}
+                        {libCategoryOptions(it.category).map(([k, l]) => <SelectItem key={k}>{l}</SelectItem>)}
                       </Select>
                     )}
                     <Button size="sm" variant="flat" onPress={() => remove(it.key)}>移除</Button>

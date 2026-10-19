@@ -13,7 +13,8 @@
     "build": "next build",
     "start": "NODE_ENV=production node server.js",
     "install:skills": "node scripts/install-skills.mjs",
-    "test": "node --test tests/unit.test.mjs"
+    "install:ic-writer": "node scripts/install-writer-skill.mjs",
+    "test": "node --test \"tests/*.test.mjs\""
   },
   "dependencies": {
     "@heroui/react": "2.7.11",

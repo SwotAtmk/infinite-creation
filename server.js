@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import next from 'next';
 import { WebSocketServer } from 'ws';
-import { DATA_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger, startupCleanup, maskComfyBaseUrl } from './lib/core/index.js';
+import { DATA_DIR, PROJECTS_DIR, ensureDirs, loadConfig, Workflows, DEFAULT_SPECS, logger, startupCleanup, maskComfyBaseUrl } from './lib/core/index.js';
 import { scanSkills } from './lib/agent/index.js';
 import { setBroadcaster } from './lib/ws.js';
 
@@ -50,11 +50,23 @@ function serveFile(res, req, abs) {
     if (range) {
       // Range 支持：浏览器 <video>/<audio> 拖进度条靠它（206 分段返回），缺失则无法 seek
       const m = /^bytes=(\d*)-(\d*)$/.exec(range);
-      if (!m || !m[1] && !m[2]) { res.writeHead(416, { 'Content-Range': 'bytes */' + total }); res.end(); return true; }
-      let start = m[1] ? parseInt(m[1], 10) : 0;
-      let end = m[2] ? parseInt(m[2], 10) : total - 1;
-      if (start >= total || start > end) { res.writeHead(416, { 'Content-Range': 'bytes */' + total }); res.end(); return true; }
-      end = Math.min(end, total - 1);
+      const reject = () => { res.writeHead(416, { 'Content-Range': 'bytes */' + total }); res.end(); };
+      if (!m || (!m[1] && !m[2])) { reject(); return true; }
+      let start;
+      let end;
+      if (!m[1]) {
+        // 后缀范围 `bytes=-N` = **最后** N 字节。原实现无论有没有起始值都按 start=0 算，
+        // 于是 `bytes=-1000` 返回的是**开头** 1000 字节（还回 206 + Content-Range，看不出异常）：
+        // 拖到片尾反而拿到片头。`bytes=-0` 非法，按 RFC 回 416。
+        const n = Number(m[2]);
+        if (!Number.isFinite(n) || n <= 0) { reject(); return true; }
+        start = Math.max(total - n, 0);
+        end = total - 1;
+      } else {
+        start = Number(m[1]);
+        end = m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= total || start > end) { reject(); return true; }
+      }
       res.writeHead(206, {
         ...headers,
         'Content-Range': `bytes ${start}-${end}/${total}`,
@@ -74,12 +86,30 @@ function serveFile(res, req, abs) {
 
 app.prepare().then(() => {
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url, 'http://localhost');
+    // req.url 是客户端给的原文，这一层又跑在 Next 之外（抛出的异常没有任何兜底）：
+    // `GET //` 会让 new URL 抛 TypeError、`/files/%E0%A4%A` 会让 decodeURIComponent 抛 URIError，
+    // 两者都会直接杀死整个进程——正在跑的任务一起没了、jobs 留在 running。
+    // 一律按 400 处理：畸形请求不该拖垮服务（不能靠全局 uncaughtException 兜，那种「继续跑」的状态不可信）。
+    let url;
+    try {
+      url = new URL(req.url, 'http://localhost');
+    } catch {
+      res.writeHead(400).end();
+      return;
+    }
     if (url.pathname.startsWith('/files/')) {
-      // 相对路径 -> data/ 下的绝对路径，并做路径穿越防护
-      const rel = decodeURIComponent(url.pathname.slice('/files/'.length));
+      // 相对路径 -> data/ 下的绝对路径，并做路径穿越防护。
+      // 只放开 data/projects/：data/ 根下还放着数据库（ic.db）等本不该对外暴露的文件，
+      // 前台所有 /files 链接都是 /files/projects/<项目id>/... ，收窄到项目目录不影响功能。
+      let rel;
+      try {
+        rel = decodeURIComponent(url.pathname.slice('/files/'.length));
+      } catch {
+        res.writeHead(400).end();
+        return;
+      }
       const abs = path.resolve(DATA_DIR, '.' + path.sep + rel.replace(/^\/+/, ''));
-      const safe = path.relative(DATA_DIR, abs);
+      const safe = path.relative(PROJECTS_DIR, abs);
       if (safe && !safe.startsWith('..') && !path.isAbsolute(safe) && serveFile(res, req, abs)) return;
       res.writeHead(404).end();
       return;
@@ -100,9 +130,26 @@ app.prepare().then(() => {
   // 导致浏览器报 “WebSocket connection to .../_next/webpack-hmr failed”。
   const upgradeHandler = app.getUpgradeHandler();
   server.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url, 'http://localhost');
+    // 客户端在升级握手中途断开（ECONNRESET）会让 raw socket 触发 'error'：没有监听器时
+    // EventEmitter 直接抛出，同样杀进程。这里先兜住，业务错误由下面的 ws 监听器负责。
+    socket.on('error', () => {});
+    // 同上：畸形 URL（如 `//`）会在 new URL 抛异常，而这里是 upgrade 事件回调，
+    // 抛出去同样无人接管、直接杀进程。升级请求容错更简单：直接断开。
+    let url;
+    try {
+      url = new URL(req.url, 'http://localhost');
+    } catch {
+      socket.destroy();
+      return;
+    }
     if (url.pathname === '/ws') {
       wss.handleUpgrade(req, socket, head, (ws) => {
+        // ws 的 'error' 必须有监听器：客户端发一个畸形帧（未掩码 / 非法 opcode / 非法 UTF-8 /
+        // 超 maxPayload）就会触发它，而这里是「无订阅者的 emit」——全仓没有 wss.on('connection')，
+        // ws 对象上没有任何业务监听器，'error' 抛出即 uncaughtException。
+        // 实测（生产模式 `npm start`，无 Next 的全局兜底）：一个未掩码帧就能让整个进程退出，
+        // 正在跑的任务全丢、jobs 永远停在 running。dev 下只是被 Next 的兜底接住、日志里留一行。
+        ws.on('error', (e) => logger.warn('WebSocket 客户端异常，已断开该连接：' + ((e && e.message) || e)));
         wss.emit('connection', ws, req);
       });
     } else if (url.pathname.startsWith('/_next/')) {

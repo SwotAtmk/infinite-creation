@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Assets } from '@/lib/core/index.js';
+import { Assets, withWriteContext } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,13 +34,23 @@ export async function PATCH(req, { params }) {
   // 让 LLM 阶段的 update_asset 不得覆盖它——用户改的提示词必须真的生效。
   // 清空提示词（保存空串）等于解锁：之后允许 LLM 重新写。
   if (patch.prompt !== undefined) patch.prompt_locked = String(patch.prompt).trim() ? 1 : 0;
-  return NextResponse.json(Assets.update(aid, patch));
+  return withWriteContext('PATCH /api/projects/:id/assets/:aid', async () => {
+    try {
+      return NextResponse.json(Assets.update(aid, patch));
+    } catch (e) {
+      // 值域外的分类 / 无父变体 / 非变体带父（db 层 Assets.update 的守卫）：是入参错误，翻成 400 而不是 500
+      if (e && (e.code === 'BAD_ASSET_CATEGORY' || e.code === 'BAD_VARIANT_PARENT' || e.code === 'BAD_ASSET_PARENT')) return NextResponse.json({ error: e.message }, { status: 400 });
+      throw e;
+    }
+  });
 }
 
 export async function DELETE(_req, { params }) {
   const { id, aid } = await params;
   const a = Assets.get(aid);
   if (!a || a.project_id !== id) return NextResponse.json({ error: '素材不存在' }, { status: 404 });
-  Assets.remove(aid);
-  return NextResponse.json({ ok: true });
+  return withWriteContext('DELETE /api/projects/:id/assets/:aid', async () => {
+    Assets.remove(aid);
+    return NextResponse.json({ ok: true });
+  });
 }

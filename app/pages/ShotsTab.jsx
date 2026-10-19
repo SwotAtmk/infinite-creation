@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Button, Input, Card, CardBody, Chip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Spinner } from '@heroui/react';
 import { api } from '../api-client.js';
 import { fileUrl, dialogueSpeakers, statusColor } from './shared';
+import { nameMatches } from '../../lib/shared/index.js';
 import { useToast } from '../toast';
 import ShotMaterialPicker from './ShotMaterialPicker';
 import LoadingOverlay from './LoadingOverlay';
@@ -181,9 +182,10 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       </div>
       {shown.map((s) => {
         const chars = charsOf(s), scenes = scenesOf(s), props = propsOf(s), costumes = costumesOf(s), ages = agesOf(s), audios = audiosOf(s);
-        // 语音参考只显示「有台词」角色（与后端 assembleShotReferences 一致）：多人同场时仅说话角色才有音色
+        // 语音参考只显示「有台词」角色（与后端 assembleShotReferences 一致，同走 nameMatches：
+        // 名字用规范化后精确相等，避免「明」被对白里的「小明」误判成说话人）
         const speakers = dialogueSpeakers(s.dialogue);
-        const speakingChars = chars.filter((c) => speakers.some((sp) => sp === c.name || sp.includes(c.name) || c.name.includes(sp)));
+        const speakingChars = chars.filter((c) => speakers.some((sp) => nameMatches(sp, c.name)));
         const voices = speakingChars.filter((c) => c.voice_ref).map((c) => ({ name: c.name, voice_ref: c.voice_ref }));
         const allRefs = [...chars, ...scenes, ...props, ...costumes, ...ages];
         const resoLabel = s.resolution === 'custom' && project
@@ -276,7 +278,9 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
           </Card>
         );
       })}
-      {!shots.length && <p className="muted">暂无分镜-请先生成素材</p>}
+      {/* 空态按**当前筛选后**的列表判断：按章节筛选时，其它章节有分镜也会让这里永远不显示提示，
+          用户看着「共 0 镜」却一句话都没有（旧写法判的是 shots.length） */}
+      {!shown.length && <p className="muted">暂无分镜-请先生成素材</p>}
 
       <Modal isOpen={!!preview} size="3xl" backdrop="blur" onClose={() => setPreview(null)}>
         <ModalContent>
@@ -316,6 +320,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
           mode={materialPicker.mode}
           replaceAssetId={materialPicker.replaceAssetId}
           assignedIds={asArr((shots.find((s) => s.id === materialPicker.shotId) || {})[MATERIAL_FIELD[materialPicker.category]])}
+          charIds={asArr((shots.find((s) => s.id === materialPicker.shotId) || {}).character_ids)}
           onPick={applyMaterial}
           onCancel={() => setMaterialPicker(null)}
         />

@@ -159,10 +159,12 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
     return done;
   }
   async function delRef(rid) {
+    setEditDirty(true);
     try { await api.del('/api/projects/' + projectId + '/references/' + rid); loadRefs(); } catch (e) { alert(e.message); }
   }
   async function updateRef(rid, patch) {
-    // 乐观更新，失败回滚重载
+    // 乐观更新，失败回滚重载；编辑参考素材也算「有改动」，让「保存本章」按钮可点（确认后关闭弹窗）
+    setEditDirty(true);
     setSavedRefs((prev) => prev.map((r) => (r.id === rid ? { ...r, ...patch } : r)));
     try {
       await api.patch('/api/projects/' + projectId + '/references/' + rid, patch);

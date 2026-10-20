@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
-import { Card, CardBody, Button, Input, Select, SelectItem, Modal, ModalContent, ModalBody, ModalFooter } from '@heroui/react';
+import { Card, CardBody, Button, Input, Select, SelectItem, Modal, ModalContent, ModalBody, ModalFooter, Spinner } from '@heroui/react';
 import { fileUrl, selectKeys, pickKey } from './shared';
 import { REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES, isReferenceImageName, isVariantAssetCategory, ASSET_CATEGORIES, ASSET_CATEGORY_LABEL } from '../../lib/shared/index.js';
 import { useToast } from '../toast';
@@ -22,6 +22,33 @@ function libCategoryOptions(cur) {
 let seq = 0;
 function nextKey() { seq += 1; return 'ref_' + Date.now() + '_' + seq; }
 
+// 缩略图：从服务器加载时显示转圈动画，加载失败回退成「图」占位，避免图片出现前一片空白
+function ThumbImg({ src, alt, onClick, title }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return <div className="w-12 h-12 flex items-center justify-center rounded bg-default-100 text-muted shrink-0">图</div>;
+  }
+  return (
+    <div className="relative w-12 h-12 rounded overflow-hidden bg-default-100 shrink-0">
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Spinner size="sm" />
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        onClick={onClick}
+        title={title}
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+        className={'w-12 h-12 object-cover rounded cursor-zoom-in' + (loaded ? '' : ' opacity-0')}
+      />
+    </div>
+  );
+}
+
 export default function ReferencePicker({ projectId, items, onChange, saved = [], onUpdateSaved, onDeleteSaved, allowAdd = true }) {
   const toast = useToast();
   const fileRef = useRef(null);
@@ -37,7 +64,7 @@ export default function ReferencePicker({ projectId, items, onChange, saved = []
       // 而 image/bmp、image/avif 之类又会被放行、上传后才 400。
       if (!isReferenceImageName(file.name)) { badExt.push(file.name); continue; }
       if (file.size > REFERENCE_IMAGE_MAX_BYTES) { tooBig.push(file.name); continue; }
-      next.push({ key: nextKey(), file, mode: 'reference', category: 'other', description: '', previewUrl: URL.createObjectURL(file) });
+      next.push({ key: nextKey(), file, mode: 'library', category: 'prop', description: '', previewUrl: URL.createObjectURL(file) });
     }
     if (badExt.length) toast.error('已跳过非支持格式：' + badExt.join('、') + '（仅支持 ' + REFERENCE_IMAGE_EXTS.map((e) => e.slice(1)).join('/') + '）');
     if (tooBig.length) toast.error('已跳过超过 10MB 的文件：' + tooBig.join('、'));
@@ -82,7 +109,7 @@ export default function ReferencePicker({ projectId, items, onChange, saved = []
                 <div key={'saved_' + r.id} className="border border-default-200 rounded-md p-2">
                   <div className="row" style={{ gap: 10, alignItems: 'center' }}>
                     {r.image_path
-                      ? <img src={fileUrl(projectId, r.image_path)} alt="" onClick={() => setPreview({ url: fileUrl(projectId, r.image_path), name: r.name })} className="w-12 h-12 object-cover rounded cursor-zoom-in" title="点击放大" />
+                      ? <ThumbImg src={fileUrl(projectId, r.image_path)} alt="" onClick={() => setPreview({ url: fileUrl(projectId, r.image_path), name: r.name })} title="点击放大" />
                       : <div className="thumb w-12 h-12 flex items-center justify-center rounded" style={{ aspectRatio: '1 / 1' }}>图</div>}
                     <span style={{ flex: 1, wordBreak: 'break-all' }}>{r.name || '未命名'}</span>
                     <Select size="sm" className="w-40 min-w-0" aria-label="素材用途" selectedKeys={selectKeys(r.mode)} onSelectionChange={(k) => onUpdateSaved && onUpdateSaved(r.id, { mode: pickKey(k) })}>

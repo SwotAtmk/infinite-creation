@@ -19,6 +19,11 @@ export default function SettingsPage({ onBack }) {
   const [llmTest, setLlmTest] = useState('');
   const [comfyInfo, setComfyInfo] = useState(null);
   const [workflows, setWorkflows] = useState([]);
+  const [agents, setAgents] = useState([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [agentsErr, setAgentsErr] = useState('');
+  const [agentTest, setAgentTest] = useState('');
+  const [mcpServer, setMcpServer] = useState(null);
   // 读取配置失败不能只弹一次 toast 就把用户留在「配置加载中…」：cfg 一直是 null，
   // 页面永远不会渲染出「返回」按钮，用户既看不到原因、也退不出去（只能刷浏览器）。
   const loadConfig = useCallback(() => {
@@ -29,6 +34,15 @@ export default function SettingsPage({ onBack }) {
     api.get('/api/workflows').then(setWorkflows).catch(() => {});
   }, []);
   useEffect(() => { loadConfig(); }, [loadConfig]);
+  const loadAgents = useCallback((force = false) => {
+    setAgentsLoading(true);
+    setAgentsErr('');
+    api.get('/api/agents' + (force ? '?force=1' : ''))
+      .then((r) => { setAgents(r.agents || []); setMcpServer(r.mcpServer || null); })
+      .catch((e) => setAgentsErr(e.message || '检测失败'))
+      .finally(() => setAgentsLoading(false));
+  }, []);
+  useEffect(() => { loadAgents(false); }, [loadAgents]);
   async function detectComfy(comfyui) {
     try { setComfyInfo(await api.post('/api/comfyui/test', { comfyui })); } catch { setComfyInfo({ ok: false, error: '连接失败' }); }
   }
@@ -83,6 +97,42 @@ export default function SettingsPage({ onBack }) {
   }
   const hwMode = hardwareMode(cfg);
   const isRunningHub = (cfg.comfyui.provider || 'native') === 'runninghub';
+  const agentCfg = cfg.agent || { runtime: 'openclaude', extraPath: '', custom: {} };
+  const agentRuntime = agentCfg.runtime || 'openclaude';
+  const isExternalAgent = agentRuntime !== 'openclaude';
+  const externalAgents = agents.filter((a) => a.id !== 'openclaude');
+  const selectedAgent = externalAgents.find((a) => a.id === agentRuntime);
+  const customCfg = agentCfg.custom || {};
+  function setAgent(patch) {
+    setCfg({ ...cfg, agent: { ...agentCfg, ...patch } });
+  }
+  function setAgentCustom(patch) {
+    setAgent({ custom: { ...customCfg, ...patch } });
+  }
+  function switchAgentMode(mode) {
+    if (mode === 'openclaude') { setAgent({ runtime: 'openclaude' }); return; }
+    const first = externalAgents.find((a) => a.available);
+    setAgent({ runtime: first ? first.id : 'custom' });
+  }
+  async function testAgent() {
+    setAgentTest('检测中…');
+    try {
+      const r = await api.post('/api/agents/test', { agentId: agentRuntime, custom: customCfg });
+      setAgentTest(r.ok
+        ? ('可用' + (r.version ? ' · ' + r.version : '') + (r.path ? ' · ' + r.path : ''))
+        : ('不可用：' + (r.error || '未知错误')));
+    } catch (e) {
+      setAgentTest('失败：' + e.message);
+    }
+  }
+  function copyMcpConfig() {
+    if (!mcpServer) return;
+    if (!navigator.clipboard) { toast.error('当前环境不支持剪贴板，请手动复制'); return; }
+    const snippet = JSON.stringify({ mcpServers: { ic: { command: mcpServer.command, args: mcpServer.args } } }, null, 2);
+    navigator.clipboard.writeText(snippet)
+      .then(() => toast.success('MCP 配置已复制'))
+      .catch(() => toast.error('复制失败，请手动选择文本'));
+  }
   // 切换硬件模式：工作流列表与「生成维护」默认值立即跟着变，无需先保存；
   // 用户手改过的 workflows / freeAfterEvery（不等于任一模式预设/默认值）保持不动。
   function switchMode(mode) {
@@ -148,6 +198,105 @@ export default function SettingsPage({ onBack }) {
               {test && <span className="muted">{test}</span>}
             </div>
             <p className="muted" style={{ marginTop: 4 }}>最终服务 URL：{comfyBaseUrl(cfg)}</p>
+          </>
+        )}
+
+        <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>Agent 运行时</h3>
+        <RadioGroup aria-label="Agent 运行时" orientation="horizontal" value={isExternalAgent ? 'external' : 'openclaude'} onValueChange={switchAgentMode}>
+          <Radio value="openclaude">内置 openclaude（默认）</Radio>
+          <Radio value="external">外部 Agent（本机 CLI）</Radio>
+        </RadioGroup>
+        <p className="muted" style={{ marginTop: 4 }}>内置 openclaude 使用下方 LLM 配置；外部 Agent 使用它自己的模型与登录态，并通过本地 MCP 服务调用本项目的领域工具。</p>
+
+        {isExternalAgent && (
+          <>
+            <div className="row mt-2" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ flex: 'none' }}>选择 Agent</span>
+              <Select
+                size="sm"
+                className="w-72"
+                aria-label="外部 Agent"
+                placeholder="请选择 Agent"
+                selectedKeys={selectKeys(agentRuntime)}
+                disallowEmptySelection
+                onSelectionChange={(k) => {
+                  // 单选下拉再次点已选项时会回传空集合；不能把它当成「切回内置」，
+                  // 否则 Agent 运行时会瞬间跳回 openclaude、整个外部 Agent 区块被卸载。
+                  const next = pickKey(k);
+                  if (next) setAgent({ runtime: next });
+                }}
+                isDisabled={agentsLoading}
+              >
+                {externalAgents.map((a) => {
+                  const label = a.name + (a.available ? '' : '（未安装）');
+                  return (
+                    <SelectItem key={a.id} textValue={label} isDisabled={!a.available}>
+                      {label}
+                    </SelectItem>
+                  );
+                })}
+                <SelectItem key="custom" textValue="自定义 CLI">自定义 CLI</SelectItem>
+              </Select>
+              <Button size="sm" variant="flat" isLoading={agentsLoading} onPress={() => loadAgents(true)}>重新检测</Button>
+              <Button size="sm" onPress={testAgent} isDisabled={agentsLoading}>检测可执行</Button>
+            </div>
+            {agentsErr && <p className="muted" style={{ marginTop: 4 }}>检测失败：{agentsErr}</p>}
+            {externalAgents.some((a) => !a.available) && (
+              <p className="muted" style={{ marginTop: 4 }}>
+                未安装：{externalAgents.filter((a) => !a.available).map((a, i) => (
+                  <span key={a.id}>
+                    {i ? '、' : ''}
+                    {a.installUrl ? <a href={a.installUrl} target="_blank" rel="noopener noreferrer">{a.name}</a> : a.name}
+                  </span>
+                ))}
+              </p>
+            )}
+            {selectedAgent && !selectedAgent.available && (
+              <p className="muted" style={{ marginTop: 4 }}>
+                ❌ 未安装{selectedAgent.bin ? '：' + selectedAgent.bin : ''}
+                {selectedAgent.installUrl ? <> · <a href={selectedAgent.installUrl} target="_blank" rel="noopener noreferrer">安装说明</a></> : null}
+              </p>
+            )}
+            {selectedAgent && selectedAgent.available && (
+              <p className="muted" style={{ marginTop: 4 }}>✅ 已安装{selectedAgent.version ? ' · ' + selectedAgent.version : ''}{selectedAgent.path ? ' · ' + selectedAgent.path : ''}</p>
+            )}
+            {selectedAgent?.hint && <p className="muted text-warning" style={{ marginTop: 4 }}>⚠ {selectedAgent.hint}</p>}
+            {agentTest && <p className="muted" style={{ marginTop: 4 }}>{agentTest}</p>}
+
+            {agentRuntime === 'custom' && (
+              <>
+                <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+                  <span style={{ flex: 'none' }}>名称</span>
+                  <Input size="sm" className="flex-1" value={customCfg.name || ''} onChange={(e) => setAgentCustom({ name: e.target.value })} placeholder="自定义 CLI" />
+                </div>
+                <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+                  <span style={{ flex: 'none' }}>可执行文件</span>
+                  <Input size="sm" className="flex-1" value={customCfg.bin || ''} onChange={(e) => setAgentCustom({ bin: e.target.value })} placeholder="例如 my-agent 或 /usr/local/bin/my-agent" />
+                </div>
+                <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+                  <span style={{ flex: 'none' }}>启动参数</span>
+                  <Input size="sm" className="flex-1" value={customCfg.args || ''} onChange={(e) => setAgentCustom({ args: e.target.value })} placeholder="例如 --print 或 -p {prompt}；支持 {mcpConfig}" />
+                </div>
+                <Checkbox size="sm" isSelected={customCfg.promptViaStdin !== false} onValueChange={(v) => setAgentCustom({ promptViaStdin: v })}>
+                  通过 stdin 传入 prompt（推荐）
+                </Checkbox>
+                <p className="muted" style={{ marginTop: 4 }}>自定义 CLI 需要自行接入 MCP。把下方配置加到它的 MCP 设置中；任务运行时本项目会注入 IC_MCP_* 环境变量。</p>
+                {mcpServer && (
+                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Button size="sm" variant="flat" onPress={copyMcpConfig}>复制 MCP 配置</Button>
+                    <span className="muted" style={{ wordBreak: 'break-all' }}>{mcpServer.command} {mcpServer.args.join(' ')}</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+              <span style={{ flex: 'none' }}>额外 PATH</span>
+              <Input size="sm" className="flex-1" value={agentCfg.extraPath || ''} onChange={(e) => setAgent({ extraPath: e.target.value })} placeholder="可选；多个目录用系统 PATH 分隔符（macOS/Linux 为 :，Windows 为 ;）" />
+            </div>
+            <p className="muted" style={{ marginTop: 4 }}>
+              外部 Agent 使用其自身模型与登录态；本项目通过本地 MCP 服务提供领域工具。外部 Agent 拥有其 CLI 自身权限，请只选择可信 Agent。首次运行请在任务日志确认工具调用。
+            </p>
           </>
         )}
 

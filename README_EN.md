@@ -23,7 +23,6 @@ English | [中文](README.md)
 ## Roadmap
 - [Ongoing] Addressing BUGs in the project
 - [In progress] For home-grade GPUs with low VRAM, the blogger's testing equipment is limited. More users are needed to help with testing and provide feedback to the repository's Issues. Please contribute your insights! 🙏
-- [In progress] Integrate the function of automatically generating video subtitles
 - [In progress] Address and optimize issues such as tool invocation security and context compression in internal agents
 - [In Progress] Integrating external agents, divided into standard and professional editions. The professional edition calls external agents for processing, while the standard edition includes an integrated agent module
 - [In Progress] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
@@ -33,6 +32,7 @@ English | [中文](README.md)
 - [In Progress] Package and build Docker deployment, desktop app
 - [In Progress] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
 - [In Progress] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
+- [✅] Automatic video subtitles: a project-level toggle burns shot dialogue/narration into the final video on a shot-based timeline (speaker names stripped), with a subtitle-free copy and a downloadable SRT file
 - [✅] Support background music management: integrate MiniMax Music3 for local/cloud automatic background-music generation and synthesis into videos, with a "Background Music" library (manual generation / preview / select / apply to chapters)
 - [✅] Add Agent security approval policies to prevent Agent from performing unauthorized operations, deleting projects, or executing dangerous commands
 - [✅] Integrate the online RunningHub-ComfyUI workflow for generation, with free overnight MiniMax-H3 runs for members
@@ -83,6 +83,7 @@ RAM: 32GB DDR4 3200 MT/s (16GBx2)
 - **Checkpoint/resume**: Task persistence + idempotent skipping; after a process crash/restart it continues without regenerating completed items.
 - **Review/regenerate**: Shot-level preview and regeneration (change seed / rewrite prompt based on feedback).
 - **Background music**: The video stage automatically generates instrumental background music and synthesizes it into the final film; a dedicated "Background Music" library supports manual generation (with caption / lyrics / duration), preview, selection, and applying a track to multiple completed chapters at once.
+- **Automatic subtitles**: A project-level "auto subtitles" toggle burns shot dialogue/narration into the final video on a shot-based timeline (speaker names stripped), while also keeping a subtitle-free copy and an SRT file. The "Exports" page lets you download the subtitled video, the subtitle-free video, or the SRT, and supports single or batch deletion.
 - **Staged execution**: Generation is split into four independent stages — text creation / asset image generation / voice design / storyboard video — any subset can be toggled to run or resume. Batches are split automatically by VRAM constraints, and unneeded stages don't spin up their processes.
 - **VRAM maintenance**: The settings page lets you configure "release ComfyUI VRAM every N generations" (default 3, 0 = off), covering text-to-image / image-to-image / costume change / voice / video rendering — AMD Dynamic VRAM's memory accumulation isn't only triggered by video. After a release, the next generation reloads models (about 1–3 minutes extra). When Dynamic VRAM is disabled, the UI shows a prompt recommending it be turned on.
 - **Online preview**: Final films / shot videos are streamed via backend Range requests — drag the progress bar freely and jump instantly.
@@ -228,7 +229,7 @@ Register now and you can receive 500 RH coins, which can be used to generate ple
 1. New project → paste the novel text (or a one-line idea) + style.
 2. In "Chapter Management", click a chapter's "Actions", check the stages to run (text creation / asset image generation / voice design / storyboard video; you can check only a subset for resuming), click ▶ Start → watch progress in the console in real time (no intermediate actions needed).
 3. After the video stage finishes, background music is generated automatically and the film is merged; go to "Shot Review" to preview segment by segment and click ↻ to regenerate any unsatisfactory shot (optional feedback); the "Background Music" page lets you manually generate / preview / select a track and apply it to multiple chapters.
-4. Go to the "Final Film" page to preview online (draggable progress bar) and ⬇ download.
+4. Go to the "Final Film" page to preview online (draggable progress bar) and download the subtitled video, the subtitle-free video, or the SRT as needed; delete unwanted exports individually or in batch.
 
 ## Self-Iteration: New Workflow → New Skill
 
@@ -244,7 +245,8 @@ On the Workflows page, paste a new ComfyUI workflow JSON → "Analyze nodes/role
 | GET      | /api/projects/:id/assets?category=        | Assets (by category)                 |
 | GET      | /api/projects/:id/shots                   | Shots                                |
 | POST     | /api/projects/:id/shots/:sid/regenerate   | Regenerate a single shot             |
-| POST     | /api/projects/:id/export                  | Merge & export the final film        |
+| POST     | /api/projects/:id/export                  | Merge & export the final film (burns subtitles per project toggle, plus a subtitle-free copy and SRT) |
+| GET/DELETE | /api/projects/:id/exports               | List / delete exports (batch supported; cleans up the subtitle-free copy and SRT too) |
 | GET      | /api/projects/:id/stages                  | Pending counts + stage definitions   |
 | POST     | /api/projects/:id/stages                  | Run by stages (check llm/image/tts/video to start a batch, incl. preflight) |
 | POST     | /api/projects/:id/music                   | Generate background music (create / regenerate a music asset) |

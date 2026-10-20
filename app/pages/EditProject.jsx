@@ -17,6 +17,7 @@ export default function EditProject({ project, onClose, onSaved }) {
   const [cw, setCw] = useState(project.video_width ? String(project.video_width) : '');
   const [ch, setCh] = useState(project.video_height ? String(project.video_height) : '');
   const [enableBgm, setEnableBgm] = useState(project.enable_bgm !== false);
+  const [enableSub, setEnableSub] = useState(project.enable_subtitles !== false);
   const [saving, setSaving] = useState(false);
   async function save() {
     setSaving(true);
@@ -28,6 +29,7 @@ export default function EditProject({ project, onClose, onSaved }) {
         video_width: Number(cw) || 0,
         video_height: Number(ch) || 0,
         enable_bgm: enableBgm,
+        enable_subtitles: enableSub,
       });
       toast.success('已保存'); onClose(); onSaved();
     }
@@ -70,9 +72,13 @@ export default function EditProject({ project, onClose, onSaved }) {
                   </>
                 )}
               </div>
-              <div className="row" style={{ marginTop: 12, alignItems: 'center', gap: 8 }}>
+              <div className="row" style={{ marginTop: 12, alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Switch size="sm" isSelected={enableBgm} onValueChange={setEnableBgm}>是否生成背景音乐</Switch>
                 <span className="muted" style={{ fontSize: 12 }}>开启后，视频阶段会自动生成纯音乐背景音乐并合成到成片。</span>
+              </div>
+              <div className="row" style={{ marginTop: 12, alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Switch size="sm" isSelected={enableSub} onValueChange={setEnableSub}>自动添加字幕</Switch>
+                <span className="muted" style={{ fontSize: 12 }}>开启后，导出/合并成片时会把分镜台词与旁白直接烧录进视频画面（不显示角色名）。</span>
               </div>
               <p className="muted" style={{ marginTop: 8 }}>章节与小说原文在「章节管理」页编辑；素材在「素材库」页管理（全项目共用）。</p>
             </ModalBody>

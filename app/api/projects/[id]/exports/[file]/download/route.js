@@ -18,7 +18,8 @@ export async function GET(_req, { params }) {
   const buf = fs.readFileSync(abs);
   return new NextResponse(buf, {
     headers: {
-      'Content-Type': 'video/mp4',
+      // SRT 是纯文本字幕，按规范类型返回（浏览器下载时仍按 UTF-8 文件名落盘）
+      'Content-Type': /\.srt$/i.test(name) ? 'application/x-subrip; charset=utf-8' : 'video/mp4',
       'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent(name),
     },
   });

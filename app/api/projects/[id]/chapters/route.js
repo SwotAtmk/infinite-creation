@@ -1,6 +1,8 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Chapters, Shots, Projects, ensureChapterPoster, withWriteContext, chapterStats, pickChapterFields } from '@/lib/core/index.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { Chapters, Shots, Projects, ensureChapterPoster, withWriteContext, chapterStats, pickChapterFields, projectDir, slugify } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +10,22 @@ export async function GET(_req, { params }) {
   const { id } = await params;
   const chs = Chapters.list(id);
   const all = Shots.list(id);
+  // 成片目录里的导出视频：按章节标题匹配（文件名形如「项目名_章节名_uid.mp4」），取最新一条，
+  // 供「完成」章节点击预览图直接播放最新成片。「不带字幕」副本只作下载配套，不作为播放对象。
+  const proj = Projects.get(id);
+  const exportsDir = path.join(projectDir(id), 'exports');
+  let exportVideos = [];
+  try {
+    exportVideos = fs.readdirSync(exportsDir)
+      .filter((f) => /\.(mp4|webm|mov|mkv|m4v|avi)$/i.test(f) && !/_nosub\.[^.]+$/i.test(f))
+      .map((f) => ({ name: f, mtime: fs.statSync(path.join(exportsDir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+  } catch {}
+  const latestVideo = (title) => {
+    const prefix = slugify(proj?.name || '') + '_' + slugify(title) + '_';
+    const hit = exportVideos.find((f) => f.name.startsWith(prefix));
+    return hit ? '/files/projects/' + id + '/exports/' + hit.name : '';
+  };
   const out = [];
   for (const c of chs) {
     const shots = all.filter((s) => s.chapter === c.title);
@@ -16,7 +34,7 @@ export async function GET(_req, { params }) {
     // 进度摘要走 lib/core 的唯一实现：分镜的「生成中」状态是 generating，不是 running
     // （早先这里内联判 running，永远不命中 → 正在出视频的章节被显示成「待生成」）
     const st = chapterStats(id, c.title);
-    out.push({ ...c, shotCount: st.total, doneCount: st.done, genStatus: st.status, poster });
+    out.push({ ...c, shotCount: st.total, doneCount: st.done, genStatus: st.status, poster, video: latestVideo(c.title) });
   }
   return NextResponse.json(out);
 }

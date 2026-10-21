@@ -35,6 +35,8 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 - **角色 voice_desc（声音画像）**：create_asset 创建角色时，必须把该角色声音特征（性别+年龄段+音色质感，如「青年男性，嗓音低沉」）作为 voice_desc 传入；已创建的缺 voice_desc 用 update_asset 补。voice_desc 是 design_voice 的性别/年龄依据，缺失时 TTS 会自由发挥成女声。
 - **视觉参考（若系统提示说明当前 LLM 支持图片输入）**：写图片/图生图提示词前，先用 view_asset(asset_id) 查看资产当前参考图，基于真实图写提示词；不支持图片输入则跳过此步。
 - **图片提示词**：对每个图片资产（人物/场景/道具），按 image-prompt-writing 写出 prompt 与 negative_prompt，用 update_asset(id, {prompt, negative_prompt}) 写入。
+- **参考图派生新素材（图生图 i2i）**：若首条消息附带了「参考生成新素材」的参考图（带 reference_id），当剧情需要生成与该参考图相关的素材时，用 generate_asset_from_reference(reference_id, category, name, prompt, description) 以参考图为图生图输入派生新图，不要用文生图重画；只有与参考图无关、纯靠文字描述的新素材才走 generate_assets_batch。
+- **导入素材绑定分镜**：若首条消息附带了「导入素材库」的图（带 asset_id），先分析每张图适合出现在哪个分镜（人物→characters、场景→scenes、道具→props），再在 set_storyboard 里按名字绑定到对应分镜，禁止忽略或为同一主体重复生成同义资产。
 - **音色参数**：对每个角色，按 tts-voice-design 写出 text（**20~30 字左右的简短自我介绍，约 5 秒，禁止长篇大论**）与 voice_description（**音色描述，不限制字数，可详细写**），连续调用 design_voice(asset_id, text, voice_description) 生成音色样本（落盘 voice_ref）。
 - **再统一提交图片**：generate_assets_batch 会用已写入的 prompt 连续文生图全部图片资产（人物 16:9 三视图、场景 16:9 环境图、道具 1:1 白底图），已生成成功的自动跳过（幂等），失败的标记并继续。
 - **生成衣橱（多套服装）**：人物 canonical 图生成完成后，对每个角色调用 design_outfits(character_id, outfits) 一次性生成该角色衣橱里的全部服装资产（图生图，保持脸/发型/画风一致）；每套服装成为 category=costume、parent_id 指向该角色的资产，素材库会按角色展示这些服装。

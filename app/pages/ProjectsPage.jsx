@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spinner, Switch } from '@heroui/react';
+import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spinner, Switch, Checkbox } from '@heroui/react';
 import { api } from '../api-client.js';
 import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor, fileUrl, VIDEO_RESOLUTIONS, VIDEO_RATIOS } from './shared';
 import ReferencePicker from './ReferencePicker';
@@ -16,6 +16,15 @@ function TrashIcon() {
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <path d="M10 11v6" />
       <path d="M14 11v6" />
+    </svg>
+  );
+}
+
+// 勾选图标（用于卡片左上角的选择按钮）
+function CheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="20 6 9 17 4 12" />
     </svg>
   );
 }
@@ -45,10 +54,14 @@ export default function ProjectsPage({ onOpen }) {
   const [enableBgm, setEnableBgm] = useState(true);
   // 创建项目进行中：显示全屏加载层提示等待并阻断重复点击
   const [busy, setBusy] = useState(null);
+  // 批量删除：已勾选的项目 id（只针对当前已加载的列表）
+  const [selected, setSelected] = useState(() => new Set());
+  const allSelected = projects.length > 0 && selected.size === projects.length;
 
   const load = useCallback(() => {
     setLoading(true);
     pageRef.current = 1;
+    setSelected(new Set());
     return api.get('/api/projects?page=1&pageSize=' + PAGE_SIZE)
       .then((r) => {
         setProjects(r.items || []);
@@ -136,6 +149,32 @@ export default function ProjectsPage({ onOpen }) {
     try { await api.del('/api/projects/' + id); toast.success('已删除'); load(); } catch (e) { toast.error(e.message); }
     finally { setBusy(null); }
   }
+  function toggleOne(id, checked) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  }
+  function toggleAll(checked) {
+    setSelected(checked ? new Set(projects.map((p) => p.id)) : new Set());
+  }
+  async function batchDelete() {
+    const ids = projects.filter((p) => selected.has(p.id)).map((p) => p.id);
+    if (!ids.length) return;
+    if (!(await toast.confirm('删除选中的 ' + ids.length + ' 个项目及其所有素材？', { danger: true }))) return;
+    // 逐个删除：单个删除接口里已包含「停任务 + 删库 + 删目录」，批量不需要另开一套后端逻辑。
+    // 某一个失败不影响其余，最后统一汇报失败项。
+    const failed = [];
+    for (let i = 0; i < ids.length; i++) {
+      setBusy('正在删除项目 ' + (i + 1) + '/' + ids.length + '…');
+      try { await api.del('/api/projects/' + ids[i]); } catch (e) { failed.push((e.message || '未知错误')); }
+    }
+    setBusy(null);
+    if (failed.length) toast.error('有 ' + failed.length + ' 个项目删除失败：' + failed.join('；'));
+    else toast.success('已删除 ' + ids.length + ' 个项目');
+    load();
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -191,7 +230,21 @@ export default function ProjectsPage({ onOpen }) {
 
       <Card>
         <CardBody className="gap-2">
-          <h2 className="text-lg font-semibold m-0">项目列表</h2>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-lg font-semibold m-0">项目列表</h2>
+            {!loading && projects.length > 0 && (
+              <div className="flex items-center gap-3">
+                <Checkbox size="sm" isSelected={allSelected} onValueChange={toggleAll}>全选</Checkbox>
+                <Button
+                  size="sm"
+                  color="danger"
+                  variant="flat"
+                  isDisabled={!selected.size}
+                  onPress={batchDelete}
+                >批量删除{selected.size ? '（' + selected.size + '）' : ''}</Button>
+              </div>
+            )}
+          </div>
           {loading && (
             <div className="flex items-center justify-center gap-2.5 py-6">
               <Spinner size="sm" />
@@ -204,13 +257,25 @@ export default function ProjectsPage({ onOpen }) {
             // grid 按从左到右、从上到下铺满，只有最后一行的剩余位置是空的。
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
               {projects.map((p) => (
-                <div key={p.id} className="border border-default-200 rounded-xl overflow-hidden flex flex-col bg-default-50 hover:shadow-md transition-shadow">
+                <div key={p.id} className={'border rounded-xl overflow-hidden flex flex-col bg-default-50 hover:shadow-md transition-shadow ' + (selected.has(p.id) ? 'border-primary ring-1 ring-primary' : 'border-default-200')}>
                   <div className="relative">
                     <button onClick={() => onOpen(p.id)} className="block w-full p-0 bg-transparent border-0 cursor-pointer">
                       {p.poster
                         ? <img src={fileUrl(p.id, p.poster)} alt={p.name} className="w-full aspect-video object-cover bg-black" />
                         : <div className="w-full aspect-video bg-default-200 flex items-center justify-center text-default-500 text-sm">暂无预览</div>}
                     </button>
+                    {/* 自绘圆形勾选按钮：HeroUI Checkbox 自带 p-2 -m-2 且为方形，
+                        套在浮层里左右/上下留白不一致，看起来不居中；这里用固定 24px 圆点保证对称 */}
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={selected.has(p.id)}
+                      aria-label={'选择 ' + p.name}
+                      onClick={(e) => { e.stopPropagation(); toggleOne(p.id, !selected.has(p.id)); }}
+                      className={'absolute top-2 left-2 z-10 w-6 h-6 p-0 rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer ' + (selected.has(p.id)
+                        ? 'bg-primary border-primary text-primary-foreground shadow-sm'
+                        : 'bg-transparent border-white/90 text-transparent hover:bg-white/25')}
+                    ><CheckIcon /></button>
                     <Button
                       isIconOnly
                       size="sm"

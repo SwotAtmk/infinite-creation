@@ -24,7 +24,7 @@ English | [中文](README.md)
 - [Ongoing] Addressing BUGs in the project
 - [In progress] For home-grade GPUs with low VRAM, the blogger's testing equipment is limited. More users are needed to help with testing and provide feedback to the repository's Issues. Please contribute your insights! 🙏
 - [In progress] Address and optimize issues such as tool invocation security and context compression in internal agents
-- [In Progress] Integrating external agents, divided into standard and professional editions. The professional edition calls external agents for processing, while the standard edition includes an integrated agent module
+- [✅] External Agent runtime: support local CLI agents (Claude Code, Codex CLI, Gemini CLI, Qwen Code, Cursor Agent, Qoder CLI, Grok Build, Hermes, custom command) to take over the "novel→video" pipeline via a local MCP tool bridge, while keeping the built-in openclaude as the default runtime
 - [In Progress] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
 - [In Progress] Automated Pipeline Supports Custom Prompt Assembly Plugins
 - [In Progress] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
@@ -87,6 +87,7 @@ RAM: 32GB DDR4 3200 MT/s (16GBx2)
 - **Staged execution**: Generation is split into four independent stages — text creation / asset image generation / voice design / storyboard video — any subset can be toggled to run or resume. Batches are split automatically by VRAM constraints, and unneeded stages don't spin up their processes.
 - **VRAM maintenance**: The settings page lets you configure "release ComfyUI VRAM every N generations" (default 3, 0 = off), covering text-to-image / image-to-image / costume change / voice / video rendering — AMD Dynamic VRAM's memory accumulation isn't only triggered by video. After a release, the next generation reloads models (about 1–3 minutes extra). When Dynamic VRAM is disabled, the UI shows a prompt recommending it be turned on.
 - **Online preview**: Final films / shot videos are streamed via backend Range requests — drag the progress bar freely and jump instantly.
+- **External Agent runtime**: Besides the built-in openclaude, switch on the settings page to a locally installed CLI agent (Claude Code / Codex CLI / Gemini CLI / Qwen Code / Cursor Agent / Qoder CLI / Grok Build / Hermes / custom command), exposing domain tools to it via a local MCP stdio service so it fully takes over the pipeline; model accounts and sign-in state stay with each CLI.
 
 # Screenshots
 
@@ -110,7 +111,7 @@ RAM: 32GB DDR4 3200 MT/s (16GBx2)
 ## Tech Stack
 
 - Backend: Node.js (Next.js custom server) + `node:sqlite` + ComfyUI REST/WebSocket + ffmpeg, zero native-compilation dependencies.
-- Agent: Self-developed ReAct loop (native function-calling with JSON action-block fallback), tool registry + skill engine + skill factory.
+- Agent: built-in openclaude kernel (in-process SDK) + optional external Agent runtime (local CLI via an MCP tool bridge), tool registry + skill engine + skill factory.
 - Frontend: Next.js 15 + React 18 (App Router).
 - Structure: single package — `app/` (pages + 30+ API endpoints) · `lib/` (reusable core/agent/shared logic) · `server.js` (custom server: WebSocket progress push + `/files` static hosting with Range-based video streaming).
 
@@ -119,14 +120,15 @@ RAM: 32GB DDR4 3200 MT/s (16GBx2)
 ```
 infinite-creation/
 ├── app/                 # Next.js App Router (pages + API endpoints)
-├── lib/                 # Reusable logic: core (ComfyUI/LLM/DB/ffmpeg) · agent (runtime + skills) · shared (constants)
+├── lib/                 # Reusable logic: core (ComfyUI/LLM/DB/ffmpeg) · agent (built-in openclaude + external agents + skills) · shared (constants)
+│   └── agent/external/  #   External Agent runtime: defs/ (one definition file per CLI) · registry · detect · mcp-config · mcp-server (MCP service) · runner
 ├── server.js            # Custom server (WebSocket progress push + /files static hosting, Range streaming)
 ├── workflows/           # ComfyUI workflow templates (MiniMax H3 video / Qwen-Image 2.1 image & text / Krea2 / Qwen3-TTS, incl. GGUF quantized editions)
 ├── start-infinite-creation.bat    # Windows one-click background startup (auto-install deps + wait until ready)
 ├── stop-infinite-creation.bat     # Windows service stop
 ├── skills/              # Skill library (9 official + novel-to-video + custom)
 ├── scripts/install-skills.mjs   # Pull MiniMax-H3 official skills
-├── tests/unit.test.mjs          # Unit tests
+├── tests/               # Unit tests: unit.test.mjs + external-agents.test.mjs (agent defs / custom command / MCP handshake)
 ├── vendor/openclaude/           # Agent kernel source (dist/ build artifacts not committed; requires local build)
 └── data/                # Runtime (gitignored): SQLite + projects/<id>/…
 ```
@@ -187,8 +189,9 @@ pnpm run build && pnpm start
 Click ⚙ in the top-right corner:
 
 1. ComfyUI service URL: default `http://127.0.0.1:8188`, click "Test Connection" to confirm.
-2. LLM (the Agent's brain, OpenAI-compatible): fill in Base URL (must end with `/v1`), model, and API Key. Default model is `deepseek-v4-flash-vision-exp`.
-3. Generation maintenance (optional): set "release ComfyUI VRAM every N generations" (default on = 3, 0 = off), counted across **all ComfyUI generation tasks** (text-to-image / image-to-image / costume change / voice / video all count — on AMD GPUs with Dynamic VRAM, any consecutive generation gradually slows down). After a release, the next generation reloads models (about 1–3 minutes extra). When ComfyUI is detected as having Dynamic VRAM disabled, the UI shows a prompt recommending it be turned on.
+2. Agent runtime (optional): defaults to "Built-in openclaude"; you can also switch to "External Agent (local CLI)" and pick a locally installed CLI agent (Claude Code / Codex CLI / Gemini CLI / Qwen Code / Cursor Agent / Qoder CLI / Grok Build / Hermes / custom command) to take over the pipeline via a local MCP tool bridge.
+3. LLM (the Agent's brain, OpenAI-compatible): fill in Base URL (must end with `/v1`), model, and API Key. Default model is `deepseek-v4-flash-vision-exp` (the built-in openclaude uses this; external agents use their own model and sign-in state).
+4. Generation maintenance (optional): set "release ComfyUI VRAM every N generations" (default on = 3, 0 = off), counted across **all ComfyUI generation tasks** (text-to-image / image-to-image / costume change / voice / video all count — on AMD GPUs with Dynamic VRAM, any consecutive generation gradually slows down). After a release, the next generation reloads models (about 1–3 minutes extra). When ComfyUI is detected as having Dynamic VRAM disabled, the UI shows a prompt recommending it be turned on.
 
 Configuration is saved to `config.json` at the root (not committed). Generation parameters (timeout minutes, concurrency, release frequency) can be edited directly in the `generation` section of `config.json`.
 

@@ -231,10 +231,24 @@ export default function ProjectsPage({ onOpen }) {
                 placeholder=""
                 value={form.novel}
                 onChange={(e) => { setForm({ ...form, novel: e.target.value }); if (uploadedNovel) setUploadedNovel(null); }}
-                onFocus={() => setNovelFocused(true)}
+                onFocus={() => { setNovelFocused(true); if (uploadedNovel) setUploadedNovel(null); }}
                 onBlur={() => setNovelFocused(false)}
               />
-              {!form.novel && !novelFocused && !uploadedNovel && (
+              {uploadedNovel ? (
+                <div className="absolute inset-0 flex items-center gap-2 px-2 py-2 text-small pointer-events-none">
+                  <span className="text-foreground-500">已上传「{uploadedNovel.name}」（约 {uploadedNovel.chars} 字，将拆分为 {uploadedNovel.chapterCount} 章）</span>
+                  <button
+                    type="button"
+                    onClick={() => novelFileRef.current && novelFileRef.current.click()}
+                    className="pointer-events-auto text-primary hover:underline bg-transparent border-0 p-0 cursor-pointer"
+                  >更换</button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadedNovel(null)}
+                    className="pointer-events-auto text-primary hover:underline bg-transparent border-0 p-0 cursor-pointer"
+                  >取消</button>
+                </div>
+              ) : (!form.novel && !novelFocused) ? (
                 <div className="absolute inset-0 flex items-start gap-1 px-2 py-2 text-small pointer-events-none">
                   <span className="text-foreground-500">粘贴小说原文或一句话描述故事，或者</span>
                   <button
@@ -255,14 +269,9 @@ export default function ProjectsPage({ onOpen }) {
                     </Tooltip>
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
             <input ref={novelFileRef} type="file" accept=".txt,text/plain" style={{ display: 'none' }} onChange={uploadNovelFile} />
-            {uploadedNovel && (
-              <span className="muted" style={{ fontSize: 12 }}>
-                已上传「{uploadedNovel.name}」（约 {uploadedNovel.chars} 字，将拆分为 {uploadedNovel.chapterCount} 章）
-              </span>
-            )}
           </div>
           <div className="row" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
             <span className="muted">分辨率</span>

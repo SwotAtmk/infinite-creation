@@ -301,12 +301,15 @@ export default function SettingsPage({ onBack }) {
         )}
 
         <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>LLM（Agent 大脑，OpenAI 兼容）</h3>
+        <p className="muted" style={{ marginTop: 4 }}>
+          推荐使用 DeepSeek模型，Base URL 填写 <code>https://api.deepseek.com/v1</code>；<a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">获取 API Key</a>。
+        </p>
         <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
           <span style={{ flex: 'none' }}>Base URL</span>
           <Input size="sm" className="flex-1 min-w-0" placeholder="需 /v1 结尾" value={cfg.llm.baseUrl} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, baseUrl: e.target.value } })} />
         </div>
         <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
-          <span style={{ flex: 'none' }}>模型</span>
+          <span style={{ flex: 'none' }}>模型（推荐：deepseek-v4-flash-vision-exp 模型）</span>
           <Input size="sm" className="flex-1 min-w-0" placeholder="模型" value={cfg.llm.model} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, model: e.target.value } })} />
         </div>
         <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>

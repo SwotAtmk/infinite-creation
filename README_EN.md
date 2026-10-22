@@ -24,7 +24,6 @@ English | [中文](README.md)
 - [Ongoing] Addressing BUGs in the project
 - [In progress] For home-grade GPUs with low VRAM, the blogger's testing equipment is limited. More users are needed to help with testing and provide feedback to the repository's Issues. Please contribute your insights! 🙏
 - [In progress] Address and optimize issues such as tool invocation security and context compression in internal agents
-- [✅] External Agent runtime: support local CLI agents (Claude Code, Codex CLI, Gemini CLI, Qwen Code, Cursor Agent, Qoder CLI, Grok Build, Hermes, custom command) to take over the "novel→video" pipeline via a local MCP tool bridge, while keeping the built-in openclaude as the default runtime
 - [In Progress] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
 - [In Progress] Automated Pipeline Supports Custom Prompt Assembly Plugins
 - [In Progress] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
@@ -32,6 +31,8 @@ English | [中文](README.md)
 - [In Progress] Package and build Docker deployment, desktop app
 - [In Progress] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
 - [In Progress] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
+- [In Progress] Support uploading txt text files, automatically parsing and creating multiple chapters
+- [✅] External Agent runtime: support local CLI agents (Claude Code, Codex CLI, Gemini CLI, Qwen Code, Cursor Agent, Qoder CLI, Grok Build, Hermes, custom command) to take over the "novel→video" pipeline via a local MCP tool bridge, while keeping the built-in openclaude as the default runtime
 - [✅] Automatic video subtitles: a project-level toggle burns shot dialogue/narration into the final video on a shot-based timeline (speaker names stripped), with a subtitle-free copy and a downloadable SRT file
 - [✅] Support background music management: integrate MiniMax Music3 for local/cloud automatic background-music generation and synthesis into videos, with a "Background Music" library (manual generation / preview / select / apply to chapters)
 - [✅] Add Agent security approval policies to prevent Agent from performing unauthorized operations, deleting projects, or executing dangerous commands
@@ -350,7 +351,7 @@ This project was independently completed by an individual developer. Feedback, b
 ## Acknowledgements
 
 - Thanks to developer [happymy](https://github.com/happymy) for providing the AMD + GGUF adaptation solution and fixing some bugs in the project.
-- We would like to express our gratitude to the following developers for their contributions to the project: [ghshhf](https://github.com/ghshhf), [binonxia](https://github.com/binonxia)
+- We would like to express our gratitude to the following developers for their contributions to the project: [ghshhf](https://github.com/ghshhf), [binonxia](https://github.com/binonxia), [anupamme](https://github.com/anupamme)
 
 ## Star History
 

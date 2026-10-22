@@ -22,7 +22,6 @@
 - [持续进行] 解决项目中存在的BUG
 - [计划中] 适配低显存的家用级显卡，博主的测试设备有限，需要更多的用户帮忙测试并反馈到仓库中的Issues多多反馈🙏🏻
 - [计划中] 解决并优化内部Agent存在的工具调用安全及上下文压缩等……问题
-- [✅] 接入外部 Agent 运行时：支持本机 CLI Agent（Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Grok Build、Hermes、自定义命令）通过本地 MCP 工具桥接管「小说→视频」流水线，同时保留内置 openclaude 作为默认运行时
 - [计划中] 插件系统开发，支持插件上传、插件调用、插件框架……
 - [计划中] 自动流水线支持提示词自定义编排插件
 - [计划中] 收录更多高阶Skill技能，提升Agent技能视觉美感
@@ -30,6 +29,8 @@
 - [计划中] 打包构建Docker部署、桌面端App
 - [计划中] 工作流接入视频超分，让生成的视频更加清晰
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
+- [计划中] 支持上传txt文本文件，自动解析创建多章节
+- [✅] 接入外部 Agent 运行时：支持本机 CLI Agent（Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Grok Build、Hermes、自定义命令）通过本地 MCP 工具桥接管「小说→视频」流水线，同时保留内置 openclaude 作为默认运行时
 - [✅] 支持自动生成视频字幕：项目级开关，把分镜台词/旁白按时间轴烧录进成片（自动隐藏角色名），同时保留不带字幕版本与 SRT 字幕文件供下载
 - [✅] 支持背景音乐管理，接入 MiniMax Music3 本地/云端自动生成背景音乐并合成到视频中，含「背景音乐库」（手动生成/预览/选择/应用到章节）
 - [✅] 添加Agent安全审批策略，防止Agent越权操作，删除项目或执行危险命令
@@ -347,7 +348,7 @@ pnpm test   # node --test tests/unit.test.mjs
 
 ## 致谢
 - 感谢开发者 [happymy](https://github.com/happymy) 为此项目提供了AMD+GGUF适配的解决方案以及解决项目中存在的部分bug
-- 感谢以下开发者为项目做出的贡献：[ghshhf](https://github.com/ghshhf)、[binonxia](https://github.com/binonxia)
+- 感谢以下开发者为项目做出的贡献：[ghshhf](https://github.com/ghshhf)、[binonxia](https://github.com/binonxia)、[anupamme](https://github.com/anupamme)
 
 ## Star 历史
 

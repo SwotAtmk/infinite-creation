@@ -27,7 +27,7 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 - 把大纲写入项目 context（bible.md / style.md 骨架）。
 
 ### 2. 一致性锚点
-- bible.md：每个角色唯一外貌/配色/声音特征（一句话可复用描述）；并写出该角色的「衣橱」——多套服装清单（每套短名 + 外观描述），不要写死为唯一一套；这些服装后续都会生成服装资产供分镜引用。
+- bible.md：每个角色唯一外貌/配色/声音特征（一句话可复用描述）；并写出该角色的「衣橱」——多套服装清单（每套短名 + 外观描述），不要写死为唯一一套；这些服装后续都会生成服装资产供分镜引用。另为每个场景建立「场景站位表」（空间锚点 + 各角色默认方位 + 道具锚点 + 180度轴线与允许机位），随 bible 一并写出，作为跨镜站位一致性的锚点。
 - style.md：统一画风/光线/色调/镜头语言，后续所有生图与视频提示词强制引用。
 
 ### 3. 资产生成（技能驱动：先加载技能写参数，再统一提交）
@@ -44,6 +44,7 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 
 ### 4. 分镜脚本（完整覆盖 · 长镜头聚合，不拆碎）—— 先加载 story-pipeline-cn 再拆分
 - **先调用 skill(story-pipeline-cn) 加载拆分规约**，严格按其模式C 长镜头版拆分（禁止凭记忆臆造）。
+- **先调用 skill(scene-blocking-consistency) 建立站位表并写入 bible**：拆分镜前，为每个场景建立站位表（空间锚点/角色站位/道具锚点/轴线机位），合并进 bible（先 get_project 读回现有 context.bible 再 save_context，勿覆盖人物/衣橱）；之后每条 set_storyboard 的 sub_shots 与 visual 都必须明确写出各角色/道具相对左右方位与朝向，不得零指代（如「同上/保持原样」）。**按 idx 顺序逐条写分镜，并自动判断前后两镜是否转场**：比较前后两镜的 scene_name/场景头与时间——同场景且时间连续→写每条前先回顾上一条 sub_shots 的结尾落幅，起幅=上一镜落幅（角色左右方位/朝向/道具位置/动作方向一致）；发生转场（场景切换/地点变化/时间跳跃）→不参考上一镜位置，为新场景重建站位表。
 - **视觉参考（若支持图片输入）**：拆分/写 sub_shots 前，用 view_asset 一次性查看每个唯一角色/场景/服装的参考图并记住、跨镜复用（不要逐镜重复查看同一张图）；仅当某镜头引用了尚未看过的资产时才用 view_shot_references(shot_id) 补看，确保画面描述与人物/场景/服装一致。
 - **硬性要求：完整覆盖整章，但按「连续剧情段」聚合成长镜头，禁止碎片化**。镜头数 ≈ 场景切换次数（而非每段落一镜）；同一场景内连续动作 + 多句连贯对白合并成一个主镜头。
 - 拆分规则（story-pipeline-cn · 模式C · 长镜头版）：
@@ -59,7 +60,7 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 
 ### 5. 先写 H3 视频提示词，再一整章全部生成（r2v，确定性批量）
 - **先调用 skill(h3-prompt-writing) 加载提示词规范**，并读其 references/comfyui-node-adapter.md（官方 <Picture N>/<Audio N> → 本节点 __MINIMAX_H3_REF_N__ 的映射与平铺格式）。
-- **逐镜写 video_prompt**：对本章每个镜头，按 h3-prompt-writing + 适配说明写出英文平铺提示词（含 __MINIMAX_H3_REF_N__ 参考标签、时间轴画面/运镜/音效、对白走 voice_ref、画面无文字），用 update_shot(shot_id, {video_prompt}) 写入。参考标签序号必须与 assembleShotReferences 的引用顺序一致；**音频参考标签只对应「有台词」角色**（仅说话角色才有 voice_ref，按角色顺序排在图片之后，且 ≤3 段），不要给无台词角色写声音标签。
+- **逐镜写 video_prompt**：对本章每个镜头，按 h3-prompt-writing + 适配说明写出英文平铺提示词（含 __MINIMAX_H3_REF_N__ 参考标签、时间轴画面/运镜/音效、对白走 voice_ref、画面无文字），并把该场景站位表里的角色/道具左右方位与朝向翻译成英文复述进提示词，用 update_shot(shot_id, {video_prompt}) 写入。参考标签序号必须与 assembleShotReferences 的引用顺序一致；**音频参考标签只对应「有台词」角色**（仅说话角色才有 voice_ref，按角色顺序排在图片之后，且 ≤3 段），不要给无台词角色写声音标签。
 - 写完全部 video_prompt 后，用 **generate_chapter_videos(chapter=该章)** 一次性生成本章全部镜头视频：工具会循环遍历本章每个镜头（读 shot.video_prompt→generate_shot_video），**不省略任何镜头，一直跑到该章所有镜头 done**。若某镜漏写 video_prompt，工具会用最小兜底提示词（仍可出片，但质量打折），所以务必逐镜写全。
 - **硬性要求：不因时间/数量/失败跳过任何镜头**；失败镜头会被标记 failed 并继续。若返回 remaining>0，用 list_shots 看哪些 failed，修复后**再次调用 generate_chapter_videos** 直到 remaining=0。
 - 遵守 H3 上限：参考图 ≤9、音视频 ≤3（assembleShotReferences 内部处理）。

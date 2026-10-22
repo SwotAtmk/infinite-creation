@@ -42,7 +42,12 @@ export default function ProjectsPage({ onOpen }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const pageRef = useRef(1);
   const sentinelRef = useRef(null);
+  const novelFileRef = useRef(null);
   const [form, setForm] = useState({ name: '', novel: '', style: '' });
+  // 上传 txt 解析出的全文（不在输入框预览，创建项目时作为 novel 来源）
+  const [uploadedNovel, setUploadedNovel] = useState(null);
+  // textarea 是否聚焦：聚焦时隐藏自定义 placeholder（含上传按钮），让用户正常输入
+  const [novelFocused, setNovelFocused] = useState(false);
   const [customStyle, setCustomStyle] = useState('');
   const [vision, setVision] = useState(false);
   const [refs, setRefs] = useState([]);
@@ -98,7 +103,8 @@ export default function ProjectsPage({ onOpen }) {
     return () => io.disconnect();
   }, [loadMore]);
 
-  async function uploadReferences(projectId, chapterId) {
+  // 上传参考图：拆成多章时 shared=true，参考图标记为「共享」供所有章节使用
+  async function uploadReferences(projectId, chapterId, shared) {
     for (const it of refs) {
       const fd = new FormData();
       fd.append('file', it.file);
@@ -106,6 +112,7 @@ export default function ProjectsPage({ onOpen }) {
       fd.append('category', it.category || 'other');
       fd.append('chapter_id', chapterId);
       fd.append('description', it.description || '');
+      if (shared) fd.append('shared', '1');
       const res = await fetch('/api/projects/' + projectId + '/references', { method: 'POST', body: fd });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -114,12 +121,31 @@ export default function ProjectsPage({ onOpen }) {
     }
   }
 
+  // 上传 .txt 小说文件到后端解析（不本地预览），解析结果用于创建项目
+  async function uploadNovelFile(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch('/api/novel/parse', { method: 'POST', body: fd });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || ('解析失败 HTTP ' + res.status));
+      setUploadedNovel({ name: file.name, novel: j.novel || '', chars: j.chars || 0, chapterCount: j.chapterCount || 0 });
+    } catch (err) {
+      toast.error('上传小说失败：' + (err.message || err));
+    }
+  }
+
   async function create() {
     setBusy('正在创建项目…');
     try {
       const style = resolveStyle(form.style, customStyle);
+      const novel = uploadedNovel ? uploadedNovel.novel : form.novel;
       const p = await api.post('/api/projects', {
         ...form,
+        novel,
         style,
         video_resolution: res,
         video_aspect_ratio: ratio,
@@ -134,7 +160,7 @@ export default function ProjectsPage({ onOpen }) {
       try {
         if (refs.length) {
           const chapters = await api.get('/api/projects/' + p.id + '/chapters');
-          await uploadReferences(p.id, (chapters[0] && chapters[0].id) || '');
+          await uploadReferences(p.id, (chapters[0] && chapters[0].id) || '', chapters.length > 1);
         }
       } catch (e) {
         toast.error('项目已创建，但参考图上传失败：' + e.message + '（可在章节页重新上传）');
@@ -198,7 +224,34 @@ export default function ProjectsPage({ onOpen }) {
               <Input size="sm" placeholder="请填写自定义风格" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} className="w-60" />
             )}
           </div>
-          <Textarea size="sm" placeholder="粘贴小说原文或一句话描述故事" value={form.novel} onChange={(e) => setForm({ ...form, novel: e.target.value })} />
+          <div className="flex flex-col gap-2">
+            <div className="relative">
+              <Textarea
+                size="sm"
+                placeholder=""
+                value={form.novel}
+                onChange={(e) => { setForm({ ...form, novel: e.target.value }); if (uploadedNovel) setUploadedNovel(null); }}
+                onFocus={() => setNovelFocused(true)}
+                onBlur={() => setNovelFocused(false)}
+              />
+              {!form.novel && !novelFocused && !uploadedNovel && (
+                <div className="absolute inset-0 flex items-start gap-1 px-2 py-2 text-small pointer-events-none">
+                  <span className="text-foreground-500">粘贴小说原文或一句话描述故事，或者</span>
+                  <button
+                    type="button"
+                    onClick={() => novelFileRef.current && novelFileRef.current.click()}
+                    className="pointer-events-auto text-primary hover:underline bg-transparent border-0 p-0 cursor-pointer"
+                  >上传txt文本文件</button>
+                </div>
+              )}
+            </div>
+            <input ref={novelFileRef} type="file" accept=".txt,text/plain" style={{ display: 'none' }} onChange={uploadNovelFile} />
+            {uploadedNovel && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                已上传「{uploadedNovel.name}」（约 {uploadedNovel.chars} 字，将拆分为 {uploadedNovel.chapterCount} 章）
+              </span>
+            )}
+          </div>
           <div className="row" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
             <span className="muted">分辨率</span>
             <Select size="sm" className="w-36" aria-label="分辨率" selectedKeys={selectKeys(res)} onSelectionChange={(k) => setRes(pickKey(k))}>
@@ -223,7 +276,7 @@ export default function ProjectsPage({ onOpen }) {
           </div>
           {vision && <ReferencePicker items={refs} onChange={setRefs} />}
           <div>
-            <Button color="primary" isDisabled={!form.name || !form.novel.trim()} onPress={create}>创建并打开</Button>
+            <Button color="primary" isDisabled={!form.name || (!uploadedNovel && !form.novel.trim())} onPress={create}>创建并打开</Button>
           </div>
         </CardBody>
       </Card>

@@ -29,7 +29,7 @@
 - [计划中] 打包构建Docker部署、桌面端App
 - [计划中] 工作流接入视频超分，让生成的视频更加清晰
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
-- [计划中] 支持上传txt文本文件，自动解析创建多章节
+- [✅] 支持上传txt文本文件，自动解析创建多章节
 - [✅] 接入外部 Agent 运行时：支持本机 CLI Agent（Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Grok Build、Hermes、自定义命令）通过本地 MCP 工具桥接管「小说→视频」流水线，同时保留内置 openclaude 作为默认运行时
 - [✅] 支持自动生成视频字幕：项目级开关，把分镜台词/旁白按时间轴烧录进成片（自动隐藏角色名），同时保留不带字幕版本与 SRT 字幕文件供下载
 - [✅] 支持背景音乐管理，接入 MiniMax Music3 本地/云端自动生成背景音乐并合成到视频中，含「背景音乐库」（手动生成/预览/选择/应用到章节）

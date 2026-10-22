@@ -14,7 +14,7 @@ import {
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
@@ -1510,4 +1510,84 @@ test('任务列表：运行中的行内任务（llm/export）不渲染「删除�
   const delLine = src.split('\n').find((l) => l.includes('>删除</Button>'));
   assert.ok(delLine, '找不到任务列表的删除按钮');
   assert.match(delLine, /CANCELLABLE/, '删除按钮必须排除「后端拒绝删除的运行中行内任务」');
+});
+
+// —— 小说拆分章节（创建项目时自动拆分长篇小说） ——
+
+test('splitNovelIntoChapters：空文本返回空数组', () => {
+  assert.deepEqual(splitNovelIntoChapters(''), []);
+  assert.deepEqual(splitNovelIntoChapters('   \n  '), []);
+});
+
+test('splitNovelIntoChapters：短文本保持单章', () => {
+  const out = splitNovelIntoChapters('一句话描述故事');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].title, '第1章');
+  assert.equal(out[0].novel, '一句话描述故事');
+});
+
+test('splitNovelIntoChapters：识别中文章节标题并切分', () => {
+  const novel = '第一章 初入江湖\n正文A\n第二章 风起\n正文B\n第三章\n正文C';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 3);
+  assert.equal(out[0].title, '第一章');
+  assert.equal(out[0].novel, '正文A');
+  assert.equal(out[1].title, '第二章');
+  assert.equal(out[1].novel, '正文B');
+  assert.equal(out[2].title, '第三章');
+  assert.equal(out[2].novel, '正文C');
+});
+
+test('splitNovelIntoChapters：识别阿拉伯数字与英文标题', () => {
+  const novel = '第1章 开始\n内容一\nChapter 2\ncontent two';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].title, '第1章');
+  assert.equal(out[0].novel, '内容一');
+  assert.equal(out[1].title, 'Chapter 2');
+  assert.equal(out[1].novel, 'content two');
+});
+
+test('splitNovelIntoChapters：前言并入第一段', () => {
+  const novel = '前言文字\n第一章 开场\n正文A\n第二章\n正文B';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].title, '第一章');
+  assert.equal(out[0].novel, '前言文字\n\n正文A');
+  assert.equal(out[1].title, '第二章');
+  assert.equal(out[1].novel, '正文B');
+});
+
+test('splitNovelIntoChapters：重复标题追加后缀去重', () => {
+  const novel = '第一章\na\n第一章\nb';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].title, '第一章');
+  assert.equal(out[1].title, '第一章·(2)');
+});
+
+test('splitNovelIntoChapters：无标题且超长按字数均分', () => {
+  const chunk = '字'.repeat(100);
+  const novel = chunk.repeat(3); // 300 字，设 fallbackChars=100 → 3 章
+  const out = splitNovelIntoChapters(novel, { fallbackChars: 100 });
+  assert.equal(out.length, 3);
+  assert.deepEqual(out.map((c) => c.title), ['第1章', '第2章', '第3章']);
+  assert.equal(out[0].novel.length, 100);
+  assert.equal(out[2].novel.length, 100);
+});
+
+test('filterReferenceImages：shared 参考图在所有章节生效', () => {
+  const list = [
+    { id: 'r1', chapter_id: 'c1', shared: 0 },
+    { id: 'r2', chapter_id: 'c1', shared: 1 },
+    { id: 'r3', chapter_id: 'c2', shared: 0 },
+  ];
+  // 指定 c2：保留 c2 自己的 + 所有 shared
+  const c2 = filterReferenceImages(list, new Set(['c2'])).map((r) => r.id);
+  assert.deepEqual(c2, ['r2', 'r3']);
+  // 指定 c1：保留 c1 自己的 + shared
+  const c1 = filterReferenceImages(list, new Set(['c1'])).map((r) => r.id);
+  assert.deepEqual(c1, ['r1', 'r2']);
+  // 全量：全部返回
+  assert.equal(filterReferenceImages(list, null).length, 3);
 });

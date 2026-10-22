@@ -31,7 +31,7 @@ English | [中文](README.md)
 - [In Progress] Package and build Docker deployment, desktop app
 - [In Progress] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
 - [In Progress] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
-- [In Progress] Support uploading txt text files, automatically parsing and creating multiple chapters
+- [✅] Support uploading txt text files, automatically parsing and creating multiple chapters
 - [✅] External Agent runtime: support local CLI agents (Claude Code, Codex CLI, Gemini CLI, Qwen Code, Cursor Agent, Qoder CLI, Grok Build, Hermes, custom command) to take over the "novel→video" pipeline via a local MCP tool bridge, while keeping the built-in openclaude as the default runtime
 - [✅] Automatic video subtitles: a project-level toggle burns shot dialogue/narration into the final video on a shot-based timeline (speaker names stripped), with a subtitle-free copy and a downloadable SRT file
 - [✅] Support background music management: integrate MiniMax Music3 for local/cloud automatic background-music generation and synthesis into videos, with a "Background Music" library (manual generation / preview / select / apply to chapters)

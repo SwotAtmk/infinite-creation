@@ -1,6 +1,7 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import { Projects, Assets, Shots, Chapters, ensureChapterPoster, ensureProjectDirs, withWriteContext } from '@/lib/core/index.js';
+import { splitNovelIntoChapters } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,9 @@ export async function POST(req) {
   // 整段包在写上下文里：项目 + 自动创建的「第1章」共享同一 batch_id，可整批回滚
   return withWriteContext('POST /api/projects', async () => {
     try {
-      const p = Projects.create(body || {});
+      // 长篇小说自动拆分：识别章节标题 / 超长按字数均分，单章结果走现状路径（向后兼容）
+      const chapters = splitNovelIntoChapters(String(body.novel || ''));
+      const p = Projects.create({ ...body, chapters: chapters.length > 1 ? chapters : null });
       ensureProjectDirs(p.id);
       return NextResponse.json(p);
     } catch (e) {

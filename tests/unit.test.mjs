@@ -1576,6 +1576,19 @@ test('splitNovelIntoChapters：无标题且超长按字数均分', () => {
   assert.equal(out[2].novel.length, 100);
 });
 
+test('splitNovelIntoChapters：字数兜底按段落（换行符）切分，不切断句子', () => {
+  const para = '完整段落内容不会被切断。';
+  const lines = Array.from({ length: 10 }, () => para); // 10 段
+  const novel = lines.join('\n');
+  const out = splitNovelIntoChapters(novel, { fallbackChars: 30 });
+  assert.ok(out.length > 1, '超长文本应拆成多章');
+  for (const c of out) {
+    assert.ok(c.novel.split('\n').every((p) => p === para), '每章内容必须由完整段落组成，切分点只能在换行符处');
+  }
+  const totalParas = out.reduce((s, c) => s + c.novel.split('\n').length, 0);
+  assert.equal(totalParas, lines.length, '拆分后段落总数不能丢失');
+});
+
 test('filterReferenceImages：shared 参考图在所有章节生效', () => {
   const list = [
     { id: 'r1', chapter_id: 'c1', shared: 0 },

@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@heroui/react": "2.7.11",
-    "adm-zip": "0.5.18",
+    "adm-zip": "0.6.1",
     "autoprefixer": "^10.6.1",
     "framer-motion": "^14.0.0",
     "next": "^15.1.6",

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spinner, Switch, Checkbox } from '@heroui/react';
+import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spinner, Switch, Checkbox, Tooltip } from '@heroui/react';
 import { api } from '../api-client.js';
 import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor, fileUrl, VIDEO_RESOLUTIONS, VIDEO_RATIOS } from './shared';
 import ReferencePicker from './ReferencePicker';
@@ -240,8 +240,20 @@ export default function ProjectsPage({ onOpen }) {
                   <button
                     type="button"
                     onClick={() => novelFileRef.current && novelFileRef.current.click()}
-                    className="pointer-events-auto text-primary hover:underline bg-transparent border-0 p-0 cursor-pointer"
-                  >上传txt文本文件</button>
+                    className="pointer-events-auto text-primary hover:underline bg-transparent border-0 p-0 cursor-pointer inline-flex items-center"
+                  >
+                    上传txt文本文件
+                    <Tooltip
+                      content="自动识别章节标题（如「第一章 / 第1章 / Chapter 1」）拆分；无标题且超长时按约 6000 字/章均分"
+                      placement="top"
+                    >
+                      <span className="inline-flex items-center ml-1">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+                        </svg>
+                      </span>
+                    </Tooltip>
+                  </button>
                 </div>
               )}
             </div>

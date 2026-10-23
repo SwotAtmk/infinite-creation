@@ -1,8 +1,15 @@
+<div align="center">
+
 # Agent Infinite Creation · Turn Your Stories into a Billion Frames
 
-![](images/banner.jpg)
+**Free, open-source, fully automated local-agent video generation ✨ — turn novels/scripts into long videos with one click.**<br>
+<sub>🇨🇳 中文用户请看 <a href="README.md">简体中文说明</a></sub>
 
-English | [中文](README.md)
+<a href="https://github.com/SwotAtmk/infinite-creation/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SwotAtmk/infinite-creation?style=for-the-badge&color=F5B700&label=stars"></a> <a href="README.md"><img alt="简体中文" src="https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555?style=for-the-badge"></a> <a href="https://github.com/SwotAtmk/infinite-creation/blob/main/LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licence-MIT-2EA44F?style=for-the-badge"></a> <a href="https://nodejs.org/"><img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=for-the-badge"></a>
+
+</div>
+
+![](images/banner.jpg)
 
 ## Project Introduction
 
@@ -31,7 +38,8 @@ English | [中文](README.md)
 - [In Progress] Package and build Docker deployment, desktop app
 - [In Progress] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
 - [In Progress] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
-- [✅] Support uploading txt text files, automatically parsing and creating multiple chapters
+- [✅] Support uploading txt text files, automatically parsing and creating multiple chapters and sharing reference assets
+- [✅] New "Scene Blocking Consistency" Skill: builds a character/prop staging map per scene (spatial anchors + character positions + 180-degree axis) to eliminate left-right drift and axis-crossing issues across shots
 - [✅] External Agent runtime: support local CLI agents (Claude Code, Codex CLI, Gemini CLI, Qwen Code, Cursor Agent, Qoder CLI, Grok Build, Hermes, custom command) to take over the "novel→video" pipeline via a local MCP tool bridge, while keeping the built-in openclaude as the default runtime
 - [✅] Automatic video subtitles: a project-level toggle burns shot dialogue/narration into the final video on a shot-based timeline (speaker names stripped), with a subtitle-free copy and a downloadable SRT file
 - [✅] Support background music management: integrate MiniMax Music3 for local/cloud automatic background-music generation and synthesis into videos, with a "Background Music" library (manual generation / preview / select / apply to chapters)
@@ -52,7 +60,7 @@ Provide an end-to-end integration solution for generating ultra-long videos with
 
 ## Architecture
 
-An **automated "novel/script → video" Agent workflow** built on **local ComfyUI** (MiniMax H3 video GGUF edition + Qwen-Image 2.1 text-to-image/image-to-image + Krea2 text-to-image + Qwen3-TTS + MiniMax Music3 background music). The project currently organizes 27 Skills, including MiniMax-H3 prompt optimization, storyboard script generation, and novel-to-script conversion.
+An **automated "novel/script → video" Agent workflow** built on **local ComfyUI** (MiniMax H3 video GGUF edition + Qwen-Image 2.1 text-to-image/image-to-image + Krea2 text-to-image + Qwen3-TTS + MiniMax Music3 background music). The project currently organizes 35 Skills, including MiniMax-H3 prompt optimization, storyboard script generation, novel-to-script conversion, and scene blocking consistency.
 
 Just paste a novel/script into the project and click "Start" — the Agent fully automates:
 

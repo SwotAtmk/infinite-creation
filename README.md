@@ -1,10 +1,15 @@
+<div align="center">
+
 # Agent无限创作 · 把你的故事变成亿帧画面
 
+**免费开源本地 Agent 全自动视频生成 ✨，小说/剧本一键生成长视频。**<br>
+<sub>🇬🇧 English users please read <a href="README_EN.md">README in English</a></sub>
+
+<a href="https://github.com/SwotAtmk/infinite-creation/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SwotAtmk/infinite-creation?style=for-the-badge&color=F5B700&label=stars"></a> <a href="README_EN.md"><img alt="English" src="https://img.shields.io/badge/README-English-555?style=for-the-badge"></a> <a href="https://github.com/SwotAtmk/infinite-creation/blob/main/LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licence-MIT-2EA44F?style=for-the-badge"></a> <a href="https://nodejs.org/"><img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=for-the-badge"></a>
+
+</div>
 
 ![](images/banner.jpg)
-
-
-中文 | [English](README_EN.md)
 
 ## 项目简介
 - 免费开源本地Agent全自动视频生成的开源项目✨，不用演员、配音、导演和剪辑师就能本地一键生成超长视频。可以做小说生成视频、漫剧广告、故事类讲解视频，让你所想到的故事变成亿帧画面。
@@ -29,7 +34,8 @@
 - [计划中] 打包构建Docker部署、桌面端App
 - [计划中] 工作流接入视频超分，让生成的视频更加清晰
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
-- [✅] 支持上传txt文本文件，自动解析创建多章节
+- [✅] 支持上传txt文本文件，自动解析创建多章节并共享参考素材
+- [✅] 新增「场景站位一致性」Skill：为每个场景建立人物/道具站位表（空间锚点+角色方位+180度轴线），消除跨镜左右漂移与越轴等分镜一致性问题
 - [✅] 接入外部 Agent 运行时：支持本机 CLI Agent（Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Grok Build、Hermes、自定义命令）通过本地 MCP 工具桥接管「小说→视频」流水线，同时保留内置 openclaude 作为默认运行时
 - [✅] 支持自动生成视频字幕：项目级开关，把分镜台词/旁白按时间轴烧录进成片（自动隐藏角色名），同时保留不带字幕版本与 SRT 字幕文件供下载
 - [✅] 支持背景音乐管理，接入 MiniMax Music3 本地/云端自动生成背景音乐并合成到视频中，含「背景音乐库」（手动生成/预览/选择/应用到章节）
@@ -49,7 +55,7 @@
 提供Agent生成超长视频全链路整合方案
 
 ## 项目架构
-基于**本地 ComfyUI**（MiniMax H3 优化版 + Qwen-Image 2.1 文生图/图生图 + Krea2 文生图 + Qwen3-TTS + MiniMax Music3 背景音乐）的**全自动「小说/剧本 → 视频」Agent 工作流**。项目目前整理了27个Skill技能，其中包含MiniMax-H3提示词优化，分镜剧本生成，小说转剧本等。
+基于**本地 ComfyUI**（MiniMax H3 优化版 + Qwen-Image 2.1 文生图/图生图 + Krea2 文生图 + Qwen3-TTS + MiniMax Music3 背景音乐）的**全自动「小说/剧本 → 视频」Agent 工作流**。项目目前整理了35个Skill技能，其中包含MiniMax-H3提示词优化，分镜剧本生成，小说转剧本、场景站位一致性等。
 
 只要把一部小说/剧本粘贴进项目，点一下「开始」，Agent 会全自动完成：
 

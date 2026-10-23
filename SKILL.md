@@ -107,8 +107,10 @@ curl http://127.0.0.1:4600/api/health # 期望 {"ok":true}
 - **剧本/编剧**：`0715-scriptwriter`、`script-master`、`novel-to-skitscreenplay`、`novel-to-storyboard`、`hf-drama-storyboard-script`。
 - **漫剧创作**：`manga-drama-generator`、`manju-director-agent`、`ai-manga-planner`、`comic-drama-generator`、`manga-full-stack`、`script-to-manga`、`cinematic-ai-comic-director`、`micro-drama-creator`。
 - **一致性/其它类型**：`era-consistency-optimizer`（年代一致）、`3d-animation-short-generator`、`papercraft-stop-motion-explainer`、`paper-collage-explainer-generator`、`music-video-subtitle-generator`、`minimalist-product-ad-generator`、`handdrawn-live-video-generator`、`co-op-game-intro-generator`、`brand-promo-video-generator`。
+- **小说写作（网文）**：`ultimate-novel`（路由）、`ultimate-novel-setup`、`ultimate-novel-market-data`、`ultimate-novel-benchmark`、`ultimate-novel-long-scan`、`ultimate-novel-long-analyze`、`ultimate-novel-long-write`、`ultimate-novel-short-scan`、`ultimate-novel-short-analyze`、`ultimate-novel-short-write`、`ultimate-novel-import`、`ultimate-novel-review`、`ultimate-novel-deslop`、`ultimate-novel-cover`、`ultimate-novel-performance-review`。
+- **导演分镜优化**：`storyboard_optimization_skill`（项导轻量版V1.8，已有资产/小说转分镜/最终视频提示词）。
 
-（完整 27 个技能以 `skills/` 目录实际为准，每个 `SKILL.md` 的 frontmatter `description` 是权威触发条件。）
+（完整技能清单以 `skills/` 目录实际为准，每个 `SKILL.md` 的 frontmatter `description` 是权威触发条件。）
 
 ## 五、自定义工作流接入
 

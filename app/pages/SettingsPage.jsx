@@ -56,11 +56,27 @@ export default function SettingsPage({ onBack }) {
     } catch (e) { toast.error(e.message); return false; }
     finally { setSaving(false); }
   }
-  // 返回前若有未保存的修改，先提示是否保存，避免用户直接离开丢失配置
+  // 返回前若有未保存的修改，先提示保存；「放弃修改并返回」是必须有的一条出口，
+  // 否则用户改错了只能点「取消」留在页面，退不出去。放弃会丢改动，所以再确认一次。
   async function handleBack() {
     if (cfg !== savedCfg) {
-      const ok = await toast.confirm('配置有未保存的修改，保存后再返回？', { confirmLabel: '保存并返回', cancelLabel: '取消' });
-      if (!ok) return;
+      const r = await toast.confirm('配置有未保存的修改，保存后再返回？', {
+        confirmLabel: '保存并返回',
+        extraLabel: '放弃修改并返回',
+        extraValue: 'discard',
+        extraDanger: true,
+        cancelLabel: '取消',
+      });
+      if (r === 'discard') {
+        const sure = await toast.confirm('放弃未保存的修改并返回？修改将丢失。', {
+          danger: true,
+          confirmLabel: '放弃并返回',
+          cancelLabel: '继续编辑',
+        });
+        if (sure === true) onBack();
+        return;
+      }
+      if (r !== true) return;
       const saved = await save();
       if (!saved) return;
     }

@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findAgentDef, customAgentDef, parseCustomArgs } from '../lib/agent/external/index.js';
+import { writeMcpConfigs } from '../lib/agent/external/mcp-config.js';
 import { TOOL_DEFINITIONS } from '../lib/agent/tools.js';
 import { resolveHardwareConfig } from '../lib/core/config.js';
 
@@ -25,8 +26,38 @@ test('Agent 定义：Claude 启动参数包含 MCP 配置', () => {
   assert.ok(args.includes(path.join(ws, 'claude-mcp.json')));
 });
 
-test('自定义命令：分词与占位符替换', () => {
-  assert.deepEqual(parseCustomArgs('--model x "a b" \'c d\''), ['--model', 'x', 'a b', 'c d']);
+test('Agent 定义：OpenCode 用 run --standalone 并把 prompt 放最后', () => {
+  const def = findAgentDef('opencode');
+  assert.ok(def);
+  assert.equal(def.promptViaStdin, false);
+  assert.equal(def.mcpMode, 'workspace');
+  const args = def.buildArgs({ prompt: 'P', ws: '/tmp/w' });
+  assert.deepEqual(args, ['run', '--standalone', '--auto', 'P']);
+});
+
+test('MCP 配置：OpenCode 写 mcp.servers 的 local server', () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-oc-'));
+  try {
+    const spec = { command: '/usr/bin/node', args: ['/x/mcp-server.mjs'] };
+    const mcpVars = { IC_MCP_PROJECT_ID: 'p1', IC_MCP_JOB_ID: 'j1' };
+    writeMcpConfigs(findAgentDef('opencode'), ws, spec, mcpVars);
+    const cfg = JSON.parse(fs.readFileSync(path.join(ws, 'opencode.json'), 'utf8'));
+    const server = cfg.mcp.servers.ic;
+    assert.equal(server.type, 'local');
+    assert.deepEqual(server.command, ['/usr/bin/node', '/x/mcp-server.mjs']);
+    assert.equal(server.codemode, false);
+    assert.deepEqual(server.environment, mcpVars);
+    assert.deepEqual(cfg.policies, [
+      { action: 'integration.use', resource: 'mcp:*', effect: 'deny' },
+      { action: 'integration.use', resource: 'mcp:ic', effect: 'allow' },
+      { action: 'integration.use', resource: 'skill:*', effect: 'deny' },
+    ]);
+  } finally {
+    fs.rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test('自定义命令：分词与占位符替换', () => {  assert.deepEqual(parseCustomArgs('--model x "a b" \'c d\''), ['--model', 'x', 'a b', 'c d']);
 
   const withPrompt = customAgentDef({ bin: 'my-agent', args: '--model x {prompt}', promptViaStdin: false });
   assert.deepEqual(

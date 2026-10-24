@@ -28,6 +28,26 @@ const BT = String.fromCharCode(96); // 反引号
 
 function load(name) { return JSON.parse(fs.readFileSync(path.join(WF, name), 'utf8')); }
 
+// Qwen-Image 2.1 的提示词改写三开关（thinking_mode / refine_prompt / use_default_template）在提示词
+// 已经写得很详细时是负面的：改写器会重写并损失细节。四个规格默认全部关闭，上游模板更新后靠这条守住。
+test('Qwen-Image 2.1 工作流默认关闭提示词改写三开关', () => {
+  const files = [
+    'qwen_image_2_1_t2i-Q8_0_gguf.json',
+    'qwen_image_2_1_image_edit-Q8_0_gguf.json',
+    'image_qwen_image_2_1_t2i_api.json',
+    'image_qwen_image_2_1_image_edit_api.json',
+  ];
+  for (const f of files) {
+    const wf = load(f);
+    for (const [id, n] of Object.entries(wf)) {
+      const i = n.inputs || {};
+      if ('thinking' in i) assert.equal(i.thinking, false, f + ' ' + id + '.thinking');
+      if ('use_default_template' in i) assert.equal(i.use_default_template, false, f + ' ' + id + '.use_default_template');
+      if (n.class_type === 'ComfySwitchNode') assert.equal(i.switch, false, f + ' ' + id + '.switch');
+    }
+  }
+});
+
 test('analyzeWorkflow: t2i 角色映射（Krea2）', () => {
   const a = analyzeWorkflow(load('krea2_hyperreal_2608.json'));
   assert.equal(a.kind, 't2i');

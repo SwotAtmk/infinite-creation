@@ -287,7 +287,7 @@
       "sampling_mode.repetition_penalty": 1.05,
       "sampling_mode.seed": 1095460012924539,
       "sampling_mode.presence_penalty": 0,
-      "thinking": true,
+      "thinking": false,
       "use_default_template": false,
       "mtp": "auto",
       "clip": [

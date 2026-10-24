@@ -38,7 +38,7 @@ export function ToastProvider({ children }) {
   const ask = useCallback((d) => {
     dialogRef.current = d;
     if (d.mode === 'prompt') setPromptVal(d.defaultValue || '');
-    setDialog({ mode: d.mode, message: d.message, danger: !!d.danger, confirmLabel: d.confirmLabel, cancelLabel: d.cancelLabel, placeholder: d.placeholder || '' });
+    setDialog({ mode: d.mode, message: d.message, danger: !!d.danger, confirmLabel: d.confirmLabel, cancelLabel: d.cancelLabel, extraLabel: d.extraLabel || '', extraValue: d.extraValue, extraDanger: !!d.extraDanger, placeholder: d.placeholder || '' });
   }, []);
 
   // 只允许答一次：dialogRef 置空后，重复调用（连点、StrictMode）不再生效
@@ -49,8 +49,10 @@ export function ToastProvider({ children }) {
     if (d) d.resolve(v);
   }, []);
 
+  // extraLabel 是可选第三按钮（如「放弃修改并返回」），点它 resolve(opts.extraValue)；
+  // extraDanger 让它显示为红色。不传 extraLabel 就仍是二选一
   const confirm = useCallback((message, opts = {}) => new Promise((resolve) => {
-    ask({ mode: 'confirm', message, danger: !!opts.danger, confirmLabel: opts.confirmLabel || '确定', cancelLabel: opts.cancelLabel || '取消', resolve });
+    ask({ mode: 'confirm', message, danger: !!opts.danger, confirmLabel: opts.confirmLabel || '确定', cancelLabel: opts.cancelLabel || '取消', extraLabel: opts.extraLabel || '', extraValue: opts.extraValue || 'extra', extraDanger: !!opts.extraDanger, resolve });
   }), [ask]);
 
   const prompt = useCallback((message, opts = {}) => new Promise((resolve) => {
@@ -136,6 +138,13 @@ export function ToastProvider({ children }) {
                     else answer(true);
                   }}
                 >{dialog.confirmLabel}</Button>
+                {dialog.extraLabel && (
+                  <Button
+                    variant={dialog.extraDanger ? 'solid' : 'flat'}
+                    color={dialog.extraDanger ? 'danger' : 'default'}
+                    onPress={() => answer(dialog.extraValue)}
+                  >{dialog.extraLabel}</Button>
+                )}
                 <Button variant="flat" onPress={() => answer(dialog.mode === 'prompt' ? null : false)}>{dialog.cancelLabel}</Button>
               </ModalFooter>
             </>

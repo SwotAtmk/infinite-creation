@@ -52,7 +52,7 @@ Web「生成」按钮
 ## 外部 Agent 运行时（可选，MCP 工具桥）
 
 设置页「Agent 运行时」可把执行器从内置 openclaude 切换为本机已安装的 CLI Agent：
-Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Grok Build、Hermes，以及自定义命令。
+Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Grok Build、Hermes、OpenCode，以及自定义命令。
 配置写入 `config.json` 的 `agent.runtime`，默认仍是 `openclaude`。
 
 ```
@@ -62,6 +62,7 @@ Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Gr
       └─ 外部 Agent → lib/agent/external/runner.js::runExternalAgent()
             ├─ 生成工作区 data/agent-workspaces/<jobId>/
             │    ├─ claude-mcp.json / .gemini / .qwen / .cursor / .qoder / .grok
+            │    ├─ opencode.json（V2 的 mcp.servers，policies 只放行 ic）
             │    └─ Hermes 的 hermes-home/config.yaml（复制用户配置后合并，不改原文件）
             ├─ spawn CLI（cwd=工作区，注入 IC_MCP_* 环境变量）
             └─ CLI 连接 lib/agent/external/mcp-server.mjs
@@ -107,7 +108,7 @@ Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Gr
 - `lib/agent/openclaude-agent.js` —— 对接层：provider/工具/persona/禁用工具/流式进度
 - `lib/agent/agent-runtime.js` —— 运行时选择：内置 openclaude / 外部 Agent
 - `lib/agent/external/registry.js` —— 外部 Agent 注册表（新增 Agent 时在这里登记）
-- `lib/agent/external/defs/` —— 每个 Agent 一个定义文件（claude/codex/gemini/qwen/cursor-agent/qoder/grok/hermes + shared 共享常量 + custom 自定义命令）
+- `lib/agent/external/defs/` —— 每个 Agent 一个定义文件（claude/codex/gemini/qwen/cursor-agent/qoder/grok/hermes/opencode + shared 共享常量 + custom 自定义命令）
 - `lib/agent/external/` —— 检测（detect）、工作区与 MCP 配置（mcp-config）、stdio 服务（mcp-server.mjs）、执行器（runner）
 - `lib/agent/job-runner.js` —— startCreateJob 驱动 openclaude agent；runExclusiveVideo 视频任务串行闸门；startStageJob 分阶段任务入口
 - `lib/agent/stages.js` —— 分阶段调度（阶段定义 / pendingByStage 待办 / preflight 预检 / 串行执行）

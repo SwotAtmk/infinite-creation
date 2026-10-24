@@ -2053,7 +2053,7 @@
               1.05,
               0,
               0,
-              true,
+              false,
               false,
               "auto"
             ],
@@ -2068,7 +2068,7 @@
               "sampling_mode.repetition_penalty": 1.05,
               "sampling_mode.seed": 0,
               "sampling_mode.presence_penalty": 0,
-              "thinking": true,
+              "thinking": false,
               "use_default_template": false,
               "mtp": "auto"
             }

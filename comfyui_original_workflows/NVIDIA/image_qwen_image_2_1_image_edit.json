@@ -2061,8 +2061,8 @@
               1,
               0,
               0,
-              true,
-              true,
+              false,
+              false,
               "auto"
             ],
             "widgets_values_named": {
@@ -2076,8 +2076,8 @@
               "sampling_mode.repetition_penalty": 1,
               "sampling_mode.seed": 0,
               "sampling_mode.presence_penalty": 0,
-              "thinking": true,
-              "use_default_template": true,
+              "thinking": false,
+              "use_default_template": false,
               "mtp": "auto"
             }
           }

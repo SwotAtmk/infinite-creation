@@ -425,6 +425,15 @@ export default function SettingsPage({ onBack }) {
         )}
           </>
         )}
+        <h3 className="text-base font-semibold" style={{ marginTop: 16 }}>联网搜索</h3>
+        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+          <Checkbox size="sm" isSelected={cfg.search?.enabled !== false} onValueChange={(v) => setCfg({ ...cfg, search: { ...(cfg.search || {}), enabled: v } })}>
+            开启互联网搜索（资料搜索 + 参考图片搜索，默认开启）
+          </Checkbox>
+        </div>
+        <p className="muted" style={{ marginTop: 4 }}>
+          Agent 遇到不确定的品牌/产品型号/年代物品/专业术语时会联网查证；需要参考图（老电话、手机型号、服装等）时自动搜图并下载为参考图，供图生图派生素材。关闭后 Agent 改用自身既有知识继续、不再联网。
+        </p>
         <div className="mt-2">
           <Button size="sm" color="primary" isLoading={saving} isDisabled={saving} onPress={save}>保存配置</Button>
         </div>

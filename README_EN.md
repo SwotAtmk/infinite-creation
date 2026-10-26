@@ -30,7 +30,7 @@
 ## Roadmap
 - [Ongoing] Addressing BUGs in the project
 - [Planned] Internet search skill support, e.g. asset generation can search for reference images (such as specific Huawei phone or Apple MacBook models) and use them as references to generate new assets
-- [Planned] Agent automatically selects text-to-video, image-to-video, first/last-frame, or digital-human mode based on the actual use case
+- [✅] Agent automatically selects text-to-video, image-to-video, first/last-frame, or digital-human mode based on the actual use case (digital-human mode is currently reservation-only, not yet wired end-to-end)
 - [Planned] Adaptation for home-grade GPUs with low VRAM — the blogger's testing equipment is limited. More users are needed to help with testing and provide feedback to the repository's Issues. Please contribute your insights! 🙏
 - [Planned] Address and optimize issues such as tool invocation security and context compression in internal agents
 - [Planned] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
@@ -368,7 +368,7 @@ Thank you to these projects for enabling rapid iteration and improvement.
 This project was independently completed by an individual developer. Feedback, bug reports, and promotion are all welcome — let's build a better product for more people to discover. The project has just been open-sourced, so there may be many areas that need adjustment and optimization. Issues and further optimizations are welcome. Thank you to everyone who contributes to this project.
 
 ## Acknowledgements
-
+- Thank you to the developer [taoxiangyoushu](https://github.com/taoxiangyoushu) for their contribution to this project. They have integrated the workflow mode of Tusense video + first and last frames and fixed some bugs
 - Thanks to developer [happymy](https://github.com/happymy) for providing the AMD + GGUF adaptation solution and fixing some bugs in the project.
 - We would like to express our gratitude to the following developers for their contributions to the project: [ghshhf](https://github.com/ghshhf), [binonxia](https://github.com/binonxia), [anupamme](https://github.com/anupamme)
 

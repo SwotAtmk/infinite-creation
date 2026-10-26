@@ -580,7 +580,8 @@ test('自动换装：同章第二次换装事件不被首次结果误判为「�
     return rel;
   };
   const ch = Assets.create(p.id, { category: 'character', name: '小明' });
-  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png') });
+  // 依赖判定要求「资产已完成」：真实流程里 hGenerateAssetImage 会同时写 image_path 与 status='done'
+  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png'), status: 'done' });
   // 预置一套「内容与提示词都没改过」的服装：change_outfit 判定可复用 → 直接返回，不触发渲染
   const costume = Assets.create(p.id, { category: 'costume', name: '小明-沐浴后换上的干净衣裳', description: '沐浴后换上的干净衣裳', prompt: 'keep', parent_id: ch.id });
   Assets.update(costume.id, { status: 'done', image_path: mkImg('assets/costume/y.png'), prompt_used: 'keep' });
@@ -621,7 +622,8 @@ test('停止：当前分镜复位为待生成，不再留在「失败」', async
     return rel;
   };
   const ch = Assets.create(p.id, { category: 'character', name: '小明' });
-  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png') });
+  // 依赖判定要求「资产已完成」：真实流程里 hGenerateAssetImage 会同时写 image_path 与 status='done'
+  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png'), status: 'done' });
   const s = Shots.create(p.id, { chapter: '第1章', visual: '画面' });
   Shots.update(s.id, { video_prompt: '已完成的提示词', character_ids: [ch.id] });
   const ctx = createToolRuntime({ projectId: p.id });
@@ -649,6 +651,46 @@ test('停止：当前分镜复位为待生成，不再留在「失败」', async
   assert.ok(calls.some((c) => c.id === s.id && c.f.status === 'pending'), '前提：渲染的 catch 按取消复位为 pending');
   assert.equal(Shots.get(s.id).status, 'pending', '停止后必须复位，方便直接重跑');
   assert.equal(Shots.get(s.id).error, '');
+  Projects.remove(p.id);
+});
+
+test('依赖调度：引用资产未完成的镜头被暂缓，已就绪的镜头照常提交', async () => {
+  const p = mkProject('依赖调度项目');
+  const mkImg = (rel) => {
+    const abs = path.join(projectDir(p.id), rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, 'x');
+    return rel;
+  };
+  // 已就绪的角色（image_path + status=done）
+  const readyCh = Assets.create(p.id, { category: 'character', name: '已就绪角色' });
+  Assets.update(readyCh.id, { image_path: mkImg('assets/character/ready.png'), status: 'done' });
+  // 未完成的角色：还没出图（status=pending）
+  const pendingCh = Assets.create(p.id, { category: 'character', name: '未完成角色' });
+
+  const s1 = Shots.create(p.id, { chapter: '第1章', visual: '画面1' });
+  Shots.update(s1.id, { video_prompt: '提示词1', character_ids: [readyCh.id] });
+  const s2 = Shots.create(p.id, { chapter: '第1章', visual: '画面2' });
+  Shots.update(s2.id, { video_prompt: '提示词2', character_ids: [pendingCh.id] });
+
+  const ctx = createToolRuntime({ projectId: p.id });
+  const origFetch = globalThis.fetch;
+  const submitted = [];
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/upload/')) {
+      return new Response(JSON.stringify({ name: 'x.png', subfolder: '', type: 'input' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    submitted.push(String(url));
+    throw new Error('模拟 ComfyUI 不可达');
+  };
+  let out;
+  try {
+    out = JSON.parse(await runTool(ctx, 'generate_chapter_videos', { chapter: '第1章' }));
+  } finally { globalThis.fetch = origFetch; }
+
+  assert.equal(out.deferred, 1, '应报告 1 个镜头因依赖未完成而暂缓');
+  assert.equal(submitted.length, 1, '只有已就绪的那一镜会被提交渲染');
+  assert.equal(Shots.get(s2.id).status, 'pending', '未就绪的镜头不得被改动');
   Projects.remove(p.id);
 });
 
@@ -1063,7 +1105,8 @@ test('换装兜底：LLM 阶段（renderDisabled）不渲染，推迟到「资�
     return rel;
   };
   const ch = Assets.create(p.id, { category: 'character', name: '小明' });
-  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png') });
+  // 依赖判定要求「资产已完成」：真实流程里 hGenerateAssetImage 会同时写 image_path 与 status='done'
+  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png'), status: 'done' });
   // 预置一套「内容与提示词都没改过」的服装：兜底判定可复用 → 直接返回，不触发渲染
   const costume = Assets.create(p.id, { category: 'costume', name: '小明-沐浴后换上的干净衣裳', description: '沐浴后换上的干净衣裳', prompt: 'keep', parent_id: ch.id });
   Assets.update(costume.id, { status: 'done', image_path: mkImg('assets/costume/y.png'), prompt_used: 'keep' });
@@ -1098,7 +1141,8 @@ test('停止：换装/年龄兜底循环不再逐镜继续出图（每个事件�
     return rel;
   };
   const ch = Assets.create(p.id, { category: 'character', name: '小明' });
-  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png') });
+  // 依赖判定要求「资产已完成」：真实流程里 hGenerateAssetImage 会同时写 image_path 与 status='done'
+  Assets.update(ch.id, { image_path: mkImg('assets/character/x.png'), status: 'done' });
   const ctx = createToolRuntime({ projectId: p.id, chapter: '第1章' });
   await runTool(ctx, 'set_storyboard', { shots: [
     { idx: 1, characters: ['小明'], visual: '小明在屋后沐浴' },

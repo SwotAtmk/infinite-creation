@@ -29,15 +29,17 @@
 
 ## Roadmap
 - [Ongoing] Addressing BUGs in the project
-- [In progress] For home-grade GPUs with low VRAM, the blogger's testing equipment is limited. More users are needed to help with testing and provide feedback to the repository's Issues. Please contribute your insights! 🙏
-- [In progress] Address and optimize issues such as tool invocation security and context compression in internal agents
-- [In Progress] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
-- [In Progress] Automated Pipeline Supports Custom Prompt Assembly Plugins
-- [In Progress] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
-- [In Progress] For the beautification work of the tool Web page, a highly aesthetic AI designer is needed
-- [In Progress] Package and build Docker deployment, desktop app
-- [In Progress] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
-- [In Progress] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
+- [Planned] Internet search skill support, e.g. asset generation can search for reference images (such as specific Huawei phone or Apple MacBook models) and use them as references to generate new assets
+- [Planned] Agent automatically selects text-to-video, image-to-video, first/last-frame, or digital-human mode based on the actual use case
+- [Planned] Adaptation for home-grade GPUs with low VRAM — the blogger's testing equipment is limited. More users are needed to help with testing and provide feedback to the repository's Issues. Please contribute your insights! 🙏
+- [Planned] Address and optimize issues such as tool invocation security and context compression in internal agents
+- [Planned] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
+- [Planned] Automated Pipeline Supports Custom Prompt Assembly Plugins
+- [Planned] Incorporate more advanced Skills to enhance the visual aesthetic of Agent skills
+- [Planned] For the beautification work of the tool Web page, a highly aesthetic AI designer is needed
+- [Planned] Package and build Docker deployment, desktop app
+- [Planned] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
+- [Planned] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
 - [✅] Support uploading txt text files, automatically parsing and creating multiple chapters and sharing reference assets
 - [✅] New "Scene Blocking Consistency" Skill: builds a character/prop staging map per scene (spatial anchors + character positions + 180-degree axis) to eliminate left-right drift and axis-crossing issues across shots
 - [✅] External Agent runtime: support local CLI agents (Claude Code, Codex CLI, Gemini CLI, Qwen Code, Cursor Agent, Qoder CLI, Grok Build, Hermes, custom command) to take over the "novel→video" pipeline via a local MCP tool bridge, while keeping the built-in openclaude as the default runtime
@@ -45,6 +47,7 @@
 - [✅] Support background music management: integrate MiniMax Music3 for local/cloud automatic background-music generation and synthesis into videos, with a "Background Music" library (manual generation / preview / select / apply to chapters)
 - [✅] Add Agent security approval policies to prevent Agent from performing unauthorized operations, deleting projects, or executing dangerous commands
 - [✅] Integrate the online RunningHub-ComfyUI workflow for generation, with free overnight MiniMax-H3 runs for members
+- [✅] Package the project as a Skill for one-click Agent invocation
 - [✅] Consolidated text-to-image and image-to-image workflows using the latest Qwen-Image 2.1
 - [✅] Integrated the Qwen-Image 2.1 text-to-image + image-to-image workflow
 - [✅] Support for submitting reference assets, and agent-based organization of reference assets
@@ -60,7 +63,7 @@ Provide an end-to-end integration solution for generating ultra-long videos with
 
 ## Architecture
 
-An **automated "novel/script → video" Agent workflow** built on **local ComfyUI** (MiniMax H3 video GGUF edition + Qwen-Image 2.1 text-to-image/image-to-image + Krea2 text-to-image + Qwen3-TTS + MiniMax Music3 background music). The project currently organizes 35 Skills, including MiniMax-H3 prompt optimization, storyboard script generation, novel-to-script conversion, and scene blocking consistency.
+An **automated "novel/script → video" Agent workflow** built on **local ComfyUI** (optimized MiniMax H3 + Qwen-Image 2.1 text-to-image/image-to-image + Krea2 text-to-image + Qwen3-TTS + MiniMax Music3 background music). The project currently organizes 35 Skills, including MiniMax-H3 prompt optimization, storyboard script generation, novel-to-script conversion, and scene blocking consistency.
 
 Just paste a novel/script into the project and click "Start" — the Agent fully automates:
 
@@ -94,22 +97,22 @@ RAM: 32GB DDR4 3200 MT/s (16GBx2)
 - **Background music**: The video stage automatically generates instrumental background music and synthesizes it into the final film; a dedicated "Background Music" library supports manual generation (with caption / lyrics / duration), preview, selection, and applying a track to multiple completed chapters at once.
 - **Automatic subtitles**: A project-level "auto subtitles" toggle burns shot dialogue/narration into the final video on a shot-based timeline (speaker names stripped), while also keeping a subtitle-free copy and an SRT file. The "Exports" page lets you download the subtitled video, the subtitle-free video, or the SRT, and supports single or batch deletion.
 - **Staged execution**: Generation is split into four independent stages — text creation / asset image generation / voice design / storyboard video — any subset can be toggled to run or resume. Batches are split automatically by VRAM constraints, and unneeded stages don't spin up their processes.
-- **VRAM maintenance**: The settings page lets you configure "release ComfyUI VRAM every N generations" (default 3, 0 = off), covering text-to-image / image-to-image / costume change / voice / video rendering — AMD Dynamic VRAM's memory accumulation isn't only triggered by video. After a release, the next generation reloads models (about 1–3 minutes extra). When Dynamic VRAM is disabled, the UI shows a prompt recommending it be turned on.
+- **VRAM maintenance**: The settings page lets you configure "release ComfyUI VRAM every N generations" (default 3, 0 = off), covering text-to-image / image-to-image / costume change / voice / video rendering — AMD Dynamic VRAM's memory accumulation isn't only triggered by video. When Dynamic VRAM is disabled, the UI shows a prompt recommending it be turned on.
 - **Online preview**: Final films / shot videos are streamed via backend Range requests — drag the progress bar freely and jump instantly.
 - **External Agent runtime**: Besides the built-in openclaude, switch on the settings page to a locally installed CLI agent (Claude Code / Codex CLI / Gemini CLI / Qwen Code / Cursor Agent / Qoder CLI / Grok Build / Hermes / custom command), exposing domain tools to it via a local MCP stdio service so it fully takes over the pipeline; model accounts and sign-in state stay with each CLI.
 
 # Screenshots
 
 1. Project Home
-   ![Project Home](images/j1.png)
+   ![Project Home](images/j1.jpg)
 2. Chapter Management
-   ![Chapter Management](images/j2.png)
+   ![Chapter Management](images/j2.jpg)
 3. Service Configuration
-   ![Service Configuration](images/j3.png)
+   ![Service Configuration](images/j3.jpg)
 4. Skill Management
    ![Skill Management](images/j4.png)
 5. Asset Management
-   ![Asset Management](images/j5.png)
+   ![Asset Management](images/j5.jpg)
 6. Run Logs
    ![Run Logs](images/j6.png)
 7. Shot Review
@@ -152,6 +155,12 @@ infinite-creation/
 
 ```text
 Help me clone this project https://github.com/SwotAtmk/infinite-creation.git 
+locally (fill in the target install directory here), and run it locally.
+```
+
+- **For users in China:**
+```text
+Help me clone this project https://gitcode.com/SwotAtmk/infinite-creation.git 
 locally (fill in the target install directory here), and run it locally.
 ```
 
@@ -215,7 +224,7 @@ I've shared "无限创作-ComfyUI一键安装部署" (Infinite Creation - ComfyU
 Link: https://pan.quark.cn/s/ed2afd0f6a4f?pwd=GVZe
 Extraction code: GVZe
 ```
-It is recommended that those who have ComfyUI related technology can install and complete the relevant plugins and models themselves, and run the relevant workflows in the comfyui_originalw_workflows folder. Note: distinguish the workflows of Nvidia NVIDIA graphics cards and AMD graphics cards
+It is recommended that those who have ComfyUI related technology can install and complete the relevant plugins and models themselves, and run the relevant workflows in the comfyui_original_workflows folder. Note: distinguish the workflows of NVIDIA graphics cards and AMD graphics cards
 
 Before using this Agent project tool, it's recommended to manually run all workflows in ComfyUI first (i.e., run through every workflow in the `comfyui_original_workflows/` directory), after which the Agent project tool can perform fully automated generation.
 
@@ -227,14 +236,16 @@ Before using this Agent project tool, it's recommended to manually run all workf
 
 **Claim your free trial of RunningHub's cloud computing power**
 ```text
-Open the link: https://www.runninghub.ai?inviteCode=zjt69ib3
+Open the link: https://www.runninghub.cn?inviteCode=6to0etcb
 Register now and you can receive 500 RH coins, which can be used to generate plenty of images and videos for free!
 ```
-- Open the browser and navigate to [https://www.runninghub.ai/call-api/bill-task?tab=keys&type=consumer&inviteCode=zjt69ib3](https://www.runninghub.ai/call-api/bill-task?tab=keys&type=consumer&inviteCode=zjt69ib3) to obtain the RunningHub Api-Key
+- Open the browser and navigate to [https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer&inviteCode=6to0etcb](https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer&inviteCode=6to0etcb) to obtain the RunningHub Api-Key
 ![r2.png](images/r2.png)
 
 - Configure RunningHub Api-Key
 ![r1.png](images/r1.png)
+
+- My RunningHub workflow homepage: [https://www.runninghub.cn/user-center/2013421139631808514/webapp?inviteCode=6to0etcb](https://www.runninghub.cn/user-center/2013421139631808514/webapp?inviteCode=6to0etcb)
 
 ## Usage Flow
 

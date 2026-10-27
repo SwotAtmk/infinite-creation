@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Button, Input, Select, SelectItem, Card, CardBody, Textarea, Chip, Spinner, Switch, Checkbox, Tooltip } from '@heroui/react';
 import { api } from '../api-client.js';
 import { STYLE_OPTIONS, STYLE_CUSTOM, resolveStyle, selectKeys, pickKey, statusColor, fileUrl, VIDEO_RESOLUTIONS, VIDEO_RATIOS } from './shared';
+import { PROJECT_TYPES, PROJECT_TYPE_LABEL } from '../../lib/shared/index.js';
 import ReferencePicker from './ReferencePicker';
 import LoadingOverlay from './LoadingOverlay';
 import { useToast } from '../toast';
@@ -30,11 +31,16 @@ function CheckIcon() {
 }
 
 // ============ 项目列表 ============
+// 同一个组件服务两个入口：
+// - Agent无限创作：type='agent' 固定过滤，带「新建项目」表单（只有 Agent 类型能新建）
+// - 项目列表：showTypeFilter 打开分类筛选（默认全部），不显示新建表单
 const PAGE_SIZE = 10;
 
-export default function ProjectsPage({ onOpen }) {
+export default function ProjectsPage({ onOpen, type = '', showCreate = true, showTypeFilter = false }) {
   const toast = useToast();
   const [projects, setProjects] = useState([]);
+  const [typeFilter, setTypeFilter] = useState(''); // '' = 全部分类
+  const typeParam = showTypeFilter ? typeFilter : type;
   // 首次加载标记：数据回来之前不要显示「暂无项目」，否则用户会误以为项目丢了
   const [loading, setLoading] = useState(true);
   // 瀑布流分页：hasMore 决定是否还有下一页，loadingMore 防止滚动时重复请求
@@ -63,23 +69,24 @@ export default function ProjectsPage({ onOpen }) {
   const [selected, setSelected] = useState(() => new Set());
   const allSelected = projects.length > 0 && selected.size === projects.length;
 
+  const query = (page) => '/api/projects?page=' + page + '&pageSize=' + PAGE_SIZE + (typeParam ? '&type=' + encodeURIComponent(typeParam) : '');
   const load = useCallback(() => {
     setLoading(true);
     pageRef.current = 1;
     setSelected(new Set());
-    return api.get('/api/projects?page=1&pageSize=' + PAGE_SIZE)
+    return api.get(query(1))
       .then((r) => {
         setProjects(r.items || []);
         setHasMore(!!r.hasMore);
       })
       .catch((e) => toast.error(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [typeParam]);
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     const next = pageRef.current + 1;
-    return api.get('/api/projects?page=' + next + '&pageSize=' + PAGE_SIZE)
+    return api.get(query(next))
       .then((r) => {
         pageRef.current = next;
         setProjects((prev) => [...prev, ...(r.items || [])]);
@@ -87,7 +94,7 @@ export default function ProjectsPage({ onOpen }) {
       })
       .catch((e) => toast.error(e.message))
       .finally(() => setLoadingMore(false));
-  }, [loadingMore, hasMore]);
+  }, [loadingMore, hasMore, typeParam]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {}); }, []);
@@ -145,6 +152,7 @@ export default function ProjectsPage({ onOpen }) {
       const novel = uploadedNovel ? uploadedNovel.novel : form.novel;
       const p = await api.post('/api/projects', {
         ...form,
+        type: type || 'agent',
         novel,
         style,
         video_resolution: res,
@@ -165,7 +173,7 @@ export default function ProjectsPage({ onOpen }) {
       } catch (e) {
         toast.error('项目已创建，但参考图上传失败：' + e.message + '（可在章节页重新上传）');
       }
-      onOpen(p.id);
+      onOpen(p);
     } catch (e) { toast.error(e.message); }
     finally { setBusy(null); }
   }
@@ -204,6 +212,7 @@ export default function ProjectsPage({ onOpen }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {showCreate && (
       <Card>
         <CardBody className="gap-3">
           <h2 className="text-lg font-semibold m-0">新建项目</h2>
@@ -301,23 +310,41 @@ export default function ProjectsPage({ onOpen }) {
           </div>
         </CardBody>
       </Card>
+      )}
 
       <Card>
         <CardBody className="gap-2">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <h2 className="text-lg font-semibold m-0">项目列表</h2>
-            {!loading && projects.length > 0 && (
-              <div className="flex items-center gap-3">
-                <Checkbox size="sm" isSelected={allSelected} onValueChange={toggleAll}>全选</Checkbox>
-                <Button
-                  size="sm"
-                  color="danger"
-                  variant="flat"
-                  isDisabled={!selected.size}
-                  onPress={batchDelete}
-                >批量删除{selected.size ? '（' + selected.size + '）' : ''}</Button>
-              </div>
-            )}
+            <div className="flex items-center gap-3 flex-wrap">
+              {showTypeFilter && (
+                <>
+                  <span className="muted">分类</span>
+                  <Select
+                    size="sm"
+                    className="w-44"
+                    aria-label="项目分类"
+                    selectedKeys={selectKeys(typeFilter)}
+                    onSelectionChange={(k) => setTypeFilter(pickKey(k))}
+                  >
+                    <SelectItem key="">全部</SelectItem>
+                    {PROJECT_TYPES.map((t) => <SelectItem key={t}>{PROJECT_TYPE_LABEL[t] || t}</SelectItem>)}
+                  </Select>
+                </>
+              )}
+              {!loading && projects.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <Checkbox size="sm" isSelected={allSelected} onValueChange={toggleAll}>全选</Checkbox>
+                  <Button
+                    size="sm"
+                    color="danger"
+                    variant="flat"
+                    isDisabled={!selected.size}
+                    onPress={batchDelete}
+                  >批量删除{selected.size ? '（' + selected.size + '）' : ''}</Button>
+                </div>
+              )}
+            </div>
           </div>
           {loading && (
             <div className="flex items-center justify-center gap-2.5 py-6">
@@ -333,7 +360,7 @@ export default function ProjectsPage({ onOpen }) {
               {projects.map((p) => (
                 <div key={p.id} className={'border rounded-xl overflow-hidden flex flex-col bg-default-50 hover:shadow-md transition-shadow ' + (selected.has(p.id) ? 'border-primary ring-1 ring-primary' : 'border-default-200')}>
                   <div className="relative">
-                    <button onClick={() => onOpen(p.id)} className="block w-full p-0 bg-transparent border-0 cursor-pointer">
+                    <button onClick={() => onOpen(p)} className="block w-full p-0 bg-transparent border-0 cursor-pointer">
                       {p.poster
                         ? <img src={fileUrl(p.id, p.poster)} alt={p.name} className="w-full aspect-video object-cover bg-black" />
                         : <div className="w-full aspect-video bg-default-200 flex items-center justify-center text-default-500 text-sm">暂无预览</div>}
@@ -361,8 +388,9 @@ export default function ProjectsPage({ onOpen }) {
                     ><TrashIcon /></Button>
                   </div>
                   <div className="flex flex-col gap-2 p-3">
-                    <button onClick={() => onOpen(p.id)} className="bg-transparent border-0 p-0 text-left text-[15px] font-medium cursor-pointer text-foreground truncate">{p.name}</button>
+                    <button onClick={() => onOpen(p)} className="bg-transparent border-0 p-0 text-left text-[15px] font-medium cursor-pointer text-foreground truncate">{p.name}</button>
                     <div className="flex items-center gap-1.5 flex-wrap">
+                      {showTypeFilter && <Chip size="sm" variant="flat">{PROJECT_TYPE_LABEL[p.type] || p.type || 'agent'}</Chip>}
                       <span className="muted">资产 {p.assetCount} · 分镜 {p.shotCount}</span>
                       <Chip size="sm" variant="flat" color={statusColor(p.status)}>{p.status || 'idle'}</Chip>
                     </div>

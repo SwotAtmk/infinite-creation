@@ -41,6 +41,7 @@
     "runninghubConcurrency": 1,
     "agentConcurrency": 4,
     "agentQueueTimeoutMinutes": 120,
+    "videosPerShot": 1,
     "retryTimes": 3,
     "videoTimeoutMinutes": 30,
     "imageTimeoutMinutes": 10

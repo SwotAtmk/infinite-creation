@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Cloud,
   Cpu,
+  Film,
   KeyRound,
   Lock,
   Save,
@@ -473,6 +474,25 @@ export default function SettingsPage({ onBack, publicMode = false }) {
             建议默认 4000；任务报「LLM 输出被截断」时优先调大。
           </p>
         </details>
+      </Section>
+
+      <Section icon={Film} title="分镜视频生成" description="每个分镜一次生成几条候选视频；候选越多，渲染耗时和显存占用越高。">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="分镜抽卡数量" hint="默认 1（一个分镜一条视频）；>1 时生成多个候选供勾选最优导出，范围 1-10。">
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              value={String(cfg.generation?.videosPerShot ?? 1)}
+              onChange={(e) =>
+                setCfg({ ...cfg, generation: { ...cfg.generation, videosPerShot: Math.max(1, Math.min(10, Math.round(Number(e.target.value) || 1))) } })
+              }
+            />
+          </Field>
+        </div>
+        <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-4)]">
+          生成多个候选会成倍增加渲染耗时与显存占用，建议 2～3。修改后对新提交的分镜任务生效；已有候选不会被删除。
+        </p>
       </Section>
 
       <Section icon={Users} title="Agent 调度" description="多个章节并行时，限制同时运行的 Agent 会话数；超出的任务会排队等待。">

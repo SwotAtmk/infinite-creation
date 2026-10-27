@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, Clapperboard, Clock, Download, Film, Hash, Package, Play, RefreshCw, Wand2 } from 'lucide-react';
+import { ChevronDown, Clapperboard, Clock, Download, Film, Hash, Package, Play, Plus, RefreshCw, Wand2 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useBilling, costLabel, costText } from '../lib/billing.js';
 import CostButton from '../components/CostButton.jsx';
@@ -69,6 +69,14 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
   const chapterTitle = chapters.find((c) => c.id === cursorId)?.title || '';
   const shown = chapterTitle ? shots.filter((s) => (s.chapter || '默认') === chapterTitle) : shots;
   const doneShots = shown.filter((s) => s.video_path && s.status === 'done');
+  // 单分镜多候选：后端返回 videos 列表；老数据只有 video_path，做一条兼容候选。
+  const candidatesOf = (s) => (Array.isArray(s.videos) && s.videos.length
+    ? s.videos
+    : (s.video_path ? [{ id: '__legacy__', video_path: s.video_path, selected: true, idx: 0, seed: s.seed }] : []));
+  const selectedOf = (s) => {
+    const cs = candidatesOf(s);
+    return cs.find((v) => v.selected) || cs[0] || null;
+  };
   const isActiveJob = (j) => j && (j.status === 'running' || j.status === 'queued');
   const chapterJobFor = (shot) =>
     jobs.find(
@@ -120,16 +128,16 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
   const agesOf = (s) => asArray(s.age_ids).map(byId).filter(Boolean);
   const audiosOf = (s) => asArray(s.audio_ids).map(byId).filter(Boolean);
 
-  async function regen(shotId, render = true) {
+  async function regen(shotId, render = true, append = false) {
     if (submitting) return;
     if (submitLockRef.current.has(shotId)) return;
     submitLockRef.current.add(shotId);
     const fb = (feedback[shotId] || '').trim();
     setSubmitting(shotId);
     try {
-      const job = await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb || undefined, render });
+      const job = await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb || undefined, render, append });
       if (job && job.id) setLocalJobs((prev) => ({ ...prev, [shotId]: { job, at: Date.now() } }));
-      toast.success(render ? '已提交重生成' : '已提交：仅 LLM 改写提示词，不渲染视频');
+      toast.success(append ? '已提交生成候选' : (render ? '已提交重生成' : '已提交：仅 LLM 改写提示词，不渲染视频'));
       if (fb) setFeedback((f) => ({ ...f, [shotId]: '' }));
       // 乐观更新这一镜的状态即可；任务列表/项目状态由 WebSocket 与后台轮询自然更新，
       // 这里不再主动触发父级全量刷新（每次点击会多出 3 个请求 + 整页重渲染）。
@@ -151,6 +159,18 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
   function onRegen(shotId) {
     if ((feedback[shotId] || '').trim()) setAsk(shotId);
     else regen(shotId, true);
+  }
+
+  // 勾选一条候选作为「导出用」：后端会同步 shots.video_path，导出/打包无需改链路。
+  async function selectVideo(shotId, videoId) {
+    if (!videoId || videoId === '__legacy__') return;
+    try {
+      const videos = await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/videos/' + videoId + '/select');
+      const selected = videos.find((v) => v.selected) || videos[0] || null;
+      setShots((list) => list.map((x) => (x.id === shotId ? { ...x, videos, video_path: selected?.video_path || x.video_path } : x)));
+    } catch (e) {
+      toast.error(e.message);
+    }
   }
 
   async function exportChapter() {
@@ -338,6 +358,8 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
             const job = activeJobFor(s.id);
             const chapterJob = chapterJobFor(s);
             const shotBlocked = !!job || !!chapterJob;
+            const candidates = candidatesOf(s);
+            const selected = selectedOf(s);
             return (
               <article
                 key={s.id}
@@ -381,8 +403,8 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                 <div className="grid gap-4 p-4 lg:grid-cols-[340px_minmax(0,1fr)]">
                   <div className="flex flex-col gap-2">
                     <div className="media-frame aspect-video">
-                      {s.video_path ? (
-                        <video className="h-full w-full object-cover" src={fileUrl(projectId, s.video_path)} controls preload="metadata" />
+                      {selected?.video_path || s.video_path ? (
+                        <video className="h-full w-full object-cover" src={fileUrl(projectId, selected?.video_path || s.video_path)} controls preload="metadata" />
                       ) : (
                         <div className="flex h-full w-full flex-col items-center justify-center gap-2.5 text-[var(--fg-4)]">
                           <Film size={22} />
@@ -409,6 +431,36 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                         </div>
                       )}
                     </div>
+                    {candidates.length > 1 ? (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10.5px] text-[var(--fg-4)]">候选视频 · 勾选用于导出</span>
+                          <span className="font-mono text-[10px] text-[var(--fg-4)]">{candidates.length} 条</span>
+                        </div>
+                        <div className="flex gap-1.5 overflow-x-auto pb-1">
+                          {candidates.map((v, i) => {
+                            const active = !!v.selected || selected?.id === v.id;
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                disabled={v.id === '__legacy__' || shotBlocked}
+                                onClick={() => selectVideo(s.id, v.id)}
+                                className={
+                                  'flex shrink-0 flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 text-left transition-colors '
+                                  + (active
+                                    ? 'border-[color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] text-[var(--accent)]'
+                                    : 'border-[var(--line)] bg-white/[0.02] text-[var(--fg-3)] hover:border-[var(--line-strong)] hover:text-[var(--fg-2)]')
+                                }
+                              >
+                                <span className="text-[11px] font-medium">候选 {i + 1}</span>
+                                <span className="font-mono text-[9.5px] opacity-70">{v.seed ? 'seed ' + v.seed : '—'}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
                     {s.error ? (
                       <p className="m-0 rounded-lg border border-[color-mix(in_srgb,var(--danger)_25%,transparent)] bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] px-2.5 py-2 text-[11px] leading-relaxed text-[var(--danger)]">
                         {s.error}
@@ -534,6 +586,18 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                     >
                       <Wand2 size={12} /> 仅改写提示词
                     </CostButton>
+                    {s.video_path || candidates.length ? (
+                      <CostButton
+                        variant="secondary"
+                        size="sm"
+                        disabled={shotBlocked || submitting === s.id}
+                        title="保留已有候选，再生成一条新候选；生成后在左侧勾选导出用"
+                        cost={shotBlocked || submitting === s.id ? '' : costText(billing, 'videoPerSecond', s.duration)}
+                        onClick={() => regen(s.id, true, true)}
+                      >
+                        <Plus size={12} /> 生成候选
+                      </CostButton>
+                    ) : null}
                     <CostButton
                       variant={s.video_path ? 'secondary' : 'primary'}
                       size="sm"

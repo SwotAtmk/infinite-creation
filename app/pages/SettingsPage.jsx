@@ -24,7 +24,7 @@ export default function SettingsPage({ onBack }) {
   const [agentsErr, setAgentsErr] = useState('');
   const [agentTest, setAgentTest] = useState('');
   const [mcpServer, setMcpServer] = useState(null);
-  const [activeCat, setActiveCat] = useState('comfyui');
+  const [activeCat, setActiveCat] = useState('general');
   // 读取配置失败不能只弹一次 toast 就把用户留在「配置加载中…」：cfg 一直是 null，
   // 页面永远不会渲染出「返回」按钮，用户既看不到原因、也退不出去（只能刷浏览器）。
   const loadConfig = useCallback(() => {
@@ -177,6 +177,43 @@ export default function SettingsPage({ onBack }) {
             <ModalHeader className="pb-2"><h2 className="m-0 text-lg font-semibold">设置</h2></ModalHeader>
             <ModalBody>
               <Tabs isVertical aria-label="设置分类" selectedKey={activeCat} onSelectionChange={(k) => setActiveCat(String(k))}>
+                <Tab key="general" title="通用配置">
+                  <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>分镜视频生成</h3>
+                  <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                    <span style={{ flex: 'none' }}>分镜抽卡数量</span>
+                    <Input size="sm" className="w-24" type="number" min={1} max={10}
+                      value={String(cfg.generation.videosPerShot ?? 1)}
+                      onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, videosPerShot: Math.max(1, Math.min(10, Math.round(Number(e.target.value) || 1))) } })} />
+                    <span className="muted">默认 1（一个分镜一条视频）；&gt;1 时生成多个候选供勾选最优导出</span>
+                  </div>
+                  <p className="muted" style={{ marginTop: 4 }}>生成多个候选会按数量成倍增加渲染耗时与显存占用，建议 2~3。</p>
+
+                  <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>提示词改写</h3>
+                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+                    <span style={{ flex: 'none' }}>提示词改写语言</span>
+                    <Select size="sm" className="w-64" aria-label="提示词改写语言" selectedKeys={selectKeys(cfg.llm.rewriteLanguage || 'same')} onSelectionChange={(k) => setCfg({ ...cfg, llm: { ...cfg.llm, rewriteLanguage: pickKey(k) } })}>
+                      <SelectItem key="same">与原提示词一致（推荐）</SelectItem>
+                      <SelectItem key="zh">中文</SelectItem>
+                      <SelectItem key="en">英文</SelectItem>
+                    </Select>
+                  </div>
+                  <p className="muted" style={{ marginTop: 4 }}>在分镜里填反馈后选「仅 LLM 改写提示词」时，改写结果用什么语言。默认与原提示词保持一致，避免中英混杂。</p>
+                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+                    <span style={{ flex: 'none' }}>改写最大输出（token）</span>
+                    <Input size="sm" className="w-28" type="number" min={256} max={32768} value={String(cfg.llm.rewriteMaxTokens ?? 4000)} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, rewriteMaxTokens: Math.max(256, Math.min(32768, Math.round(Number(e.target.value) || 0))) } })} />
+                    <span className="muted">默认 4000</span>
+                  </div>
+                  <p className="muted" style={{ marginTop: 4, lineHeight: 1.7 }}>
+                    <b>作用：</b>分镜里填反馈后选「仅 LLM 改写提示词」时，允许大模型输出的最大长度（token）。
+                    <br />
+                    <b>为什么要设：</b>若本机模型是「思考型」（响应里带 reasoning_content），它会先思考再写正文，而<b>思考与正文共用这一份预算</b>；预算不足时正文会在开头就被截断——表现为改写只剩一两句、<code>__MINIMAX_H3_REF_N__</code> 参考占位符丢失，随后视频画面对不上。之所以「时好时坏」，是因为每次思考长度都不同。
+                    <br />
+                    <b>建议：</b>默认 4000 约可容纳「思考 ~2000 字 + 正文 ~500 字」。调大更不容易被截断，但更慢、更吃显存；调小会频繁触发「输出被截断」而重试甚至失败（范围 256–32768）。
+                    <br />
+                    <b>何时调：</b>任务报「LLM 改写提示词不可用（LLM 输出被截断（达到长度上限））」时，优先调大此值。
+                  </p>
+                </Tab>
+
                 <Tab key="comfyui" title="ComfyUI配置">
                   <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>ComfyUI 服务</h3>
                   <RadioGroup aria-label="ComfyUI 接口类型" orientation="horizontal" value={cfg.comfyui.provider || 'native'} onValueChange={(v) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, provider: v } })}>
@@ -225,16 +262,6 @@ export default function SettingsPage({ onBack }) {
                       <p className="muted" style={{ marginTop: 4 }}>最终服务 URL：{comfyBaseUrl(cfg)}</p>
                     </>
                   )}
-
-                  <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>分镜视频生成</h3>
-                  <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-                    <span style={{ flex: 'none' }}>分镜抽卡数量</span>
-                    <Input size="sm" className="w-24" type="number" min={1} max={10}
-                      value={String(cfg.generation.videosPerShot ?? 1)}
-                      onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, videosPerShot: Math.max(1, Math.min(10, Math.round(Number(e.target.value) || 1))) } })} />
-                    <span className="muted">默认 1（一个分镜一条视频）；&gt;1 时生成多个候选供勾选最优导出</span>
-                  </div>
-                  <p className="muted" style={{ marginTop: 4 }}>生成多个候选会按数量成倍增加渲染耗时与显存占用，建议 2~3。</p>
 
                   {!isRunningHub && (
                     <>
@@ -296,6 +323,42 @@ export default function SettingsPage({ onBack }) {
                       )}
                     </>
                   )}
+                </Tab>
+
+                <Tab key="llm" title="LLM配置">
+                  <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>LLM（Agent 大脑，OpenAI 兼容）</h3>
+                  <p className="muted" style={{ marginTop: 4 }}>
+                    推荐使用 DeepSeek模型，Base URL 填写 <code>https://api.deepseek.com/v1</code>；<a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">获取 API Key</a>。
+                  </p>
+                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+                    <span style={{ flex: 'none' }}>Base URL</span>
+                    <Input size="sm" className="flex-1 min-w-0" placeholder="需 /v1 结尾" value={cfg.llm.baseUrl} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, baseUrl: e.target.value } })} />
+                  </div>
+                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+                    <span style={{ flex: 'none' }}>模型</span>
+                    <Input size="sm" className="flex-1 min-w-0" placeholder="模型" value={cfg.llm.model} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, model: e.target.value } })} />
+                  </div>
+                  <p className="muted" style={{ marginTop: 4 }}>推荐使用模型：deepseek-v4-flash-vision-exp </p>
+                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+                    <span style={{ flex: 'none' }}>API Key</span>
+                    <Input size="sm" className="flex-1" placeholder="API Key" type="password" value={cfg.llm.apiKey} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, apiKey: e.target.value } })} />
+                  </div>
+                  <Checkbox size="sm" isSelected={!!cfg.llm.vision} onValueChange={(v) => setCfg({ ...cfg, llm: { ...cfg.llm, vision: v } })}>
+                    支持图片输入（多模态/视觉模型）
+                  </Checkbox>
+                  <p className="muted" style={{ marginTop: 4 }}>开启后，写分镜/图生图提示词时会把参考图提交给大模型；请确认所用模型确实支持视觉输入。</p>
+                  <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                    <Checkbox size="sm" isSelected={cfg.search?.enabled !== false} onValueChange={(v) => setCfg({ ...cfg, search: { ...(cfg.search || {}), enabled: v } })}>
+                      开启互联网搜索（资料搜索 + 参考图片搜索，默认开启）【注：本地调用不消耗DeepSeek搜索额度】
+                    </Checkbox>
+                  </div>
+                  <p className="muted" style={{ marginTop: 4 }}>
+                    Agent 遇到不确定的品牌/产品型号/年代物品/专业术语时会联网查证；需要参考图（老电话、手机型号、服装等）时自动搜图并下载为参考图，供图生图派生素材。关闭后 Agent 改用自身既有知识继续、不再联网。
+                  </p>
+                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
+                    <Button size="sm" onPress={testLlm}>测试连接</Button>
+                    {llmTest && <span className="muted">{llmTest}</span>}
+                  </div>
                 </Tab>
 
                 <Tab key="agent" title="Agent配置">
@@ -397,65 +460,6 @@ export default function SettingsPage({ onBack }) {
                       </p>
                     </>
                   )}
-                </Tab>
-
-                <Tab key="llm" title="LLM配置">
-                  <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>LLM（Agent 大脑，OpenAI 兼容）</h3>
-                  <p className="muted" style={{ marginTop: 4 }}>
-                    推荐使用 DeepSeek模型，Base URL 填写 <code>https://api.deepseek.com/v1</code>；<a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">获取 API Key</a>。
-                  </p>
-                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
-                    <span style={{ flex: 'none' }}>Base URL</span>
-                    <Input size="sm" className="flex-1 min-w-0" placeholder="需 /v1 结尾" value={cfg.llm.baseUrl} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, baseUrl: e.target.value } })} />
-                  </div>
-                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
-                    <span style={{ flex: 'none' }}>模型（推荐：deepseek-v4-flash-vision-exp 模型）</span>
-                    <Input size="sm" className="flex-1 min-w-0" placeholder="模型" value={cfg.llm.model} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, model: e.target.value } })} />
-                  </div>
-                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
-                    <span style={{ flex: 'none' }}>API Key</span>
-                    <Input size="sm" className="flex-1" placeholder="API Key" type="password" value={cfg.llm.apiKey} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, apiKey: e.target.value } })} />
-                  </div>
-                  <Checkbox size="sm" isSelected={!!cfg.llm.vision} onValueChange={(v) => setCfg({ ...cfg, llm: { ...cfg.llm, vision: v } })}>
-                    支持图片输入（多模态/视觉模型）
-                  </Checkbox>
-                  <p className="muted" style={{ marginTop: 4 }}>开启后，写分镜/图生图提示词时会把参考图提交给大模型；请确认所用模型确实支持视觉输入。</p>
-                  <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-                    <Checkbox size="sm" isSelected={cfg.search?.enabled !== false} onValueChange={(v) => setCfg({ ...cfg, search: { ...(cfg.search || {}), enabled: v } })}>
-                      开启互联网搜索（资料搜索 + 参考图片搜索，默认开启）【注：本地调用不消耗DeepSeek搜索额度】
-                    </Checkbox>
-                  </div>
-                  <p className="muted" style={{ marginTop: 4 }}>
-                    Agent 遇到不确定的品牌/产品型号/年代物品/专业术语时会联网查证；需要参考图（老电话、手机型号、服装等）时自动搜图并下载为参考图，供图生图派生素材。关闭后 Agent 改用自身既有知识继续、不再联网。
-                  </p>
-                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
-                    <Button size="sm" onPress={testLlm}>测试连接</Button>
-                    {llmTest && <span className="muted">{llmTest}</span>}
-                  </div>
-
-                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
-                    <span style={{ flex: 'none' }}>提示词改写语言</span>
-                    <Select size="sm" className="w-64" aria-label="提示词改写语言" selectedKeys={selectKeys(cfg.llm.rewriteLanguage || 'same')} onSelectionChange={(k) => setCfg({ ...cfg, llm: { ...cfg.llm, rewriteLanguage: pickKey(k) } })}>
-                      <SelectItem key="same">与原提示词一致（推荐）</SelectItem>
-                      <SelectItem key="zh">中文</SelectItem>
-                      <SelectItem key="en">英文</SelectItem>
-                    </Select>
-                  </div>
-                  <p className="muted" style={{ marginTop: 4 }}>在分镜里填反馈后选「仅 LLM 改写提示词」时，改写结果用什么语言。默认与原提示词保持一致，避免中英混杂。</p>
-                  <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
-                    <span style={{ flex: 'none' }}>改写最大输出（token）</span>
-                    <Input size="sm" className="w-28" type="number" min={256} max={32768} value={String(cfg.llm.rewriteMaxTokens ?? 4000)} onChange={(e) => setCfg({ ...cfg, llm: { ...cfg.llm, rewriteMaxTokens: Math.max(256, Math.min(32768, Math.round(Number(e.target.value) || 0))) } })} />
-                    <span className="muted">默认 4000</span>
-                  </div>
-                  <p className="muted" style={{ marginTop: 4, lineHeight: 1.7 }}>
-                    <b>作用：</b>分镜里填反馈后选「仅 LLM 改写提示词」时，允许大模型输出的最大长度（token）。
-                    <br />
-                    <b>为什么要设：</b>若本机模型是「思考型」（响应里带 reasoning_content），它会先思考再写正文，而<b>思考与正文共用这一份预算</b>；预算不足时正文会在开头就被截断——表现为改写只剩一两句、<code>__MINIMAX_H3_REF_N__</code> 参考占位符丢失，随后视频画面对不上。之所以「时好时坏」，是因为每次思考长度都不同。
-                    <br />
-                    <b>建议：</b>默认 4000 约可容纳「思考 ~2000 字 + 正文 ~500 字」。调大更不容易被截断，但更慢、更吃显存；调小会频繁触发「输出被截断」而重试甚至失败（范围 256–32768）。
-                    <br />
-                    <b>何时调：</b>任务报「LLM 改写提示词不可用（LLM 输出被截断（达到长度上限））」时，优先调大此值。
-                  </p>
                 </Tab>
 
                 <Tab key="skills" title="技能库管理">

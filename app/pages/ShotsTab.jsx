@@ -53,6 +53,9 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const costumesOf = (s) => asArr(s.costume_ids).map(byId).filter(Boolean);
   const agesOf = (s) => asArr(s.age_ids).map(byId).filter(Boolean);
   const audiosOf = (s) => asArr(s.audio_ids).map(byId).filter(Boolean);
+  // 单分镜多候选视频：优先用后端返回的 videos 列表，兼容存量老数据（无 shot_videos 但有 video_path）
+  const candidatesOf = (s) => (s.videos && s.videos.length ? s.videos : (s.video_path ? [{ id: '__legacy__', video_path: s.video_path, selected: true, idx: 0, seed: s.seed }] : []));
+  const selectedOf = (s) => { const cs = candidatesOf(s); return cs.find((v) => v.selected) || cs[0] || null; };
 
   function RefThumb({ a, onReplace, onRemove }) {
     return (
@@ -71,22 +74,22 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
     );
   }
 
-  async function regen(shotId, render = true) {
+  async function regen(shotId, render = true, append = false) {
     const fb = (feedback[shotId] || '').trim();
-    setBusy('正在提交重新生成…');
+    setBusy(append ? '正在提交生成候选…' : '正在提交重新生成…');
     try {
-      await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb || undefined, render });
-      toast.success(render ? '已提交重生成' : '已提交：仅 LLM 改写提示词，不渲染视频');
-      if (fb) setFeedback((f) => ({ ...f, [shotId]: '' })); // 反馈已被消费，清空以免下次重新生成又带上
+      await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { feedback: fb || undefined, render, append });
+      toast.success(append ? '已提交生成候选' : (render ? '已提交重生成' : '已提交：仅 LLM 改写提示词，不渲染视频'));
+      if (fb) setFeedback((f) => ({ ...f, [shotId]: '' })); // 反馈已被消费，清空以免下次又带上
       load();
       onRefresh && onRefresh();
     } catch (e) { toast.error(e.message); }
     finally { setBusy(null); }
   }
-  // 左侧反馈框有值 → 需要 LLM，弹窗确认；留空 → 直接渲染视频
-  function onRegen(shotId) {
+  // 左侧反馈框有值 → 需要 LLM，弹窗确认；留空 → 直接生成候选（追加，保留旧候选）
+  function onAddCandidate(shotId) {
     if ((feedback[shotId] || '').trim()) setAsk(shotId);
-    else regen(shotId, true);
+    else regen(shotId, true, true);
   }
   async function exportChapter() {
     setBusy('正在导出本章成片…');
@@ -162,6 +165,16 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
     try {
       await api.patch('/api/projects/' + projectId + '/shots/' + shotId, { [field]: next });
       toast.success('素材已移除');
+      load();
+    } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
+  }
+  // 勾选某个候选视频作为「导出用」：写回 shots.video_path，后续导出成片/打包均取用选中项
+  async function selectVideo(shotId, videoId) {
+    setBusy('正在设置导出视频…');
+    try {
+      await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/videos/' + videoId + '/select');
+      toast.success('已设为导出视频');
       load();
     } catch (e) { toast.error(e.message); }
     finally { setBusy(null); }
@@ -267,15 +280,49 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
                 {s.prompt_id && <div className="muted">ComfyUI prompt_id: {s.prompt_id}</div>}
               </details>
 
-              {s.video_path && <video className="video" controls src={fileUrl(projectId, s.video_path)} />}
+              {(() => {
+                const vids = candidatesOf(s);
+                const sel = selectedOf(s);
+                const generating = s.status === 'generating' || s.status === 'running';
+                if (!vids.length && !generating) return null;
+                return (
+                  <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                    {vids.length > 1 && (
+                      <div className="muted" style={{ fontSize: 12 }}>导出用候选视频（左上角勾选一条，默认第一条）</div>
+                    )}
+                    <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                      {vids.map((v, i) => {
+                        const isSel = sel && sel.id === v.id;
+                        return (
+                          <div key={v.id} style={{ position: 'relative', width: 210 }}>
+                            {vids.length > 1 && (
+                              <label style={{ position: 'absolute', top: 6, left: 6, zIndex: 2, maxWidth: 'calc(100% - 12px)', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.55)', borderRadius: 6, padding: '2px 6px', cursor: running ? 'default' : 'pointer', overflow: 'hidden' }}>
+                                <input type="checkbox" checked={isSel} disabled={running} onChange={() => selectVideo(s.id, v.id)} style={{ flex: '0 0 auto' }} />
+                                <span style={{ fontSize: 11, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>候选 {i + 1}{v.seed ? ' · ' + v.seed : ''}</span>
+                              </label>
+                            )}
+                            <video className="video" controls src={fileUrl(projectId, v.video_path)} style={{ width: '100%', borderRadius: 8, outline: isSel ? '2px solid #006FEE' : 'none', outlineOffset: 2 }} />
+                          </div>
+                        );
+                      })}
+                      {generating && (
+                        <div style={{ width: 210, height: 120, border: '1px dashed #999', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#999', fontSize: 12 }}>
+                          <Spinner size="sm" />
+                          <span>候选视频生成中…</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               {s.error && <p className="m-0 text-danger">错误：{s.error}</p>}
               <div className="row" style={{ marginTop: 8 }}>
                 <Input size="sm" className="flex-1" placeholder="反馈（如：镜头拉近 / 让人物微笑），留空直接渲染；有内容会先问是否 LLM 改写" value={feedback[s.id] || ''} onChange={(e) => setFeedback({ ...feedback, [s.id]: e.target.value })} />
                 {(() => {
                   const job = activeJobFor(s.id);
                   return (
-                    <Button size="sm" isDisabled={!!job} onPress={() => onRegen(s.id)}>
-                      {job ? (job.status === 'queued' ? '⏳ 排队中' : '生成中…') : '↻ 重新生成'}
+                    <Button size="sm" isDisabled={!!job} onPress={() => onAddCandidate(s.id)}>
+                      {job ? (job.status === 'queued' ? '⏳ 排队中' : '生成中…') : '＋ 生成候选'}
                     </Button>
                   );
                 })()}
@@ -306,11 +353,11 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
               <ModalHeader>检测到反馈，需要 LLM 改写提示词</ModalHeader>
               <ModalBody>
                 <p className="muted whitespace-pre-line">反馈：{ask ? feedback[ask] || '' : ''}</p>
-                <p>LLM 改写完成后，是否继续调用 ComfyUI 渲染视频？</p>
+                <p>LLM 改写完成后，是否继续生成候选视频（追加）？</p>
               </ModalBody>
               <ModalFooter>
-                <Button size="sm" color="primary" onPress={() => { const id = ask; setAsk(null); regen(id, true); }}>是 · LLM 后渲染视频</Button>
-                <Button size="sm" variant="flat" onPress={() => { const id = ask; setAsk(null); regen(id, false); }}>否 · 只做 LLM，不渲染</Button>
+                <Button size="sm" color="primary" onPress={() => { const id = ask; setAsk(null); regen(id, true, true); }}>是 · LLM 后生成候选</Button>
+                <Button size="sm" variant="flat" onPress={() => { const id = ask; setAsk(null); regen(id, false, true); }}>否 · 只做 LLM，不渲染</Button>
                 <Button size="sm" variant="light" onPress={() => setAsk(null)}>取消</Button>
               </ModalFooter>
             </>

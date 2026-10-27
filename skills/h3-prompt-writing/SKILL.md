@@ -34,7 +34,9 @@ Read `references/ref-en.txt` for label rules, retention analysis, and complete e
 
 - Write rewrite sections in English; preserve dialogue, lyrics, and visible scene text in their original language.
 - Describe each shot by composition, subjects, environment, actions, camera, sound, and the exact point where referenced content appears.
+- **Make every character action emotion-driven and physically specific**: never write only inert/still verbs (stands / sits / walks / looks) with no force. State the action's intensity, speed, and body language so the motion has visible energy (e.g. `slams the table`, `paces frantically`, `clenches his fists`, `leans in intensely`, `snatches the letter`, `stumbles back breathless`) — and keep the action consistent with that line's emotion. Static characters plus a monotonous read come across as lazy; give each beat visible, purposeful movement.
 - Avoid plot summaries, unresolved reference labels, and timing that does not match the requested duration.
+- **Annotate every spoken line's delivery (emotion + speech pace + tone/volume) with a bias toward high energy**: before each `<d>…</d>`, after the speaker ID `(Sx)`, explicitly state how the line is spoken — emotion (furious / ecstatic / frantic / explosive / urgent / breathless / anxious / annoyed / amused / sad / nervous / hesitant / calm …), pace (fast / hurried / breathless / rapid-fire / measured / slow / drawn-out / hesitant …), and tone or volume (shout / cry out / whisper / murmur / rising / trembling / flat …). Pick the high-tension end of these lists unless the beat genuinely calls for calm. Never write a bare `S1 says, <d>…</d>` with no delivery description. Vary delivery and intensity between lines, speakers, and emotional turns within the same shot instead of one flat monotone. Follow the delivery wording shown in `references/ref-en.txt` (e.g. `exclaims with light annoyance`, `says in a casual young male voice with a playful tone and an easy conversational pace`, `replies … with an amused cadence`) — and prefer its higher-energy phrasings for conflict, urgency, or strong emotion.
 
 ## Storyboard-Driven Multi-Segment
 
@@ -60,4 +62,5 @@ Notes:
 - Always match the total duration of the description to the requested video length (2–15 seconds), driven by content rhythm: a single short line of dialogue needs only 2–4 seconds — do not pad short shots to 10+ seconds.
 - Keep reference labels consistent (e.g. `<Picture 1>`, `<Video 1>`, `<Audio 1>`) across every section.
 - Prefer concrete visual and audio details over abstract words like "cinematic" or "beautiful".
+- Give every spoken line a concrete delivery description (emotion + pace + tone) with real intensity so the speech carries feeling, speed variation, and emotional thrust instead of a lazy flat monotone; pair loud/urgent delivery with big physical actions.
 - When using keyframes (I2VA / FL2VA / L2VA), clearly state how the first and/or last frame connects to the timeline.

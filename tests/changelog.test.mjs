@@ -627,6 +627,9 @@ test('停止：当前分镜复位为待生成，不再留在「失败」', async
   const s = Shots.create(p.id, { chapter: '第1章', visual: '画面' });
   Shots.update(s.id, { video_prompt: '已完成的提示词', character_ids: [ch.id] });
   const ctx = createToolRuntime({ projectId: p.id });
+  // 固定 native：本用例 mock 的是本地 ComfyUI 的 /upload/ 上传路径，避免被真实 config 的
+  // RunningHub 上传分派带偏（RunningHub 上传走别的接口，本 mock 接不住）。
+  ctx.cfg.comfyui.provider = 'native';
   // 参考图能上传，但提交任务时 ComfyUI 不可达：让失败发生在「渲染的 try 内」（不起真进程）
   const origFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
@@ -674,6 +677,11 @@ test('依赖调度：引用资产未完成的镜头被暂缓，已就绪的镜�
   Shots.update(s2.id, { video_prompt: '提示词2', character_ids: [pendingCh.id] });
 
   const ctx = createToolRuntime({ projectId: p.id });
+  // 固定 native：mock 的是本地 ComfyUI /upload/ 上传路径，避免真实 config 的 RunningHub 分派带偏。
+  ctx.cfg.comfyui.provider = 'native';
+  // 用例断言的是「提交渲染的镜头数」，与本地 config.json 的 generation.videosPerShot 无关：
+  // 候选数 > 1 时同一镜会提交多次，这里固定成 1，避免测试结果随用户设置漂移。
+  ctx.cfg.generation.videosPerShot = 1;
   const origFetch = globalThis.fetch;
   const submitted = [];
   globalThis.fetch = async (url) => {

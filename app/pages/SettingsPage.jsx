@@ -217,6 +217,16 @@ export default function SettingsPage({ onBack }) {
           </>
         )}
 
+        <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>分镜视频生成</h3>
+        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 'none' }}>分镜抽卡数量</span>
+          <Input size="sm" className="w-24" type="number" min={1} max={10}
+            value={String(cfg.generation.videosPerShot ?? 1)}
+            onChange={(e) => setCfg({ ...cfg, generation: { ...cfg.generation, videosPerShot: Math.max(1, Math.min(10, Math.round(Number(e.target.value) || 1))) } })} />
+          <span className="muted">默认 1（一个分镜一条视频）；&gt;1 时生成多个候选供勾选最优导出</span>
+        </div>
+        <p className="muted" style={{ marginTop: 4 }}>生成多个候选会按数量成倍增加渲染耗时与显存占用，建议 2~3。</p>
+
         <h3 className="text-base font-semibold" style={{ marginTop: 8 }}>Agent 运行时</h3>
         <RadioGroup aria-label="Agent 运行时" orientation="horizontal" value={isExternalAgent ? 'external' : 'openclaude'} onValueChange={switchAgentMode}>
           <Radio value="openclaude">内置 openclaude（默认）</Radio>
@@ -336,6 +346,11 @@ export default function SettingsPage({ onBack }) {
           支持图片输入（多模态/视觉模型）
         </Checkbox>
         <p className="muted" style={{ marginTop: 4 }}>开启后，写分镜/图生图提示词时会把参考图提交给大模型；请确认所用模型确实支持视觉输入。</p>
+        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+          <Checkbox size="sm" isSelected={cfg.search?.enabled !== false} onValueChange={(v) => setCfg({ ...cfg, search: { ...(cfg.search || {}), enabled: v } })}>
+            开启互联网搜索（资料搜索 + 参考图片搜索，默认开启）【注：本地调用不消耗DeepSeek搜索额度】
+          </Checkbox>
+        </div>
         <div className="row mt-2" style={{ gap: 8, alignItems: 'center' }}>
           <Button size="sm" onPress={testLlm}>测试连接</Button>
           {llmTest && <span className="muted">{llmTest}</span>}
@@ -425,12 +440,6 @@ export default function SettingsPage({ onBack }) {
         )}
           </>
         )}
-        <h3 className="text-base font-semibold" style={{ marginTop: 16 }}>联网搜索</h3>
-        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-          <Checkbox size="sm" isSelected={cfg.search?.enabled !== false} onValueChange={(v) => setCfg({ ...cfg, search: { ...(cfg.search || {}), enabled: v } })}>
-            开启互联网搜索（资料搜索 + 参考图片搜索，默认开启）
-          </Checkbox>
-        </div>
         <p className="muted" style={{ marginTop: 4 }}>
           Agent 遇到不确定的品牌/产品型号/年代物品/专业术语时会联网查证；需要参考图（老电话、手机型号、服装等）时自动搜图并下载为参考图，供图生图派生素材。关闭后 Agent 改用自身既有知识继续、不再联网。
         </p>

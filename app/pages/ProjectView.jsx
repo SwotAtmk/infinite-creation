@@ -42,15 +42,28 @@ function fmtDuration(a, b) {
   return m + ' 分' + (r ? r + ' 秒' : '');
 }
 
+// 「分镜审查」默认定位的章节：优先「生成中」；没有则定位到最后一个「生成完成」的章节；
+// 都没有（全空/待生成/失败）再退回最后一章。章节按 seq 排序，生成按章推进，这样默认看到的是
+// 最近正在跑或最近跑完的那一章，而不是列表末尾那个还没生成的新章节。
+function defaultShotCursor(list) {
+  if (!list.length) return '';
+  const running = list.find((c) => c.genStatus === 'running');
+  if (running) return running.id;
+  let lastDone = '';
+  for (const c of list) if (c.genStatus === 'done') lastDone = c.id;
+  if (lastDone) return lastDone;
+  return list[list.length - 1].id;
+}
+
 // ============ 项目工作区 ============
 export default function ProjectView({ id, onBack, initialTab = 'chapters', onTabChange }) {
   const toast = useToast();
   const [project, setProject] = useState(null);
   const [pview, setPview] = useState(initialTab === 'generate' ? 'chapters' : initialTab);
   // tab 切换同步到 URL（page.jsx replaceState 更新，刷新后停留原 tab）
-  // 进入「分镜审查」时定位到**最后一章**：生成按章推进，最近的一章才是要看的那一章。
-  // 这里按章节 id 记（见下面 cursorId），不再用「下标 -1 = 默认最后一章」的哨兵值。
-  const setTab = (t) => { if (t === 'shots') setCursorId(chapters.length ? chapters[chapters.length - 1].id : ''); setPview(t); if (onTabChange) onTabChange(t); };
+  // 进入「分镜审查」时定位到「生成中 / 最后一个生成完成」的章节（defaultShotCursor），
+  // 而不是列表末尾那个可能还没生成的新章节。按章节 id 记（见下面 cursorId），不用下标哨兵值。
+  const setTab = (t) => { if (t === 'shots') setCursorId(defaultShotCursor(chapters)); setPview(t); if (onTabChange) onTabChange(t); };
   const [events, setEvents] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
@@ -85,9 +98,9 @@ export default function ProjectView({ id, onBack, initialTab = 'chapters', onTab
     if (seq !== loadSeqRef.current) return; // 有更新的请求在飞，丢弃本次（旧）结果
     setLoadError('');
     setProject(p); setJobs(j); setChapters(c);
-    // 章节 id 仍存在就保持选中（排序/改名都不影响），否则退回**最后一章**
-    // （与「进入分镜审查默认看最后一章」保持一致）
-    setCursorId((x) => (c.some((ch) => ch.id === x) ? x : (c.length ? c[c.length - 1].id : '')));
+    // 章节 id 仍存在就保持选中（排序/改名都不影响），否则退回默认定位章节
+    // （与「进入分镜审查默认看生成中/最后一个完成章节」保持一致）
+    setCursorId((x) => (c.some((ch) => ch.id === x) ? x : defaultShotCursor(c)));
     // 出现新任务就把任务列表展开，让用户提交后立刻看到（无论它瞬间完成/失败）
     if (firstJobsLoadRef.current) firstJobsLoadRef.current = false;
     else if (j.some((x) => !seenJobIdsRef.current.has(x.id))) setQueueOpen(true);

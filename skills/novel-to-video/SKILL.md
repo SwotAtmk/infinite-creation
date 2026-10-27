@@ -27,7 +27,7 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 - 把大纲写入项目 context（bible.md / style.md 骨架）。
 
 ### 2. 一致性锚点
-- bible.md：每个角色唯一外貌/配色/声音特征（一句话可复用描述）；并写出该角色的「衣橱」——多套服装清单（每套短名 + 外观描述），不要写死为唯一一套；这些服装后续都会生成服装资产供分镜引用。
+- bible.md：每个角色唯一外貌/配色/声音特征（一句话可复用描述）；并写出该角色的「衣橱」——多套服装清单（每套短名 + 外观描述），不要写死为唯一一套；这些服装后续都会生成服装资产供分镜引用。另为每个场景建立「场景站位表」（空间锚点 + 各角色默认方位 + 道具锚点 + 180度轴线与允许机位），随 bible 一并写出，作为跨镜站位一致性的锚点。
 - style.md：统一画风/光线/色调/镜头语言，后续所有生图与视频提示词强制引用。
 
 ### 3. 资产生成（技能驱动：先加载技能写参数，再统一提交）
@@ -35,6 +35,8 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 - **角色 voice_desc（声音画像）**：create_asset 创建角色时，必须把该角色声音特征（性别+年龄段+音色质感，如「青年男性，嗓音低沉」）作为 voice_desc 传入；已创建的缺 voice_desc 用 update_asset 补。voice_desc 是 design_voice 的性别/年龄依据，缺失时 TTS 会自由发挥成女声。
 - **视觉参考（若系统提示说明当前 LLM 支持图片输入）**：写图片/图生图提示词前，先用 view_asset(asset_id) 查看资产当前参考图，基于真实图写提示词；不支持图片输入则跳过此步。
 - **图片提示词**：对每个图片资产（人物/场景/道具），按 image-prompt-writing 写出 prompt 与 negative_prompt，用 update_asset(id, {prompt, negative_prompt}) 写入。
+- **参考图派生新素材（图生图 i2i）**：若首条消息附带了「参考生成新素材」的参考图（带 reference_id），当剧情需要生成与该参考图相关的素材时，用 generate_asset_from_reference(reference_id, category, name, prompt, description) 以参考图为图生图输入派生新图，不要用文生图重画；只有与参考图无关、纯靠文字描述的新素材才走 generate_assets_batch。
+- **导入素材绑定分镜**：若首条消息附带了「导入素材库」的图（带 asset_id），先分析每张图适合出现在哪个分镜（人物→characters、场景→scenes、道具→props），再在 set_storyboard 里按名字绑定到对应分镜，禁止忽略或为同一主体重复生成同义资产。
 - **音色参数**：对每个角色，按 tts-voice-design 写出 text（**20~30 字左右的简短自我介绍，约 5 秒，禁止长篇大论**）与 voice_description（**音色描述，不限制字数，可详细写**），连续调用 design_voice(asset_id, text, voice_description) 生成音色样本（落盘 voice_ref）。
 - **再统一提交图片**：generate_assets_batch 会用已写入的 prompt 连续文生图全部图片资产（人物 16:9 三视图、场景 16:9 环境图、道具 1:1 白底图），已生成成功的自动跳过（幂等），失败的标记并继续。
 - **生成衣橱（多套服装）**：人物 canonical 图生成完成后，对每个角色调用 design_outfits(character_id, outfits) 一次性生成该角色衣橱里的全部服装资产（图生图，保持脸/发型/画风一致）；每套服装成为 category=costume、parent_id 指向该角色的资产，素材库会按角色展示这些服装。
@@ -42,6 +44,7 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 
 ### 4. 分镜脚本（完整覆盖 · 长镜头聚合，不拆碎）—— 先加载 story-pipeline-cn 再拆分
 - **先调用 skill(story-pipeline-cn) 加载拆分规约**，严格按其模式C 长镜头版拆分（禁止凭记忆臆造）。
+- **先调用 skill(scene-blocking-consistency) 建立站位表并写入 bible**：拆分镜前，为每个场景建立站位表（空间锚点/角色站位/道具锚点/轴线机位），合并进 bible（先 get_project 读回现有 context.bible 再 save_context，勿覆盖人物/衣橱）；之后每条 set_storyboard 的 sub_shots 与 visual 都必须明确写出各角色/道具相对左右方位与朝向，不得零指代（如「同上/保持原样」）。**按 idx 顺序逐条写分镜，并自动判断前后两镜是否转场**：比较前后两镜的 scene_name/场景头与时间——同场景且时间连续→写每条前先回顾上一条 sub_shots 的结尾落幅，起幅=上一镜落幅（角色左右方位/朝向/道具位置/动作方向一致）；发生转场（场景切换/地点变化/时间跳跃）→不参考上一镜位置，为新场景重建站位表。
 - **视觉参考（若支持图片输入）**：拆分/写 sub_shots 前，用 view_asset 一次性查看每个唯一角色/场景/服装的参考图并记住、跨镜复用（不要逐镜重复查看同一张图）；仅当某镜头引用了尚未看过的资产时才用 view_shot_references(shot_id) 补看，确保画面描述与人物/场景/服装一致。
 - **硬性要求：完整覆盖整章，但按「连续剧情段」聚合成长镜头，禁止碎片化**。镜头数 ≈ 场景切换次数（而非每段落一镜）；同一场景内连续动作 + 多句连贯对白合并成一个主镜头。
 - 拆分规则（story-pipeline-cn · 模式C · 长镜头版）：
@@ -50,14 +53,15 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
   3. 每镜字段：景别（ECU/CU/MCU/MS/MLS/LS/ELS/OTS/POV）、运镜（STATIC/PUSH IN/PULL OUT/PAN/TILT/TRACKING/HANDHELD/CRANE UP/ORBIT）、光线、色调、音效、画面内容、对白（原文台词，同一镜可含多句连续对白，多行「人物：台词」）、镜头时长（贴合内容，2–15s，最长 15s）。
   4. sub_shots（子分镜时间轴）：把整个主镜头按时间连续拆成多个子分镜（如 0-3s / 3-6s / 6-10s…，**首尾相接、各子分镜时长之和 = duration**）；每个子分镜写画面内容 + 运镜 + 该段对白，让多句对白在同一镜头内自然连贯、不断档。
   5. **多人对话拆镜**：**同一分镜最多 2 个说话人**；一场戏若必须有 ≥3 人轮流开口对话，拆成多个分镜，使每个分镜 ≤2 个说话人（参考音频只随说话人走，避免单分镜参考音频超限）。
-- Prompt 七段式：画风 + 场景 + 主体 + 动作/状态 + 镜头语言 + 光线/氛围 + 质量；video_prompt 只写「镜头运动 + 角色动作」（不重复外貌），image_prompt 静态。中文场景头，**image/video prompt 用英文**，且**画面中不得出现任何文字/字幕/水印/logo**。
+- Prompt 七段式：画风 + 场景 + 主体 + 动作/状态 + 镜头语言 + 光线/氛围 + 质量；video_prompt 只写「镜头运动 + 角色动作」（不重复外貌），image_prompt 静态。中文场景头，**image/video prompt 用英文**，且**画面中不得出现任何文字/字幕/水印/logo**。**角色动作要「情绪驱动 + 肢体细节 + 有力度变化」**：禁止只写 stands/sits/walks 这类被动静止动词，要写动作的力度、速度、身体语言（握拳 / 拍桌 / 来回踱步 / 猛地倾身 / 一把夺过 / 踉跄后退…），且动作要与该句对白情绪一致——动作是情绪的外化，不是走位。
+- **台词情绪/语速只进 video_prompt，不进 dialogue**：中文台词（dialogue）本身保持口语化、干净，**不写进括号式的情绪/语速标注**（以免污染字幕、干扰说话人解析），只用标点（叹号 / 问号 / 省略号 / 短句停顿）体现节奏与情绪；到步骤 5 写英文 video_prompt 时，再为每句对白补齐「说话状态（情绪 + 语速 + 语气）」。
 - **映射到 set_storyboard（我们系统镜头）**：每个主镜头 = 一条 set_storyboard（chapter=该章 title）——idx=章节内镜头序号；scene_name=场景头；character_ids=该镜角色（角色名→资产id）；scene_ids=该镜场景资产；costumes=该镜各角色此刻所穿的服装（服装短名→服装资产id，从该角色衣橱里按剧情选对应那套）；camera=运镜；dialogue=该镜全部对白（多句合并）；duration=按内容节奏 2–15s（短台词给 2–4s，禁止为凑时长拖长）；sub_shots=上述子分镜时间轴（首尾相接）。**video_prompt 不在这一步写**，留到步骤 5 加载 h3-prompt-writing 后逐镜写入。
 - **写入前自检覆盖度**：用 get_project 看本章已有镜头，确认每个【场景】、每段连续对白/关键节拍都被某个主镜头覆盖；漏则补。**不得因「够了/时间久」删减剧情，也不得拆碎成一句一镜。**
 - 用 set_storyboard 一次性写入本章全部镜头；续章用更高 idx + chapter 追加，绝不覆写旧章已 done 镜头。
 
 ### 5. 先写 H3 视频提示词，再一整章全部生成（r2v，确定性批量）
 - **先调用 skill(h3-prompt-writing) 加载提示词规范**，并读其 references/comfyui-node-adapter.md（官方 <Picture N>/<Audio N> → 本节点 __MINIMAX_H3_REF_N__ 的映射与平铺格式）。
-- **逐镜写 video_prompt**：对本章每个镜头，按 h3-prompt-writing + 适配说明写出英文平铺提示词（含 __MINIMAX_H3_REF_N__ 参考标签、时间轴画面/运镜/音效、对白走 voice_ref、画面无文字），用 update_shot(shot_id, {video_prompt}) 写入。参考标签序号必须与 assembleShotReferences 的引用顺序一致；**音频参考标签只对应「有台词」角色**（仅说话角色才有 voice_ref，按角色顺序排在图片之后，且 ≤3 段），不要给无台词角色写声音标签。
+- **逐镜写 video_prompt**：对本章每个镜头，按 h3-prompt-writing + 适配说明写出英文平铺提示词（含 __MINIMAX_H3_REF_N__ 参考标签、时间轴画面/运镜/音效、对白走 voice_ref、画面无文字），并把该场景站位表里的角色/道具左右方位与朝向翻译成英文复述进提示词，用 update_shot(shot_id, {video_prompt}) 写入。参考标签序号必须与 assembleShotReferences 的引用顺序一致；**音频参考标签只对应「有台词」角色**（仅说话角色才有 voice_ref，按角色顺序排在图片之后，且 ≤3 段），不要给无台词角色写声音标签。**为每句对白补「说话状态（情绪 + 语速 + 语气）」**：把中文台词逐句写进英文提示词时，在说话人之后、`<d>…</d>` 之前明确该句的情绪（furious/ecstatic/frantic/urgent/breathless/anxious/annoyed/amused/sad/nervous/hesitant/calm…）、语速（fast/hurried/breathless/rapid-fire/measured/slow/drawn-out/hesitant…）与语气音量（shout/cry out/whisper/murmur/rising/trembling…），**高能量词优先**，禁止只写 `says` 的平读；同一镜头内不同对白、情感转折点要有语速/情绪差异。**动作与对白情绪要匹配、有戏剧性**：动作不只是走位，而是情绪的外化——大声/急促的对白配大幅肢体动作（握拳/拍桌/猛地倾身/挥臂），有力度与速度变化，禁止静止站桩 + 平读。此要求只写进 `video_prompt`，**不写回 dialogue/字幕**。
 - 写完全部 video_prompt 后，用 **generate_chapter_videos(chapter=该章)** 一次性生成本章全部镜头视频：工具会循环遍历本章每个镜头（读 shot.video_prompt→generate_shot_video），**不省略任何镜头，一直跑到该章所有镜头 done**。若某镜漏写 video_prompt，工具会用最小兜底提示词（仍可出片，但质量打折），所以务必逐镜写全。
 - **硬性要求：不因时间/数量/失败跳过任何镜头**；失败镜头会被标记 failed 并继续。若返回 remaining>0，用 list_shots 看哪些 failed，修复后**再次调用 generate_chapter_videos** 直到 remaining=0。
 - 遵守 H3 上限：参考图 ≤9、音视频 ≤3（assembleShotReferences 内部处理）。

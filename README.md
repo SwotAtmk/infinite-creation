@@ -1,10 +1,15 @@
+<div align="center">
+
 # Agent无限创作 · 把你的故事变成亿帧画面
 
+**免费开源本地 Agent 全自动视频生成 ✨，小说/剧本一键生成长视频。**<br>
+<sub>🇬🇧 English users please read <a href="README_EN.md">README in English</a></sub>
+
+<a href="https://github.com/SwotAtmk/infinite-creation/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SwotAtmk/infinite-creation?style=for-the-badge&color=F5B700&label=stars"></a> <a href="README_EN.md"><img alt="English" src="https://img.shields.io/badge/README-English-555?style=for-the-badge"></a> <a href="https://github.com/SwotAtmk/infinite-creation/blob/main/LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licence-MIT-2EA44F?style=for-the-badge"></a> <a href="https://nodejs.org/"><img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=for-the-badge"></a>
+
+</div>
 
 ![](images/banner.jpg)
-
-
-中文 | [English](README_EN.md)
 
 ## 项目简介
 - 免费开源本地Agent全自动视频生成的开源项目✨，不用演员、配音、导演和剪辑师就能本地一键生成超长视频。可以做小说生成视频、漫剧广告、故事类讲解视频，让你所想到的故事变成亿帧画面。
@@ -22,7 +27,6 @@
 - [持续进行] 解决项目中存在的BUG
 - [计划中] 适配低显存的家用级显卡，博主的测试设备有限，需要更多的用户帮忙测试并反馈到仓库中的Issues多多反馈🙏🏻
 - [计划中] 解决并优化内部Agent存在的工具调用安全及上下文压缩等……问题
-- [计划中] 接入外部Agent，分为普通版和专业版，专业版调用外部Agent进行处理，普通版内置集成Agent模块
 - [计划中] 插件系统开发，支持插件上传、插件调用、插件框架……
 - [计划中] 自动流水线支持提示词自定义编排插件
 - [计划中] 收录更多高阶Skill技能，提升Agent技能视觉美感
@@ -30,6 +34,12 @@
 - [计划中] 打包构建Docker部署、桌面端App
 - [计划中] 工作流接入视频超分，让生成的视频更加清晰
 - [计划中] 接入Seedance、kling、wan、MiniMax-H3在线版Api接口一键生成视频
+- [✅] 支持配置单分镜生成多个视频，根据分镜抽卡选优的模式
+- [✅] 支持互联网搜索技能，比如说生成素材支持搜索参考图片，比如说华为手机、苹果电脑等相关型号的图片用做参考图生成新的素材图片
+- [✅] 支持Agent自动根据实际应用场景调用文生视频、图生视频、首尾帧、数字人的功能（数字人模式暂为预留，不对接业务）
+- [✅] 支持上传txt文本文件，自动解析创建多章节并共享参考素材
+- [✅] 新增「场景站位一致性」Skill：为每个场景建立人物/道具站位表（空间锚点+角色方位+180度轴线），消除跨镜左右漂移与越轴等分镜一致性问题
+- [✅] 接入外部 Agent 运行时：支持本机 CLI Agent（Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Grok Build、Hermes、自定义命令）通过本地 MCP 工具桥接管「小说→视频」流水线，同时保留内置 openclaude 作为默认运行时
 - [✅] 支持自动生成视频字幕：项目级开关，把分镜台词/旁白按时间轴烧录进成片（自动隐藏角色名），同时保留不带字幕版本与 SRT 字幕文件供下载
 - [✅] 支持背景音乐管理，接入 MiniMax Music3 本地/云端自动生成背景音乐并合成到视频中，含「背景音乐库」（手动生成/预览/选择/应用到章节）
 - [✅] 添加Agent安全审批策略，防止Agent越权操作，删除项目或执行危险命令
@@ -48,7 +58,7 @@
 提供Agent生成超长视频全链路整合方案
 
 ## 项目架构
-基于**本地 ComfyUI**（MiniMax H3 视频 GGUF 版 + Qwen-Image 2.1 文生图/图生图 + Krea2 文生图 + Qwen3-TTS + MiniMax Music3 背景音乐）的**全自动「小说/剧本 → 视频」Agent 工作流**。项目目前整理了27个Skill技能，其中包含MiniMax-H3提示词优化，分镜剧本生成，小说转剧本等。
+基于**本地 ComfyUI**（MiniMax H3 优化版 + Qwen-Image 2.1 文生图/图生图 + Krea2 文生图 + Qwen3-TTS + MiniMax Music3 背景音乐）的**全自动「小说/剧本 → 视频」Agent 工作流**。项目目前整理了35个Skill技能，其中包含MiniMax-H3提示词优化，分镜剧本生成，小说转剧本、场景站位一致性等。
 
 只要把一部小说/剧本粘贴进项目，点一下「开始」，Agent 会全自动完成：
 
@@ -82,6 +92,7 @@ CPU：12th Gen Intel(R) Core(TM) i5-12400F
 - **分阶段运行**：生成拆成 文本创作 / 资产生图 / 音色设计 / 分镜视频 四个独立阶段，可任意勾选单独跑或续跑 —— 按显存约束自动拆批，不需要的阶段不拉起对应进程。
 - **显存维护**：设置页可配「每 N 个生成后自动释放 ComfyUI 显存」（默认 3，0 = 关闭），覆盖文生图/图生图/换装/音色/视频全部渲染——AMD Dynamic VRAM 的显存累积不只在视频触发；未启用 Dynamic VRAM 时界面会提示关闭。
 - **在线预览**：成片/分镜视频经后端 Range 流式传输，进度条可随意拖动、即时跳转。
+- **外部 Agent 运行时**：除内置 openclaude 外，可在设置页切换到本机已安装的 CLI Agent（Claude Code / Codex CLI / Gemini CLI / Qwen Code / Cursor Agent / Qoder CLI / Grok Build / Hermes / 自定义命令），通过本地 MCP stdio 服务把领域工具暴露给外部 Agent、由其完整接管流水线；模型账号与登录态走各自 CLI。
 
 # 截图演示
 
@@ -105,7 +116,7 @@ CPU：12th Gen Intel(R) Core(TM) i5-12400F
 ## 技术栈
 
 - 后端：Node.js（Next.js 自定义 server）+ node:sqlite + ComfyUI REST/WebSocket + ffmpeg，零原生编译依赖。
-- Agent：自研 ReAct 循环（原生 function-calling，JSON 动作块兜底），工具注册表 + 技能引擎 + 技能工厂。
+- Agent：内置 openclaude 内核（进程内 SDK）+ 可选外部 Agent 运行时（本机 CLI 经 MCP 工具桥），工具注册表 + 技能引擎 + 技能工厂。
 - 前端：Next.js 15 + React 18（App Router）。
 - 结构：单包 —— `app/`（页面 + 30+ 个 API 端点）· `lib/`（core/agent/shared 复用逻辑）· `server.js`（自定义 server：WebSocket 进度推送 + `/files` 静态托管，支持 Range 流式播放视频）。
 
@@ -114,14 +125,15 @@ CPU：12th Gen Intel(R) Core(TM) i5-12400F
 ```
 infinite-creation/
 ├── app/                 # Next.js App Router（页面 + API 端点）
-├── lib/                 # 复用逻辑：core（ComfyUI/LLM/DB/ffmpeg）· agent（运行时+技能）· shared（常量）
+├── lib/                 # 复用逻辑：core（ComfyUI/LLM/DB/ffmpeg）· agent（内置 openclaude + 外部 Agent + 技能）· shared（常量）
+│   └── agent/external/  #   外部 Agent 运行时：defs/（每个 CLI 一个定义文件）· registry（注册表）· detect（检测）· mcp-config · mcp-server（MCP 服务）· runner（执行器）
 ├── server.js            # 自定义 server（WebSocket 进度推送 + /files 静态托管，Range 流式）
 ├── workflows/           # ComfyUI 工作流模板（MiniMax H3 视频 / Qwen-Image 2.1 图·文 / Krea2 / Qwen3-TTS，含 GGUF 量化版）
 ├── start-infinite-creation.bat    # Windows 一键后台启动（自动装依赖 + 等服务就绪）
 ├── stop-infinite-creation.bat     # Windows 停止服务
 ├── skills/              # 技能库（9 官方 + novel-to-video + 自定义）
 ├── scripts/install-skills.mjs   # 拉取 MiniMax-H3 官方技能
-├── tests/unit.test.mjs          # 单元测试
+├── tests/               # 单元测试：unit.test.mjs + external-agents.test.mjs（外部 Agent 定义 / 自定义命令 / MCP 握手）
 ├── vendor/openclaude/           # Agent 内核源码（dist/ 构建产物不入库，需本地构建）
 └── data/                # 运行时（gitignore）：SQLite + projects/<id>/…
 ```
@@ -197,8 +209,9 @@ pnpm run build && pnpm start
 点右上角 ⚙ 设置：
 
 1. ComfyUI 服务地址：默认 `http://127.0.0.1:8188`，点「测试连接」确认。
-2. LLM（Agent 大脑，OpenAI 兼容）：填 Base URL（需以 `/v1` 结尾）、模型、API Key。默认使用 deepseek-v4-flash-vision-exp 模型。
-3. 生成维护（可选）：设置「每 N 个生成后释放 ComfyUI 显存」（默认开启 = 3，0 = 关闭），按**所有 ComfyUI 生成任务**计数（文生图/图生图/换装/音色/视频都计入——AMD 显卡 + Dynamic VRAM 下任意连续生成都会逐步变慢）。释放后下一个生成需重新加载模型（多花约 1~3 分钟）。检测到 ComfyUI 未启用 Dynamic VRAM 时界面会提示建议关闭。
+2. Agent 运行时（可选）：默认「内置 openclaude」；也可切换为「外部 Agent（本机 CLI）」，选择本机已安装的 CLI Agent（Claude Code / Codex CLI / Gemini CLI / Qwen Code / Cursor Agent / Qoder CLI / Grok Build / Hermes / 自定义命令），由外部 Agent 通过本地 MCP 工具桥接管流水线。
+3. LLM（Agent 大脑，OpenAI 兼容）：填 Base URL（需以 `/v1` 结尾）、模型、API Key。默认使用 deepseek-v4-flash-vision-exp 模型（内置 openclaude 使用此配置；外部 Agent 使用其自身模型与登录态）。
+4. 生成维护（可选）：设置「每 N 个生成后释放 ComfyUI 显存」（默认开启 = 3，0 = 关闭），按**所有 ComfyUI 生成任务**计数（文生图/图生图/换装/音色/视频都计入——AMD 显卡 + Dynamic VRAM 下任意连续生成都会逐步变慢）。释放后下一个生成需重新加载模型（多花约 1~3 分钟）。检测到 ComfyUI 未启用 Dynamic VRAM 时界面会提示建议关闭。
 
 配置保存在根目录 config.json（不入库）。生成参数（超时分钟、并发、释放频率）可直接编辑 config.json 的 `generation` 节。
 
@@ -419,8 +432,9 @@ pnpm test   # node --test tests/unit.test.mjs
 本项目由个人开发者独立完成，欢迎各位同行多提提意见，多找找bug帮忙多多宣传，做出更好的产品让更多的人发现。项目刚开源里面可能会有很多地方需要调整优化的地方，欢迎各位提交issues或者在我的基础上做更多的优化，感谢每一位对这个项目做出贡献的人。
 
 ## 致谢
+- 感谢开发者[taoxiangyoushu](https://github.com/taoxiangyoushu)为此项目做出的贡献，接入了图生视频+首尾帧的工作流模式并修复了部分bug
 - 感谢开发者 [happymy](https://github.com/happymy) 为此项目提供了AMD+GGUF适配的解决方案以及解决项目中存在的部分bug
-- 感谢以下开发者为项目做出的贡献：[ghshhf](https://github.com/ghshhf)、[binonxia](https://github.com/binonxia)
+- 感谢以下开发者为项目做出的贡献：[ghshhf](https://github.com/ghshhf)、[binonxia](https://github.com/binonxia)、[anupamme](https://github.com/anupamme)
 
 ## Star 历史
 

@@ -19,7 +19,6 @@ function parseView() {
     const id = p.get('id');
     if (id) return { type: 'project', id, tab: p.get('tab') || 'chapters' };
   }
-  if (type === 'settings') return { type: 'settings' };
   return { type: 'list' };
 }
 function urlFor(view) {
@@ -28,12 +27,12 @@ function urlFor(view) {
     if (view.tab) u += '&tab=' + encodeURIComponent(view.tab);
     return u;
   }
-  if (view.type === 'settings') return '/?view=settings';
   return '/';
 }
 
 export default function App() {
   const [view, setView] = useState({ type: 'list' });
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // 挂载后按 URL 恢复视图；浏览器前进/后退时同步
   useEffect(() => {
@@ -68,12 +67,12 @@ export default function App() {
           </h1>
           <div className="row">
             <ThemeToggle />
-            <Button onPress={() => go({ type: 'settings' })}>⚙ 设置</Button>
+            <Button onPress={() => setSettingsOpen(true)}>⚙ 设置</Button>
           </div>
         </div>
         {view.type === 'list' && <ProjectsPage onOpen={(id) => go({ type: 'project', id, tab: 'chapters' })} />}
         {view.type === 'project' && <ProjectView id={view.id} initialTab={view.tab} onBack={() => go({ type: 'list' })} onTabChange={setTab} />}
-        {view.type === 'settings' && <SettingsPage onBack={() => go({ type: 'list' })} />}
+        {settingsOpen && <SettingsPage onBack={() => setSettingsOpen(false)} />}
         <BackToTop />
       </div>
     </ToastProvider>

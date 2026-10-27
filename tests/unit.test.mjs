@@ -13,8 +13,9 @@ import {
   freeComfy, checkComfyUI, generate, queuePrompt, getHistory, interrupt, deleteQueued, downloadOutput, getObjectInfo, resolveHardwareConfig, HW_PRESETS, loadConfig,
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
+  runRenderSlot, renderConcurrencyLimit,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
@@ -31,6 +32,26 @@ const WF = path.join(__dirname, '..', 'workflows');
 const BT = String.fromCharCode(96); // 反引号
 
 function load(name) { return JSON.parse(fs.readFileSync(path.join(WF, name), 'utf8')); }
+
+// Qwen-Image 2.1 的提示词改写三开关（thinking_mode / refine_prompt / use_default_template）在提示词
+// 已经写得很详细时是负面的：改写器会重写并损失细节。四个规格默认全部关闭，上游模板更新后靠这条守住。
+test('Qwen-Image 2.1 工作流默认关闭提示词改写三开关', () => {
+  const files = [
+    'qwen_image_2_1_t2i-Q8_0_gguf.json',
+    'qwen_image_2_1_image_edit-Q8_0_gguf.json',
+    'image_qwen_image_2_1_t2i_api.json',
+    'image_qwen_image_2_1_image_edit_api.json',
+  ];
+  for (const f of files) {
+    const wf = load(f);
+    for (const [id, n] of Object.entries(wf)) {
+      const i = n.inputs || {};
+      if ('thinking' in i) assert.equal(i.thinking, false, f + ' ' + id + '.thinking');
+      if ('use_default_template' in i) assert.equal(i.use_default_template, false, f + ' ' + id + '.use_default_template');
+      if (n.class_type === 'ComfySwitchNode') assert.equal(i.switch, false, f + ' ' + id + '.switch');
+    }
+  }
+});
 
 test('analyzeWorkflow: t2i 角色映射（Krea2）', () => {
   const a = analyzeWorkflow(load('krea2_hyperreal_2608.json'));
@@ -336,6 +357,15 @@ test('concurrencyLimit: runninghub 用 runninghubConcurrency，native 用 videoC
   assert.equal(concurrencyLimit({ comfyui: { provider: 'runninghub' }, generation: {} }), 1);
   assert.equal(concurrencyLimit({ comfyui: { provider: 'native' }, generation: { videoConcurrency: 2 } }), 2);
   assert.equal(concurrencyLimit({ generation: { videoConcurrency: 1 } }), 1);
+});
+
+test('renderConcurrencyLimit: 本地 ComfyUI 恒为 1，RunningHub 才按 runninghubConcurrency 并发', () => {
+  // 本地 ComfyUI 原生单执行队列：并发提交只会让每项多等，且 /interrupt 是全局的会误杀同批。
+  assert.equal(renderConcurrencyLimit({ comfyui: { provider: 'native' }, generation: { videoConcurrency: 5, runninghubConcurrency: 3 } }), 1);
+  assert.equal(renderConcurrencyLimit({ comfyui: { provider: 'native' }, generation: { videoConcurrency: 1 } }), 1);
+  // RunningHub 按 taskId 隔离，允许并发
+  assert.equal(renderConcurrencyLimit({ comfyui: { provider: 'runninghub' }, generation: { runninghubConcurrency: 3 } }), 3);
+  assert.equal(renderConcurrencyLimit({ comfyui: { provider: 'runninghub' }, generation: {} }), 1);
 });
 
 test('toOutputItem: fileType → kind 映射，filename 取 fileUrl 末段', () => {
@@ -917,7 +947,8 @@ test('filterReferenceImages: 无目标全量 / 指定章过滤', () => {
 
 console.log('全部单元测试通过');
 
-// ================= 阶段调度（分阶段运行） =================
+// ================= 阶段调度（分阶段运行） ==========});
+
 
 test('阶段表：4 项且 each带 need/ck', () => {
   assert.equal(STAGES.length, 4);
@@ -1272,6 +1303,25 @@ test('runExclusiveVideo: 排队等待中被停止→主动拒绝；排队超时�
   await Promise.all(holders.map((h) => h.catch(() => {})));
 });
 
+test('runExclusiveVideo: 排队超时按「最后一次进度」刷新——健康的长批次不被误杀', async () => {
+  // 固定计时会把「前面的任务在正常推进、只是整体耗时长」的队尾项误判为前置卡死。
+  // 用任务闸门（恒为 1 个槽位）构造：A 占 30ms，B 占 30ms，C 立即。
+  // queueTimeoutMs=50ms：不刷新时 C 在 t=50ms（B 还在跑）就被拒；刷新后 C 能等到 B 完成。
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let release;
+  const blocked = new Promise((r) => { release = r; });
+  const a = runExclusiveVideo(() => blocked);
+  await sleep(0);
+  const b = runExclusiveVideo(async () => { await sleep(30); return 'b'; }, () => false, { queueTimeoutMs: 50 });
+  await sleep(0);
+  const c = runExclusiveVideo(async () => 'c', () => false, { queueTimeoutMs: 50 });
+  await sleep(30);
+  release();
+  assert.equal(await c, 'c', '前面在正常推进时，队尾不得被排队超时误杀');
+  assert.equal(await b, 'b');
+  await a;
+});
+
 test('runExclusiveVideo: 不看服务状态——没有任务在跑时立即执行，且不做任何服务探测', async () => {
   const orig = global.fetch;
   let probes = 0;
@@ -1291,21 +1341,24 @@ test('holdsRenderSlot: 只有真正占着渲染槽位的任务为真（行内任
   assert.equal(holdsRenderSlot(''), false);
   assert.equal(holdsRenderSlot(undefined), false, 'jobId 缺失不应抛错');
   assert.equal(holdsRenderSlot('never-ran'), false, '没跑过的任务不占槽位');
-  assert.ok(globalThis.__infiniteCreationVideoGate.holders instanceof Set, '持有者集合也要挂 globalThis（Next dev 每个 route 一份模块）');
+  // 槽位状态分两级：任务闸门（串行）+ 渲染项闸门（并发）。持有者计数挂在渲染闸门上，
+  // 因为「占着渲染槽位」才意味着正在向 ComfyUI/RunningHub 提交，取消时值得打断。
+  assert.ok(globalThis.__infiniteCreationRenderGate.holderCounts instanceof Map, '渲染闸门的持有者计数也要挂 globalThis（Next dev 每个 route 一份模块）');
+  assert.ok(globalThis.__infiniteCreationVideoGate, '任务闸门同样挂 globalThis');
 
-  // 占满全部槽位（本地默认 1）：持有者算占用，后面的任务只能排队——排队 ≠ 占用
-  const limit = concurrencyLimit(loadConfig());
+  // 占满全部渲染槽位（本地恒为 1）：持有者算占用，后面的项只能排队——排队 ≠ 占用
+  const limit = renderConcurrencyLimit(loadConfig());
   const releases = [];
   const blockers = [];
   for (let i = 0; i < limit; i++) {
     const blocked = new Promise((r) => { releases.push(r); });
-    blockers.push(runExclusiveVideo(() => blocked, () => false, { jobId: 'r-block-' + i }));
+    blockers.push(runRenderSlot(() => blocked, { jobId: 'r-block-' + i }));
   }
   await new Promise((r) => setTimeout(r, 0));
-  assert.equal(holdsRenderSlot('r-block-0'), true, '拿到槽位即视为占用（取消它才该打断 ComfyUI）');
+  assert.equal(holdsRenderSlot('r-block-0'), true, '拿到渲染槽位即视为占用（取消它才该打断 ComfyUI）');
 
   let ran = false;
-  const queued = runExclusiveVideo(async () => { ran = true; }, () => false, { jobId: 'r-wait' });
+  const queued = runRenderSlot(async () => { ran = true; }, { jobId: 'r-wait' });
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(holdsRenderSlot('r-wait'), false, '排队中还没拿到槽位，不得当成占用（否则取消排队任务会误打断前排）');
   assert.equal(ran, false, '槽位被占满时不得开跑');
@@ -1315,6 +1368,17 @@ test('holdsRenderSlot: 只有真正占着渲染槽位的任务为真（行内任
   assert.equal(ran, true);
   assert.equal(holdsRenderSlot('r-block-0'), false, '释放槽位后必须为假');
   assert.equal(holdsRenderSlot('r-wait'), false, '跑完也必须为假');
+});
+
+test('任务闸门与渲染闸门相互独立：占着任务槽位不算在渲染（取消不会误打断）', async () => {
+  // 两级闸门必须分开：若共用一个信号量，任务持槽后子项再去获取，limit=1 时必然死锁。
+  let release;
+  const blocked = new Promise((r) => { release = r; });
+  const jobTask = runExclusiveVideo(() => blocked, () => false, { jobId: 'job-only' });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(holdsRenderSlot('job-only'), false, '任务闸门持有者不应被当成「正在渲染」');
+  release();
+  await jobTask;
 });
 
 test('取消/删除任务：只有占着渲染槽位的任务才打断 ComfyUI（行内任务不再误杀别人的渲染）', () => {
@@ -1618,4 +1682,96 @@ test('数据库配置：DATABASE_URL 自动选 PostgreSQL，IC_DB 显式覆盖',
       else process.env[k] = old[k];
     }
   }
+});
+// —— 小说拆分章节（创建项目时自动拆分长篇小说） ——
+
+test('splitNovelIntoChapters：空文本返回空数组', () => {
+  assert.deepEqual(splitNovelIntoChapters(''), []);
+  assert.deepEqual(splitNovelIntoChapters('   \n  '), []);
+});
+
+test('splitNovelIntoChapters：短文本保持单章', () => {
+  const out = splitNovelIntoChapters('一句话描述故事');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].title, '第1章');
+  assert.equal(out[0].novel, '一句话描述故事');
+});
+
+test('splitNovelIntoChapters：识别中文章节标题并切分', () => {
+  const novel = '第一章 初入江湖\n正文A\n第二章 风起\n正文B\n第三章\n正文C';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 3);
+  assert.equal(out[0].title, '第一章');
+  assert.equal(out[0].novel, '正文A');
+  assert.equal(out[1].title, '第二章');
+  assert.equal(out[1].novel, '正文B');
+  assert.equal(out[2].title, '第三章');
+  assert.equal(out[2].novel, '正文C');
+});
+
+test('splitNovelIntoChapters：识别阿拉伯数字与英文标题', () => {
+  const novel = '第1章 开始\n内容一\nChapter 2\ncontent two';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].title, '第1章');
+  assert.equal(out[0].novel, '内容一');
+  assert.equal(out[1].title, 'Chapter 2');
+  assert.equal(out[1].novel, 'content two');
+});
+
+test('splitNovelIntoChapters：前言并入第一段', () => {
+  const novel = '前言文字\n第一章 开场\n正文A\n第二章\n正文B';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].title, '第一章');
+  assert.equal(out[0].novel, '前言文字\n\n正文A');
+  assert.equal(out[1].title, '第二章');
+  assert.equal(out[1].novel, '正文B');
+});
+
+test('splitNovelIntoChapters：重复标题追加后缀去重', () => {
+  const novel = '第一章\na\n第一章\nb';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].title, '第一章');
+  assert.equal(out[1].title, '第一章·(2)');
+});
+
+test('splitNovelIntoChapters：无标题且超长按字数均分', () => {
+  const chunk = '字'.repeat(100);
+  const novel = chunk.repeat(3); // 300 字，设 fallbackChars=100 → 3 章
+  const out = splitNovelIntoChapters(novel, { fallbackChars: 100 });
+  assert.equal(out.length, 3);
+  assert.deepEqual(out.map((c) => c.title), ['第1章', '第2章', '第3章']);
+  assert.equal(out[0].novel.length, 100);
+  assert.equal(out[2].novel.length, 100);
+});
+
+test('splitNovelIntoChapters：字数兜底按段落（换行符）切分，不切断句子', () => {
+  const para = '完整段落内容不会被切断。';
+  const lines = Array.from({ length: 10 }, () => para); // 10 段
+  const novel = lines.join('\n');
+  const out = splitNovelIntoChapters(novel, { fallbackChars: 30 });
+  assert.ok(out.length > 1, '超长文本应拆成多章');
+  for (const c of out) {
+    assert.ok(c.novel.split('\n').every((p) => p === para), '每章内容必须由完整段落组成，切分点只能在换行符处');
+  }
+  const totalParas = out.reduce((s, c) => s + c.novel.split('\n').length, 0);
+  assert.equal(totalParas, lines.length, '拆分后段落总数不能丢失');
+});
+
+test('filterReferenceImages：shared 参考图在所有章节生效', () => {
+  const list = [
+    { id: 'r1', chapter_id: 'c1', shared: 0 },
+    { id: 'r2', chapter_id: 'c1', shared: 1 },
+    { id: 'r3', chapter_id: 'c2', shared: 0 },
+  ];
+  // 指定 c2：保留 c2 自己的 + 所有 shared
+  const c2 = filterReferenceImages(list, new Set(['c2'])).map((r) => r.id);
+  assert.deepEqual(c2, ['r2', 'r3']);
+  // 指定 c1：保留 c1 自己的 + shared
+  const c1 = filterReferenceImages(list, new Set(['c1'])).map((r) => r.id);
+  assert.deepEqual(c1, ['r1', 'r2']);
+  // 全量：全部返回
+  assert.equal(filterReferenceImages(list, null).length, 3);
 });

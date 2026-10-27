@@ -42,6 +42,8 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
   const [savedRefs, setSavedRefs] = useState([]);
   // 操作弹窗
   const [operating, setOperating] = useState(null);
+  // 播放成片弹窗：{ title, url }
+  const [playing, setPlaying] = useState(null);
   // 正在提交生成的章节标题：提交到「任务真正开始（runningChapter 更新）」之间的加载态
   const [submitting, setSubmitting] = useState(null);
   // 正在停止的加载态：点击「停止」到「任务真正停下（running 消失）」之间的转圈
@@ -159,10 +161,12 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
     return done;
   }
   async function delRef(rid) {
+    setEditDirty(true);
     try { await api.del('/api/projects/' + projectId + '/references/' + rid); loadRefs(); } catch (e) { alert(e.message); }
   }
   async function updateRef(rid, patch) {
-    // 乐观更新，失败回滚重载
+    // 乐观更新，失败回滚重载；编辑参考素材也算「有改动」，让「保存本章」按钮可点（确认后关闭弹窗）
+    setEditDirty(true);
     setSavedRefs((prev) => prev.map((r) => (r.id === rid ? { ...r, ...patch } : r)));
     try {
       await api.patch('/api/projects/' + projectId + '/references/' + rid, patch);
@@ -217,7 +221,22 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
                   <CardBody className="gap-3 p-4">
                     <div className="relative">
                       {c.poster
-                        ? <img src={fileUrl(projectId, c.poster)} alt={c.title} style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 10 }} />
+                        ? (
+                          <>
+                            <img
+                              src={fileUrl(projectId, c.poster)}
+                              alt={c.title}
+                              style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 10, cursor: (c.genStatus === 'done' && c.video) ? 'pointer' : 'default' }}
+                              onClick={() => { if (c.genStatus === 'done' && c.video) setPlaying({ title: c.title, url: c.video }); }}
+                            />
+                            {/* 完成且有成片时：居中播放角标提示可点击预览图播放最新成片 */}
+                            {c.genStatus === 'done' && c.video && (
+                              <div className="absolute inset-0 flex items-center justify-center" style={{ pointerEvents: 'none' }}>
+                                <span className="flex items-center justify-center" style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 16 }}>▶</span>
+                              </div>
+                            )}
+                          </>
+                        )
                         : <div className="muted bg-default-100" style={{ width: '100%', aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10 }}>暂无预览</div>}
                       {/* 右上角关闭图标（删除） */}
                       <Button
@@ -310,6 +329,20 @@ export default function ChaptersView({ projectId, chapters, onRefresh, running, 
               <ModalHeader className="pb-2"><h2 className="m-0 text-lg font-semibold">生成操作{operating ? ' · ' + operating.title : ''}</h2></ModalHeader>
               <ModalBody>
                 {operating && <ChapterOps projectId={projectId} chapter={operating} running={running} runningChapter={runningChapter} onRun={onRun} onStop={onStop} onRefresh={onRefresh} onGoLogs={onGoLogs} />}
+              </ModalBody>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      {/* 播放成片弹窗 */}
+      <Modal isOpen={!!playing} size="3xl" backdrop="blur" onClose={() => setPlaying(null)}>
+        <ModalContent>
+          {() => (
+            <>
+              <ModalHeader className="pb-2"><h2 className="m-0 text-lg font-semibold">播放成片{playing ? ' · ' + playing.title : ''}</h2></ModalHeader>
+              <ModalBody>
+                {playing && <video className="video" controls autoPlay src={playing.url} style={{ width: '100%', maxHeight: '70vh', borderRadius: 8 }} />}
               </ModalBody>
             </>
           )}

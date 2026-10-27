@@ -49,6 +49,35 @@ Web「生成」按钮
 - **排队只按「任务」**：所有会碰 ComfyUI / LLM 的任务共用一条队列（`runExclusiveVideo`），只在「确实有别的任务在占用槽位」时串行等待；没有任务时新任务立即执行。排队等待有上限（`generation.videoQueueTimeoutMinutes`，默认 120 分钟），前置任务卡死时排队任务不会无限等；排队中可点停止立即出队。
 - **就绪检查只快速失败、不等待**：preflight 勾了哪一侧就探哪一侧（LLM `/models`、ComfyUI `/system_stats`，各 4–5s 超时），服务没起立刻报错退出，不让用户等到 LLM 写完几千字才发现 ComfyUI 没启动。
 
+## 外部 Agent 运行时（可选，MCP 工具桥）
+
+设置页「Agent 运行时」可把执行器从内置 openclaude 切换为本机已安装的 CLI Agent：
+Claude Code、Codex CLI、Gemini CLI、Qwen Code、Cursor Agent、Qoder CLI、Grok Build、Hermes、OpenCode，以及自定义命令。
+配置写入 `config.json` 的 `agent.runtime`，默认仍是 `openclaude`。
+
+```
+设置页 → config.agent.runtime
+  → lib/agent/agent-runtime.js::runAgent()
+      ├─ openclaude → runOpenClaudeAgent()（现有进程内 SDK，行为不变）
+      └─ 外部 Agent → lib/agent/external/runner.js::runExternalAgent()
+            ├─ 生成工作区 data/agent-workspaces/<jobId>/
+            │    ├─ claude-mcp.json / .gemini / .qwen / .cursor / .qoder / .grok
+            │    ├─ opencode.json（V2 的 mcp.servers，policies 只放行 ic）
+            │    └─ Hermes 的 hermes-home/config.yaml（复制用户配置后合并，不改原文件）
+            ├─ spawn CLI（cwd=工作区，注入 IC_MCP_* 环境变量）
+            └─ CLI 连接 lib/agent/external/mcp-server.mjs
+                  → tools/list = TOOL_DEFINITIONS（全部领域工具，当前 34 个）
+                  → tools/call → runTool() → ComfyUI / SQLite / ffmpeg
+```
+
+- **工具桥**：`mcp-server.mjs` 是零新依赖的 newline-delimited JSON-RPC stdio 服务；只暴露 `TOOL_DEFINITIONS`，所有调用仍经过 `guardToolCall` 与参数白名单。stdout 只输出协议帧，`console.*` 全部重定向到 stderr。
+- **进度**：MCP 服务把 `tool_start` / `tool_end` / `phase` 写入 `logs/<jobId>.progress.jsonl`，runner 轮询后转成现有 `onProgress`，Web 界面与内置 Agent 口径一致。
+- **停止**：runner 检测到 `abortFlags` 后写 `logs/<jobId>.abort`，MCP 服务的 `isAborted` 立即生效；同时杀 CLI 进程树（POSIX 杀进程组，Windows `taskkill /T`）。
+- **失败判定**：外部 Agent 退出码非 0、停滞超时、或一次领域工具都没调用（MCP 未接通）都会让任务失败，不会把「只聊了几句」记成完成。
+- **环境隔离**：外部 Agent 使用自己的模型/登录态；runner 会清掉内置 openclaude 注入的 `CLAUDE_CODE_USE_OPENAI` / `OPENCLAUDE_*` 及同值的 `OPENAI_BASE_URL` / `OPENAI_MODEL`。
+- **SQLite**：外部 MCP 服务与主进程同时写库，`getDb()` 已加 `PRAGMA busy_timeout = 10000`。
+- 检查本机安装：`GET /api/agents`；可用性探测：`POST /api/agents/test`。
+
 ## 用户改过的值必须真的生效（不被 LLM / 复用逻辑吞掉）
 
 素材库里的「提示词」是用户指令，必须优先于 LLM 与任何「已存在就复用」的捷径：
@@ -77,6 +106,10 @@ Web「生成」按钮
 
 - `vendor/openclaude/` —— openclaude 完整源码（3450 文件）+ 构建产物 dist/（构建物不入库）
 - `lib/agent/openclaude-agent.js` —— 对接层：provider/工具/persona/禁用工具/流式进度
+- `lib/agent/agent-runtime.js` —— 运行时选择：内置 openclaude / 外部 Agent
+- `lib/agent/external/registry.js` —— 外部 Agent 注册表（新增 Agent 时在这里登记）
+- `lib/agent/external/defs/` —— 每个 Agent 一个定义文件（claude/codex/gemini/qwen/cursor-agent/qoder/grok/hermes/opencode + shared 共享常量 + custom 自定义命令）
+- `lib/agent/external/` —— 检测（detect）、工作区与 MCP 配置（mcp-config）、stdio 服务（mcp-server.mjs）、执行器（runner）
 - `lib/agent/job-runner.js` —— startCreateJob 驱动 openclaude agent；runExclusiveVideo 视频任务串行闸门；startStageJob 分阶段任务入口
 - `lib/agent/stages.js` —— 分阶段调度（阶段定义 / pendingByStage 待办 / preflight 预检 / 串行执行）
 - `lib/agent/tools.js` —— 21 个领域工具定义 + runTool 分派（复用），含视频任务每 N 个自动 /free 释放显存

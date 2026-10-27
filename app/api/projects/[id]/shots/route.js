@@ -1,12 +1,13 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Shots, Chapters, Projects, pickShotFields, idxTakenBy, validateShotContent, withWriteContext } from '@/lib/core/index.js';
+import { Shots, ShotVideos, Chapters, Projects, pickShotFields, idxTakenBy, validateShotContent, withWriteContext } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(_req, { params }) {
   const { id } = await params;
-  return NextResponse.json(Shots.list(id));
+  // 附带每个分镜的多候选视频列表（单选裁剪候选），前端据此渲染候选选择器
+  return NextResponse.json(Shots.list(id).map((s) => ({ ...s, videos: ShotVideos.listByShot(s.id) })));
 }
 
 // 创建分镜（外部写入 API / 人工补镜）。只接受内容字段，见 lib/core/shot-write.js。

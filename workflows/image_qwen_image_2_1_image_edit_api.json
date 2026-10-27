@@ -224,7 +224,7 @@
   },
   "459:484": {
     "inputs": {
-      "switch": true,
+      "switch": false,
       "on_false": "Replace costumes for the character",
       "on_true": [
         "459:500",
@@ -261,7 +261,7 @@
       "sampling_mode.seed": 533477005345840,
       "sampling_mode.presence_penalty": 0,
       "thinking": false,
-      "use_default_template": true,
+      "use_default_template": false,
       "mtp": "auto",
       "clip": [
         "459:477",

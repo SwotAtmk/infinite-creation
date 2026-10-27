@@ -66,6 +66,7 @@ export async function POST(req, { params }) {
   const chapter_id = String(fd.get('chapter_id') || '');
   const name = String(fd.get('name') || '');
   const description = String(fd.get('description') || '');
+  const shared = (fd.get('shared') === '1' || fd.get('shared') === 'true') ? 1 : 0;
   if (!file || typeof file.arrayBuffer !== 'function') return NextResponse.json({ error: '缺少文件' }, { status: 400 });
   // chapter_id 来自表单，必须属于本项目：挂到别的项目的章节（或拼错/空串）会让这条参考图
   // 在章节视图与生成上下文里都筛不到——不报错、也不参与任何生成，成了看不见的脏数据。
@@ -130,6 +131,7 @@ export async function POST(req, { params }) {
       mode,
       category: assetCategory,
       description: finalDescription,
+      shared,
     });
     return { asset, reference };
   });

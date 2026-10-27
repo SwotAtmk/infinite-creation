@@ -30,7 +30,7 @@
 ## Roadmap
 - [Ongoing] Addressing BUGs in the project
 - [Planned] Internet search skill support, e.g. asset generation can search for reference images (such as specific Huawei phone or Apple MacBook models) and use them as references to generate new assets
-- [✅] Agent automatically selects text-to-video, image-to-video, first/last-frame, or digital-human mode based on the actual use case (digital-human mode is currently reservation-only, not yet wired end-to-end)
+- [in progress……] Support the generation of multiple videos from a single storyboard configuration, based on a card-drawing and selection optimization model derived from the storyboard
 - [Planned] Adaptation for home-grade GPUs with low VRAM — the blogger's testing equipment is limited. More users are needed to help with testing and provide feedback to the repository's Issues. Please contribute your insights! 🙏
 - [Planned] Address and optimize issues such as tool invocation security and context compression in internal agents
 - [Planned] Plugin system development, supporting plugin upload, plugin invocation, plugin framework
@@ -40,6 +40,7 @@
 - [Planned] Package and build Docker deployment, desktop app
 - [Planned] Integrate video super-resolution into the workflow to enhance the clarity of generated videos
 - [Planned] Integrate Seedance, Kling, Wan, and the online MiniMax-H3 API for one-click video generation
+- [✅] Agent automatically selects text-to-video, image-to-video, first/last-frame, or digital-human mode based on the actual use case (digital-human mode is currently reservation-only, not yet wired end-to-end)
 - [✅] Support uploading txt text files, automatically parsing and creating multiple chapters and sharing reference assets
 - [✅] New "Scene Blocking Consistency" Skill: builds a character/prop staging map per scene (spatial anchors + character positions + 180-degree axis) to eliminate left-right drift and axis-crossing issues across shots
 - [✅] External Agent runtime: support local CLI agents (Claude Code, Codex CLI, Gemini CLI, Qwen Code, Cursor Agent, Qoder CLI, Grok Build, Hermes, custom command) to take over the "novel→video" pipeline via a local MCP tool bridge, while keeping the built-in openclaude as the default runtime

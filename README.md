@@ -182,6 +182,14 @@ pnpm run build && pnpm start
 
 > Windows 用户也可直接双击根目录 `start-infinite-creation.bat` 一键后台启动（自动检测端口/安装依赖/等待就绪，并提示 ComfyUI 状态），停止用 `stop-infinite-creation.bat`。
 
+> **独立 Studio 界面（可选）**：仓库内含一套独立启动的新界面 `studio/`（Vite + React，端口 4710），与经典界面共用同一后端与数据，支持 iframe 嵌入和对外托管模式。
+> ```bash
+> start-studio.bat          # 启动后端 + Studio，打开 http://127.0.0.1:4710
+> start-studio.bat public   # 对外托管：密钥不下发、配置接口只读
+> stop-studio.bat           # 只停止 Studio，后端保持运行
+> ```
+> 嵌入方式、postMessage 协议、RunningHub 配置与会话透传见 [studio/README.md](studio/README.md)。
+
 > Agent 内核 `vendor/openclaude/dist/` 是构建产物、不入库，`pnpm install` 会自动构建一次（幂等，已存在则跳过）。只有当你改动了 `vendor/openclaude/src/` 源码后，才需要手动重跑 `pnpm build:agent`。构建细节见 [docs/agent-architecture.md](docs/agent-architecture.md)。
 
 ## 首次配置
@@ -193,6 +201,74 @@ pnpm run build && pnpm start
 3. 生成维护（可选）：设置「每 N 个生成后释放 ComfyUI 显存」（默认开启 = 3，0 = 关闭），按**所有 ComfyUI 生成任务**计数（文生图/图生图/换装/音色/视频都计入——AMD 显卡 + Dynamic VRAM 下任意连续生成都会逐步变慢）。释放后下一个生成需重新加载模型（多花约 1~3 分钟）。检测到 ComfyUI 未启用 Dynamic VRAM 时界面会提示建议关闭。
 
 配置保存在根目录 config.json（不入库）。生成参数（超时分钟、并发、释放频率）可直接编辑 config.json 的 `generation` 节。
+
+### 数据库：SQLite / PostgreSQL
+
+默认用 SQLite（`data/ic.db`），零安装、直接启动。正式部署可以换成 PostgreSQL，**两套库共用同一份表结构**，业务代码不需要改。
+
+环境变量优先（推荐）：
+
+```bash
+# 快速启动（默认）
+IC_DB=sqlite IC_DB_SQLITE_PATH=/data/ic.db
+
+# 正式部署
+IC_DB=postgres DATABASE_URL=postgres://user:pass@127.0.0.1:5432/infinite_creation
+
+# 媒体文件固定目录（Docker 挂载）
+IC_MEDIA_DIR=/data/projects
+# 配置文件也放挂载卷（否则会写进镜像层）
+IC_CONFIG=/data/config.json
+```
+
+也可以写在 `config.json` 的 `db` 节（参见 `config.example.json`），但环境变量优先。`DATABASE_URL` 存在且没有显式 `IC_DB` 时会自动选 PostgreSQL。
+
+**迁移 / 同步数据**（表结构复用同一份 `initSchema`，不会出现两套 schema 漂移）：
+
+```bash
+# SQLite → PostgreSQL
+node scripts/db-migrate.mjs --from sqlite --to postgres \
+  --to-url postgres://user:pass@127.0.0.1:5432/infinite_creation
+
+# PostgreSQL → SQLite
+node scripts/db-migrate.mjs --from postgres --to sqlite \
+  --from-url postgres://user:pass@127.0.0.1:5432/infinite_creation \
+  --to-sqlite data/ic-pg-copy.db
+
+# 先清空目标表再写入（默认按 id upsert，可重复执行）
+node scripts/db-migrate.mjs --from sqlite --to postgres --replace
+```
+
+迁移按主键 upsert，账号/会话/项目/素材/分镜/任务/队列/用量/变更日志都会拷贝。媒体文件不在数据库里：图片和视频都在 `IC_MEDIA_DIR`（默认 `<data>/projects`）下，换库后继续用同一个目录或 Docker 挂载卷即可，不需要重新生成。
+
+> 说明：PostgreSQL 是通过 worker 线程提供同步门面的（现有业务层是同步 SQL）。这保证了零改造切换，但每次查询会阻塞当前进程事件循环；PostgreSQL 建议和本服务在同一台机器 / Docker 内网，不要接高延迟远程库。后续如果接远程库，可以再把 repository 改成 async。
+>
+> Docker 打包时注意保留 `lib/core/pg-worker.mjs` 和 `node_modules/pg`：PostgreSQL 驱动在 worker 线程里按文件路径加载，不会被 Next 的静态追踪自动收进去。媒体、SQLite 库、配置文件分别用 `IC_MEDIA_DIR`、`IC_DB_SQLITE_PATH`、`IC_CONFIG` 指到挂载卷即可。
+
+### 本地积分与计费
+
+平台自带一套本地积分钱包，不依赖父平台也能独立扣费；父平台只通过 `billing.reportUrl` 接收用量回传。
+
+- 在 **管理后台 → 计费 → 本地积分钱包** 给账号充值，然后打开「启用本地积分预扣」。
+- 默认关闭：不开启时保持原来的父平台余额校验 + 后付费行为。
+- 开启后每个计费步骤（LLM、资产图、音色、分镜视频、音乐、导出）在提交前**预授权**：
+  - 余额立即扣除；成功 → 转为用量；失败/取消 → 原路退回；
+  - 同一补偿步骤幂等，重试/重复点击不会重复扣；
+  - 余额不足的那一步不会提交，任务停止并保留已完成产物；充值后再次运行会跳过已完成项继续。
+- 动作按钮显示预计费用；流程页显示「本次预计 / 本项目已消耗 / 可用余额」。
+- 预授权在进程异常重启时自动退回；调度器每分钟清理过期预授权。
+- 用户余额/今日/本月用量通过 `GET /api/billing/me` 查询，顶部栏会显示余额。
+
+价目表与货币单位在同一个「计费」页配置；单价的含义：
+`llmPerChapter`（每章 LLM）、`llmRewritePerCall`（每次改写）、`imagePerAsset`（每张图）、`ttsPerVoice`（每个音色）、`videoPerSecond`（每秒视频）、`musicPerTrack`（每首音乐）、`exportPerChapter`（每章导出）。
+
+**RunningHub 取消/失败计费**：RunningHub 有 `POST /task/openapi/cancel`，但 OpenAPI 只返回任务状态（`QUEUED/RUNNING/SUCCESS/FAILED/CANCEL`），**不返回本次实际扣了多少点**。因此本平台提供 `billing.providerCancelPolicy`：
+
+- `charge_if_started`（默认）：排队中被取消 → 退回预授权；已经 `RUNNING`、任务失败或超时 → 仍按已消耗计费（避免本地显示“已停止”但上游已经扣点导致平台倒贴）。
+- `always_refund`：取消/失败一律退回。
+- `always_charge`：提交成功即计费。
+
+取消前会先查一次远端状态；取消失败或状态未知时按“已开始”保守计费。超时也会主动调用 RunningHub 取消接口，避免任务继续占用 GPU。若需要与 RunningHub 账单逐单核对，只能以 RunningHub 后台的任务记录/账单为准（当前 OpenAPI 没有单任务费用字段）。
 
 ### ComfyUI 所需工作流和模型
 

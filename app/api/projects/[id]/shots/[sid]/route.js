@@ -1,7 +1,7 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import { Shots, Chapters, pickShotFields, idxTakenBy, validateShotContent, withWriteContext } from '@/lib/core/index.js';
-import { activeJobOf } from '@/lib/agent/index.js';
+import { activeJobOfChapter } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,8 +38,10 @@ export async function DELETE(_req, { params }) {
   const shot = Shots.get(sid);
   if (!shot || shot.project_id !== id) return NextResponse.json({ error: '分镜不存在' }, { status: 404 });
   // 运行中的任务持有这一行：删掉后它的回写（Shots.update）只会静默落空，
-  // 于是「成片用的是旧分镜、分镜表里已经没有这条」。运行中一律拒绝。
-  if (activeJobOf(id)) return NextResponse.json({ error: '项目正在运行任务，运行中不可删除分镜；请等任务结束或先停止任务' }, { status: 409 });
+  // 于是「成片用的是旧分镜、分镜表里已经没有这条」。只挡同一章的任务。
+  if (activeJobOfChapter(id, shot.chapter)) {
+    return NextResponse.json({ error: '本章正在运行任务，运行中不可删除分镜；请等任务结束或先停止任务' }, { status: 409 });
+  }
   return withWriteContext('DELETE /api/projects/:id/shots/:sid', async () => {
     Shots.remove(sid);
     return NextResponse.json({ ok: true });

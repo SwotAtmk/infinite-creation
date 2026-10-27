@@ -1,0 +1,105 @@
+name: infinite-creation
+
+# 一个 compose 文件同时支持 PostgreSQL 和 SQLite，用 .env 里的 DB_MODE 切换。
+#
+# PostgreSQL（默认，推荐正式部署）：
+#   cp .env.docker.example .env
+#   # .env 保持 DB_MODE=postgres、COMPOSE_PROFILES=postgres，并修改 POSTGRES_PASSWORD
+#   cp config.example.json config.json
+#   docker compose up -d --build
+#   打开 http://localhost:${WEB_PORT:-4710}
+#
+# Web 入口二选一（只起一个 web 进程）：
+#   WEB_MODE=studio   Studio 页面（默认）
+#   WEB_MODE=classic  经典 Next 页面（同一个 web 进程反代）
+#
+# SQLite（单机 / 试用）：
+#   cp .env.docker.example .env
+#   # .env 改成：
+#   #   DB_MODE=sqlite
+#   #   COMPOSE_PROFILES=
+#   cp config.example.json config.json
+#   docker compose up -d --build
+#   数据库：./data/ic.db
+#
+# 两种模式共用同一份 ./data 挂载：媒体在 ./data/projects/<项目ID>/。
+
+services:
+  db:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-infinite_creation}
+      POSTGRES_USER: ${POSTGRES_USER:-ic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-please}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  app:
+    image: infinite-creation-app
+    build:
+      context: .
+      target: app
+    environment:
+      NODE_ENV: production
+      PORT: "4610"
+      HOST: "0.0.0.0"
+      NEXT_DIST_DIR: .next-studio
+      # DB_MODE=postgres / sqlite；IC_DB 优先于 DATABASE_URL
+      IC_DB: ${DB_MODE:-postgres}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-ic}:${POSTGRES_PASSWORD:-change-me-please}@db:5432/${POSTGRES_DB:-infinite_creation}}
+      IC_DATA_DIR: /data
+      IC_MEDIA_DIR: /data/projects
+      IC_CONFIG: /data/config.json
+      IC_AUTH: ${IC_AUTH:-1}
+      IC_MODERATION: ${IC_MODERATION:-1}
+      IC_MODERATION_FAIL_CLOSED: ${IC_MODERATION_FAIL_CLOSED:-1}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ./data:/data
+      - type: bind
+        source: ./config.json
+        target: /data/config.json
+      - ./logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    shm_size: "1gb"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4610/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  web:
+    image: infinite-creation-app
+    pull_policy: never
+    command: ["node", "scripts/serve-web.mjs"]
+    environment:
+      NODE_ENV: production
+      PORT: "4710"
+      WEB_MODE: ${WEB_MODE:-studio}
+      STUDIO_BACKEND: http://app:4610
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${WEB_PORT:-4710}:4710"
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Assets } from '@/lib/core/index.js';
+import { Assets, Queue } from '@/lib/core/index.js';
 import { startAgeJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
 
@@ -13,6 +13,13 @@ export async function POST(req, { params }) {
   if (!a || a.project_id !== id) return NextResponse.json({ error: '资产不存在' }, { status: 404 });
   if (a.category !== 'character') return NextResponse.json({ error: '只能对角色（人物）资产设定年龄' }, { status: 400 });
   if (!body?.age) return NextResponse.json({ error: '缺少 age（年龄/时期描述）' }, { status: 400 });
+  const active = Queue.activeByDedupe('age:' + aid);
+  if (active) {
+    return NextResponse.json(
+      { error: '该角色已有年龄变体任务在排队或执行中', code: 'ALREADY_RENDERING', jobId: active.jobId, queueId: active.id },
+      { status: 409 },
+    );
+  }
   // 提交即入全局队列，逐个执行（不再因已有任务而拒绝）
   const job = startAgeJob({ projectId: id, characterId: aid, age: body.age, prompt: body?.prompt, onProgress: (p) => broadcast(p) });
   return NextResponse.json(job);

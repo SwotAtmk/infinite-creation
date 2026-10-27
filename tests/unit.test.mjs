@@ -21,6 +21,10 @@ import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variant
 import { runExclusiveVideo, concurrencyLimit, holdsRenderSlot } from '../lib/agent/job-runner.js';
 import { guardToolCall } from '../lib/agent/guard.js';
 import { CATEGORIES } from '../app/pages/shared.js';
+import { resolveModerationEnabled, resolveModerationFailClosed, resolveTextModerationEnabled, resolveImageModerationEnabled } from '../lib/core/moderation.js';
+import { baiduEnabled } from '../lib/core/baidu-moderation.js';
+import { dbSettings } from '../lib/core/config.js';
+import { toPgSql, translateDdlForPg } from '../lib/core/db-driver.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -1510,4 +1514,108 @@ test('任务列表：运行中的行内任务（llm/export）不渲染「删除�
   const delLine = src.split('\n').find((l) => l.includes('>删除</Button>'));
   assert.ok(delLine, '找不到任务列表的删除按钮');
   assert.match(delLine, /CANCELLABLE/, '删除按钮必须排除「后端拒绝删除的运行中行内任务」');
+});
+
+// —— 内容审核开关：管理后台配置优先，未设置时跟随环境变量 ——
+// 配置读的是整个 config 对象；这两个纯函数是「后台开关是否真的生效」的唯一判定点，
+// 写反了不会报错，只会让关闭审核后仍然拦内容（或反之），所以单独钉住。
+test('文本审核开关：后台布尔值优先于 IC_MODERATION', () => {
+  assert.equal(resolveModerationEnabled({ moderation: { enabled: true } }, { IC_MODERATION: '0' }), true);
+  assert.equal(resolveModerationEnabled({ moderation: { enabled: false } }, { IC_MODERATION: '1' }), false);
+});
+
+test('文本审核开关：未设置时跟随 IC_MODERATION', () => {
+  assert.equal(resolveModerationEnabled({ moderation: { enabled: null } }, { IC_MODERATION: '1' }), true);
+  assert.equal(resolveModerationEnabled({ moderation: { enabled: null } }, {}), false);
+  assert.equal(resolveModerationEnabled({}, { IC_MODERATION: '1' }), true);
+});
+
+test('审核失败策略：后台布尔值优先于 IC_MODERATION_FAIL_CLOSED', () => {
+  assert.equal(resolveModerationFailClosed({ moderation: { failClosed: false } }, { IC_MODERATION_FAIL_CLOSED: '1' }), false);
+  assert.equal(resolveModerationFailClosed({ moderation: { failClosed: true } }, {}), true);
+  assert.equal(resolveModerationFailClosed({ moderation: { failClosed: null } }, { IC_MODERATION_FAIL_CLOSED: '1' }), true);
+  assert.equal(resolveModerationFailClosed({}, {}), false);
+});
+
+test('文本审核：总开关关闭时必然关闭，开启时跟随文本分项', () => {
+  assert.equal(resolveTextModerationEnabled({ moderation: { enabled: false, text: { enabled: true } } }, { IC_MODERATION: '1' }), false);
+  assert.equal(resolveTextModerationEnabled({ moderation: { enabled: true, text: { enabled: false } } }, {}), false);
+  assert.equal(resolveTextModerationEnabled({ moderation: { enabled: true, text: { enabled: null } } }, {}), true);
+  assert.equal(resolveTextModerationEnabled({ moderation: { enabled: null, text: { enabled: null } } }, { IC_MODERATION: '1' }), true);
+  assert.equal(resolveTextModerationEnabled({}, {}), false);
+});
+
+test('图片审核：总开关关闭时必然关闭，开启时跟随百度分项', () => {
+  assert.equal(resolveImageModerationEnabled({ moderation: { enabled: false, baidu: { enabled: true } } }, { IC_MODERATION: '1' }), false);
+  assert.equal(resolveImageModerationEnabled({ moderation: { enabled: true, baidu: { enabled: false } } }, {}), false);
+  assert.equal(resolveImageModerationEnabled({ moderation: { enabled: true, baidu: { enabled: true } } }, {}), true);
+  assert.equal(resolveImageModerationEnabled({ moderation: { enabled: null, baidu: { enabled: true } } }, { IC_MODERATION: '1' }), true);
+  assert.equal(resolveImageModerationEnabled({}, { IC_MODERATION: '1' }), false);
+});
+
+test('拆分镜 clear 保护：已生成视频的分镜不能被 Agent 清空（避免断点续跑整章重渲）', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'agent', 'tools.js'), 'utf8');
+  const start = src.indexOf('async function hSetStoryboard');
+  const end = src.indexOf(String.fromCharCode(10) + 'async function ', start + 10);
+  assert.ok(start > -1 && end > start, '找不到 hSetStoryboard');
+  const seg = src.slice(start, end);
+  assert.match(seg, /protectedShots/, 'clear 前必须检查已生成/生成中的分镜');
+  assert.match(seg, /clear 会删除这些成品视频/, '拒绝清空时要说清原因');
+});
+
+test('图片审核受总开关约束：关闭总开关后即使百度分项开着也不调用', () => {
+  const keys = { apiKey: 'k', secretKey: 's' };
+  assert.equal(baiduEnabled({ moderation: { enabled: false, baidu: { enabled: true, ...keys } } }), false);
+  assert.equal(baiduEnabled({ moderation: { enabled: true, baidu: { enabled: true, ...keys } } }), true);
+  assert.equal(baiduEnabled({ moderation: { enabled: true, baidu: { enabled: false, ...keys } } }), false);
+  assert.equal(baiduEnabled({ moderation: { enabled: true, baidu: { enabled: true, apiKey: '', secretKey: '' } } }), false);
+});
+
+// —— 双数据库：SQLite / PostgreSQL ——
+test('PostgreSQL 占位符转换：字符串与注释里的 ? 不处理', () => {
+  assert.equal(toPgSql('SELECT * FROM t WHERE a=? AND b=?'), 'SELECT * FROM t WHERE a=$1 AND b=$2');
+  assert.equal(toPgSql("SELECT '?' AS q, a FROM t WHERE b=?"), "SELECT '?' AS q, a FROM t WHERE b=$1");
+  assert.equal(toPgSql('SELECT 1 -- ?\nWHERE a=?'), 'SELECT 1 -- ?\nWHERE a=$1');
+});
+
+test('PostgreSQL DDL 类型放大：时间戳 INTEGER→BIGINT、REAL→DOUBLE PRECISION', () => {
+  const ddl = translateDdlForPg('CREATE TABLE t (id TEXT, created_at INTEGER, amount REAL)');
+  assert.match(ddl, /created_at BIGINT/);
+  assert.match(ddl, /amount DOUBLE PRECISION/);
+  assert.equal(translateDdlForPg('SELECT created_at FROM t'), 'SELECT created_at FROM t');
+});
+
+test('数据库配置：DATABASE_URL 自动选 PostgreSQL，IC_DB 显式覆盖', () => {
+  const keys = ['IC_DB', 'DATABASE_URL', 'IC_DB_SQLITE_PATH', 'PGHOST', 'PGPORT', 'PGUSER', 'PGPASSWORD', 'PGDATABASE'];
+  const old = {};
+  for (const k of keys) old[k] = process.env[k];
+  try {
+    delete process.env.IC_DB;
+    process.env.DATABASE_URL = 'postgres://u:p@db.example:6543/app';
+    let s = dbSettings();
+    assert.equal(s.provider, 'postgres');
+    assert.equal(s.postgres.url, 'postgres://u:p@db.example:6543/app');
+
+    process.env.IC_DB = 'sqlite';
+    s = dbSettings();
+    assert.equal(s.provider, 'sqlite');
+
+    process.env.IC_DB = 'postgres';
+    delete process.env.DATABASE_URL;
+    process.env.PGHOST = '127.0.0.1';
+    process.env.PGPORT = '55432';
+    process.env.PGUSER = 'ic';
+    process.env.PGDATABASE = 'ic_test';
+    s = dbSettings();
+    assert.equal(s.provider, 'postgres');
+    assert.equal(s.postgres.host, '127.0.0.1');
+    assert.equal(s.postgres.port, 55432);
+    assert.equal(s.postgres.user, 'ic');
+    assert.equal(s.postgres.database, 'ic_test');
+  } finally {
+    for (const k of keys) {
+      if (old[k] === undefined) delete process.env[k];
+      else process.env[k] = old[k];
+    }
+  }
 });

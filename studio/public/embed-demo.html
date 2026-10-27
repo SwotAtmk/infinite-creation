@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Studio iframe 嵌入示例</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #0a0b0d; color: #f3f1ea; font-family: Inter, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+      header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+      h1 { margin: 0 12px 0 0; font-size: 14px; font-weight: 600; }
+      input { width: 240px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); background: #121418; color: #f3f1ea; font-size: 12px; }
+      button { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: #b7b5ad; font-size: 12px; cursor: pointer; }
+      button:hover { background: rgba(255,255,255,.08); color: #f3f1ea; }
+      button.primary { border-color: rgba(232,177,92,.45); background: rgba(232,177,92,.14); color: #e8b15c; }
+      #stage { height: calc(100vh - 57px); }
+      #stage iframe { width: 100%; height: 100%; border: 0; background: #0a0b0d; }
+      #log { margin-left: auto; font-family: monospace; font-size: 11px; color: #7b7e86; max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Studio 嵌入示例（ICStudio SDK）</h1>
+      <input id="projectId" placeholder="项目 ID（可选，从项目页 URL 获取）" />
+      <input id="session" placeholder="会话 token（可选）" />
+      <button id="home">作品集</button>
+      <button id="project" class="primary">打开项目</button>
+      <button id="settings">设置</button>
+      <button id="applySession">应用会话</button>
+      <span id="log">等待 Studio 就绪…</span>
+    </header>
+    <div id="stage"></div>
+
+    <script src="./embed/ic-studio-embed.js"></script>
+    <script>
+      const log = document.getElementById('log');
+      const projectInput = document.getElementById('projectId');
+      const sessionInput = document.getElementById('session');
+
+      const studio = ICStudio.create({
+        target: '#stage',
+        baseUrl: './',
+        view: 'list',
+        onReady: () => { log.textContent = 'Studio 已就绪（可导航 / 切换会话）'; },
+        onView: (view) => {
+          log.textContent = '当前视图：' + view.view + (view.id ? ' · ' + String(view.id).slice(0, 8) : '') + (view.tab ? ' · ' + view.tab : '');
+        },
+      });
+
+      document.getElementById('home').onclick = () => studio.navigate('list');
+      document.getElementById('settings').onclick = () => studio.navigate('settings');
+      document.getElementById('project').onclick = () => {
+        const id = projectInput.value.trim();
+        if (!id) { log.textContent = '请先填写项目 ID'; return; }
+        studio.navigate('project', { id, tab: 'chapters' });
+      };
+      document.getElementById('applySession').onclick = () => {
+        const token = sessionInput.value.trim();
+        studio.setSession(token);
+        log.textContent = token ? '已切换会话：' + token.slice(0, 12) + '…' : '已清空会话';
+      };
+    </script>
+  </body>
+</html>

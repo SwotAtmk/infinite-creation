@@ -1,7 +1,7 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
-import { Shots, Projects, Chapters, resolveProjectPath, slugify, uid, mergeVideos, buildSrt } from '@/lib/core/index.js';
+import { Shots, Projects, Chapters, Queue, WalletHolds, resolveProjectPath, slugify, uid, mergeVideos, buildSrt, loadConfig, checkQuota, priceForKind, recordUsage, captureHold, holdCredits, releaseHold, walletEnabled } from '@/lib/core/index.js';
 import { runInlineJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
 
@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req, { params }) {
   const { id } = await params;
+  let exportHold = null;
   try {
     const body = await req.json().catch(() => ({}));
     const url = new URL(req.url);
@@ -19,6 +20,38 @@ export async function POST(req, { params }) {
     if (!done.length) return NextResponse.json({ error: chapter ? ('章节「' + chapter + '」没有已完成的镜头') : '没有已完成的分镜' }, { status: 400 });
     const inputs = done.map((s) => resolveProjectPath(id, s.video_path)).filter(Boolean);
     const p = Projects.get(id);
+    // 导出计费（后台 billing.chargeExport 开关）：按章计，整片导出按涉及章节数计。
+    // 只是展示/下载不另收；这里在合成前做额度校验，合成成功后记一次用量。
+    const exportQty = chapter ? 1 : Math.max(1, new Set(done.map((s) => s.chapter || '')).size);
+    const cfg = loadConfig();
+    const billing = cfg.billing || {};
+    const ownerId = Projects.ownerOf(id) || '';
+    let exportPrice = null;
+    if (billing.chargeExport && ownerId) {
+      exportPrice = priceForKind(cfg, 'export', exportQty);
+      if (exportPrice.amount > 0) {
+        try {
+          checkQuota({ ownerId, amount: exportPrice.amount, extraUsed: walletEnabled(cfg) ? WalletHolds.activeAmount(ownerId) : Queue.reservedAmount(ownerId) }, cfg);
+        } catch (e) {
+          return NextResponse.json({ error: e.message }, { status: 400 });
+        }
+        if (walletEnabled(cfg)) {
+          try {
+            exportHold = holdCredits({
+              ownerId,
+              amount: exportPrice.amount,
+              key: 'export:' + uid(),
+              projectId: id,
+              kind: 'export',
+              chapter: chapter || '',
+              subject: chapter || '整片',
+            }, cfg);
+          } catch (e) {
+            return NextResponse.json({ error: e.message, code: e.code }, { status: e.code === 'INSUFFICIENT_CREDITS' ? 402 : 400 });
+          }
+        }
+      }
+    }
     const base = chapter ? slugify(p.name) + '_' + slugify(chapter) : slugify(p.name);
     const outRel = 'exports/' + base + '_' + uid().slice(0, 8) + '.mp4';
     // 背景音乐：仅按章导出时，把该章已生成的 BGM 垫底混入
@@ -45,8 +78,20 @@ export async function POST(req, { params }) {
         }
       },
     );
+    if (exportPrice && exportPrice.amount > 0 && ownerId) {
+      if (exportHold) {
+        captureHold(exportHold.id, { cfg, quantity: exportQty, unitPrice: exportPrice.unitPrice, chapter: chapter || '', subject: chapter || '整片' });
+        exportHold = null;
+      } else {
+        recordUsage(
+          { projectId: id, ownerId, kind: 'export', quantity: exportQty, unitPrice: exportPrice.unitPrice, currency: exportPrice.currency, chapter: chapter || '', subject: chapter || '整片' },
+          cfg,
+        ).catch(() => {});
+      }
+    }
     return NextResponse.json({ export_path: outRel, url: '/files/projects/' + id + '/' + outRel, shots: done.length, chapter, music: !!music, subtitled: !!subtitles, nosub_path: subtitles ? nosubRel : '', srt_path: subtitles ? srtRel : '' });
   } catch (e) {
+    releaseHold(exportHold, e.message);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

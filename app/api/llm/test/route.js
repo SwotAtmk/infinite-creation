@@ -1,10 +1,17 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import { loadConfig, llmChat } from '@/lib/core/index.js';
+import { authEnabled, currentAuthUser } from '@/lib/core/auth.js';
 
 export const dynamic = 'force-dynamic';
 
+function canAdmin() {
+  return !authEnabled() || currentAuthUser()?.role === 'admin';
+}
+
 export async function POST(req) {
+  // 会用服务端保存的 LLM Key 发真实请求，只允许管理员
+  if (!canAdmin()) return NextResponse.json({ error: '需要管理员权限' }, { status: 403 });
   const body = await req.json().catch(() => ({}));
   // 优先测试前端输入框当前值（未保存状态），未传则回退到已保存配置
   let llmCfg = body?.llm;

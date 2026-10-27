@@ -2,7 +2,8 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Assets, slugify, uid, resolveProjectPath } from '@/lib/core/index.js';
+import { Assets, Queue, slugify, uid, resolveProjectPath, loadConfig, logger } from '@/lib/core/index.js';
+import { baiduCensorImage, baiduConfig, baiduEnabled } from '@/lib/core/baidu-moderation.js';
 import { PROJECT_ASSET_SUBDIRS, uploadMediaKind, UPLOAD_MAX_BYTES } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,14 @@ export async function POST(req, { params }) {
   const { id, aid } = await params;
   const asset = Assets.get(aid);
   if (!asset || asset.project_id !== id) return NextResponse.json({ error: '资产不存在' }, { status: 404 });
+  // 正在出图 / 设计音色时替换文件，会和任务回写互相覆盖；等渲染完成再替换。
+  const busy = Queue.activeByDedupe('asset:' + aid) || Queue.activeByDedupe('voice:' + aid);
+  if (busy) {
+    return NextResponse.json(
+      { error: '该素材正在生成中，暂时不能替换；请等渲染完成后再上传', code: 'ALREADY_RENDERING', jobId: busy.jobId },
+      { status: 409 },
+    );
+  }
   // 文件名头由客户端编码（界面用 encodeURIComponent）。非法转义（如单个 '%'）会让
   // decodeURIComponent 抛 URIError，本路由原先没有 try/catch → 未捕获异常 → 500。
   let orig = '';
@@ -37,6 +46,34 @@ export async function POST(req, { params }) {
   const buf = Buffer.from(await req.arrayBuffer());
   if (!buf.length) return NextResponse.json({ error: '缺少文件内容' }, { status: 400 });
   if (buf.length > limit) return tooLarge(limit);
+  // 只有「替换已有图片」才送百度图像审核：首次上传（asset 还没有 image_path）不调用。
+  // 审核必须在写盘之前：不通过时保留原图，不能先把旧图覆盖掉再报错。
+  const isImage = !isAudio && !isVideo;
+  const replacingImage = isImage && !!asset.image_path;
+  if (replacingImage) {
+    const cfg = loadConfig();
+    if (baiduEnabled(cfg)) {
+      try {
+        const r = await baiduCensorImage(buf, cfg);
+        if (!r.ok) {
+          logger.warn('图片替换未通过百度审核', { assetId: asset.id, reason: r.reason });
+          return NextResponse.json(
+            { error: '图片未通过内容审核：' + r.reason, code: 'IMAGE_MODERATION_BLOCKED' },
+            { status: 422 },
+          );
+        }
+      } catch (e) {
+        const failClosed = baiduConfig(cfg).failClosed !== false;
+        logger.warn('百度图片审核调用失败', { assetId: asset.id, error: e.message, failClosed });
+        if (failClosed) {
+          return NextResponse.json(
+            { error: '图片审核服务暂不可用，请稍后重试', code: 'IMAGE_MODERATION_UNAVAILABLE' },
+            { status: 503 },
+          );
+        }
+      }
+    }
+  }
   const subdir = PROJECT_ASSET_SUBDIRS[asset.category] || 'other';
   const rel = 'assets/' + subdir + '/' + slugify(asset.name) + '_' + uid().slice(0, 8) + ext;
   const abs = resolveProjectPath(id, rel);

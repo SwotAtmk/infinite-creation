@@ -1141,6 +1141,10 @@ test('背景音乐：排队期间被停止，资产不能永远停在「生成�
   const gate = globalThis.__infiniteCreationVideoGate;
   const before = gate.slots;
   gate.slots = 99;
+  // 本用例验证的是旧「整批串行闸门」的排队语义（本地 ComfyUI 仍走这条路）。
+  // RunningHub 公平队列是渲染级排队，任务一启动就会执行，不会停在 job 级的 queued。
+  const prevQueue = process.env.IC_QUEUE;
+  process.env.IC_QUEUE = '0';
   try {
     const job = startMusicJob({ projectId: p.id, assetId: a.id });
     assert.equal(Jobs.get(job.id).status, 'queued');
@@ -1149,6 +1153,8 @@ test('背景音乐：排队期间被停止，资产不能永远停在「生成�
     assert.equal(Assets.get(a.id).status, 'failed', '工具没跑起来，资产必须从 generating 复位，否则音乐列表永远显示「生成中」且无法重试');
   } finally {
     gate.slots = before;
+    if (prevQueue === undefined) delete process.env.IC_QUEUE;
+    else process.env.IC_QUEUE = prevQueue;
   }
   Projects.remove(p.id);
 });
@@ -1163,6 +1169,9 @@ test('背景音乐：重生成被停止时保留已有音频（不能把上一�
   const gate = globalThis.__infiniteCreationVideoGate;
   const before = gate.slots;
   gate.slots = 99;
+  // 同上：验证旧闸门的排队语义，临时关闭 RunningHub 公平队列
+  const prevQueue = process.env.IC_QUEUE;
+  process.env.IC_QUEUE = '0';
   try {
     const job = startMusicJob({ projectId: p.id, assetId: a.id });
     stopJob(job.id);
@@ -1172,6 +1181,8 @@ test('背景音乐：重生成被停止时保留已有音频（不能把上一�
     assert.equal(after.audio_path, 'assets/music/old.mp3', '旧音频不能被作废');
   } finally {
     gate.slots = before;
+    if (prevQueue === undefined) delete process.env.IC_QUEUE;
+    else process.env.IC_QUEUE = prevQueue;
   }
   Projects.remove(p.id);
 });

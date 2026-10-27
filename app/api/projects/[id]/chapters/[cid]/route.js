@@ -1,7 +1,7 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import { Chapters, Shots, withWriteContext, tx, pickChapterFields } from '@/lib/core/index.js';
-import { activeJobOf } from '@/lib/agent/index.js';
+import { activeJobOfChapter } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +12,11 @@ export async function PATCH(req, { params }) {
   // cid 来自 URL 且会被解码（vercel/next.js#64952）。不校验归属就能借别的 projectId 改他项目的
   // 章节标题/正文——与 chapters/[cid]/regenerate 的写法保持一致：先确认章节属于本项目。
   if (!before || before.project_id !== id) return NextResponse.json({ error: '章节不存在' }, { status: 404 });
+  // 本章正在跑：改标题会让任务按旧标题回写分镜（找不到章节/写成孤儿行），正文改了本轮也读不到。
+  // 其他章节不受影响。
+  if (activeJobOfChapter(id, before.title)) {
+    return NextResponse.json({ error: '本章正在运行任务，运行中不可编辑；请等任务结束或先停止本章' }, { status: 409 });
+  }
   // 只接受内容字段（title/novel/script）：seq 是叙事顺序键、status/music_* 是流水线产物，
   // 由外部写入会被用来伪造状态或撞乱成片顺序，见 lib/core/shot-write.js 的说明。
   const { patch, errors } = pickChapterFields(body);
@@ -44,8 +49,11 @@ export async function DELETE(_req, { params }) {
   // 不校验归属等于「凭任意 cid 删掉他项目的一整章分镜」。
   const ch = Chapters.get(cid);
   if (!ch || ch.project_id !== id) return NextResponse.json({ error: '章节不存在' }, { status: 404 });
-  // 级联删该章分镜：运行中的任务正持有这些行，删掉后它的回写只会静默落空
-  if (activeJobOf(id)) return NextResponse.json({ error: '项目正在运行任务，运行中不可删除章节；请等任务结束或先停止任务' }, { status: 409 });
+  // 级联删该章分镜：运行中的任务正持有这些行，删掉后它的回写只会静默落空。
+  // 只挡同一章的任务；其他章节在跑时允许删除本章。
+  if (activeJobOfChapter(id, ch.title)) {
+    return NextResponse.json({ error: '本章正在运行任务，运行中不可删除章节；请等任务结束或先停止任务' }, { status: 409 });
+  }
   return withWriteContext('DELETE /api/projects/:id/chapters/:cid', async () => {
     Chapters.remove(cid);
     return NextResponse.json({ ok: true });

@@ -1,10 +1,15 @@
 node_modules/
 data/
 config.json
+.env
+!.env.docker.example
 # openclaude 二开：源码保留在 vendor/openclaude，构建产物不入库
 vendor/openclaude/node_modules/
 vendor/openclaude/dist/
 .next/
+.next-*/
+# Studio 前端的构建产物
+studio/dist/
 .DS_Store
 *.log
 .pnpm-store/

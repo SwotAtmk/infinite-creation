@@ -4,6 +4,21 @@
     "port": 4600,
     "host": "127.0.0.1"
   },
+  "db": {
+    "provider": "sqlite",
+    "sqlite": {
+      "path": ""
+    },
+    "postgres": {
+      "url": "",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "user": "postgres",
+      "password": "",
+      "database": "infinite_creation",
+      "ssl": false
+    }
+  },
   "comfyui": {
     "provider": "native",
     "baseUrl": "http://127.0.0.1:8188",
@@ -24,8 +39,44 @@
     "imageConcurrency": 2,
     "videoConcurrency": 1,
     "runninghubConcurrency": 1,
+    "agentConcurrency": 4,
+    "agentQueueTimeoutMinutes": 120,
     "retryTimes": 3,
     "videoTimeoutMinutes": 30,
     "imageTimeoutMinutes": 10
+  },
+  "moderation": {
+    "enabled": null,
+    "text": {
+      "enabled": null
+    },
+    "failClosed": null,
+    "baidu": {
+      "enabled": false,
+      "apiKey": "",
+      "secretKey": "",
+      "strategyId": "",
+      "failClosed": true
+    }
+  },
+  "billing": {
+    "showCost": true,
+    "chargeExport": false,
+    "currency": "点",
+    "wallet": {
+      "enabled": false,
+      "requireFullEstimate": false,
+      "holdTtlMinutes": 2880
+    },
+    "prices": {
+      "llmPerChapter": 1,
+      "llmRewritePerCall": 0,
+      "imagePerAsset": 2,
+      "ttsPerVoice": 3,
+      "videoPerSecond": 0.5,
+      "musicPerTrack": 5,
+      "exportPerChapter": 2
+    },
+    "providerCancelPolicy": "charge_if_started"
   }
 }

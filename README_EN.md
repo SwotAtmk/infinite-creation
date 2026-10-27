@@ -81,7 +81,15 @@ GPU: NVIDIA GeForce RTX 3080 20G
 RAM: 32GB DDR4 3200 MT/s (16GBx2)
 ```
 
-**I haven't yet run detailed tests on how much VRAM specific local GPU configurations need. If you have test results, feel free to share them in the group chat. In theory, 8GB+ VRAM should be sufficient.**
+## **Minimum system requirements for local operation:**
+```text
+Graphics card: The minimum requirement for the graphics card is 12GB of VRAM [those with development capabilities can adapt to a version that can run with 8GB]
+CPU: No specific processor required
+Memory: Recommended 32GB or above
+Hard disk: At least 150G of space is required
+```
+
+**I haven't conducted detailed tests on the specific local graphics card configuration and required video memory size. If your computer can run this project normally, please join the group chat to share your minimum viable configuration**
 
 **Note**: ffmpeg must be installed first, otherwise the final video merge may be affected. Download: [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
 

@@ -379,7 +379,7 @@ This project was independently completed by an individual developer. Feedback, b
 ## Acknowledgements
 - Thank you to the developer [taoxiangyoushu](https://github.com/taoxiangyoushu) for their contribution to this project. They have integrated the workflow mode of Tusense video + first and last frames and fixed some bugs
 - Thanks to developer [happymy](https://github.com/happymy) for providing the AMD + GGUF adaptation solution and fixing some bugs in the project.
-- We would like to express our gratitude to the following developers for their contributions to the project: [ghshhf](https://github.com/ghshhf), [binonxia](https://github.com/binonxia), [anupamme](https://github.com/anupamme)
+- We would like to express our gratitude to the following developers for their contributions to the project: [thrasher824](https://github.com/thrasher824)、[remiliakui](https://github.com/remiliakui)、[ghshhf](https://github.com/ghshhf), [binonxia](https://github.com/binonxia), [anupamme](https://github.com/anupamme)
 
 ## Star History
 

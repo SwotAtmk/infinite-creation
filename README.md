@@ -366,7 +366,7 @@ pnpm test   # node --test tests/unit.test.mjs
 ## 致谢
 - 感谢开发者[taoxiangyoushu](https://github.com/taoxiangyoushu)为此项目做出的贡献，接入了图生视频+首尾帧的工作流模式并修复了部分bug
 - 感谢开发者 [happymy](https://github.com/happymy) 为此项目提供了AMD+GGUF适配的解决方案以及解决项目中存在的部分bug
-- 感谢以下开发者为项目做出的贡献：[ghshhf](https://github.com/ghshhf)、[binonxia](https://github.com/binonxia)、[anupamme](https://github.com/anupamme)
+- 感谢以下开发者为项目做出的贡献：[thrasher824](https://github.com/thrasher824)、[remiliakui](https://github.com/remiliakui)、[ghshhf](https://github.com/ghshhf)、[binonxia](https://github.com/binonxia)、[anupamme](https://github.com/anupamme)
 
 ## Star 历史
 

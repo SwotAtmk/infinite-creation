@@ -7,6 +7,7 @@ import { CONTEXT_KEYS } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
+
 // 项目上下文（人物圣经 / 风格指南 / 连续性记录）。写入语义与内置 Agent 的 save_context 完全一致：
 // context 表存 JSON，同时落盘 context/*.md，保证「界面/API 写入」与「Agent 写入」产物一致。
 // 键列表来自 lib/shared（单一事实来源，Agent 侧用同一份做值域校验）。
@@ -37,7 +38,7 @@ export async function PUT(req, { params }) {
   return withWriteContext('PUT /api/projects/:id/context', async () => {
     const dir = path.join(projectDir(id), 'context');
     fs.mkdirSync(dir, { recursive: true });
-    const ctxObj = { ...(p.context || {}) };
+    let fresh = p.context || {};
     for (const { key, content } of writes) {
       if (key === 'continuity') {
         // 连续性记录是追加式日志（与 save_context 一致）：读旧数组 → push → 整体写回
@@ -50,9 +51,9 @@ export async function PUT(req, { params }) {
       } else {
         fs.writeFileSync(path.join(dir, key === 'bible' ? 'bible.md' : 'style.md'), content);
       }
-      ctxObj[key] = content;
+      // 逐键合并：并行的 Agent 刚写的另一个键不会因为这里的旧快照被整段覆盖
+      fresh = Projects.setContextKey(id, key, content) || fresh;
     }
-    const updated = Projects.update(id, { context: ctxObj });
-    return NextResponse.json({ ok: true, context: updated?.context || ctxObj, keys: writes.map((w) => w.key) });
+    return NextResponse.json({ ok: true, context: fresh, keys: writes.map((w) => w.key) });
   });
 }

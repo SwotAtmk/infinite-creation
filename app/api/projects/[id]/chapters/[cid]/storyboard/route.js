@@ -1,7 +1,7 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import { Shots, Chapters, Projects, pickShotFields, idxTakenBy, validateShotContent, withWriteContext, tx } from '@/lib/core/index.js';
-import { activeJobOf } from '@/lib/agent/index.js';
+import { activeJobOfChapter } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +13,10 @@ export async function PUT(req, { params }) {
   const chapter = Chapters.get(cid);
   if (!chapter || chapter.project_id !== id) return NextResponse.json({ error: '章节不存在' }, { status: 404 });
   // replace 会删掉该章现有分镜（含已渲染、status=done 的行）：正在运行的任务持有这些行，
-  // 删掉后它的回写只会静默落空，最终「成片与当前分镜表不一致」。运行中一律拒绝。
-  if (activeJobOf(id)) {
-    return NextResponse.json({ error: '项目正在运行任务，运行中不可整章重写分镜；请等任务结束或先停止任务' }, { status: 409 });
+  // 删掉后它的回写只会静默落空，最终「成片与当前分镜表不一致」。只挡同一章的任务，
+  // 其他章节正在跑时允许重写本章（章节之间互不影响）。
+  if (activeJobOfChapter(id, chapter.title)) {
+    return NextResponse.json({ error: '本章正在运行任务，运行中不可整章重写分镜；请等任务结束或先停止任务' }, { status: 409 });
   }
 
   const body = await req.json().catch(() => ({}));

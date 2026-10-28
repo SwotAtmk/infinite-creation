@@ -4,7 +4,9 @@ import { loadConfig, llmChat } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
+
 export async function POST(req) {
+  // 会用服务端保存的 LLM Key 发真实请求，只允许管理员
   const body = await req.json().catch(() => ({}));
   // 优先测试前端输入框当前值（未保存状态），未传则回退到已保存配置
   let llmCfg = body?.llm;

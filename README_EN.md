@@ -211,6 +211,42 @@ pnpm run build && pnpm start
 
 > The Agent kernel `vendor/openclaude/dist/` is a build artifact and not committed; `pnpm install` builds it automatically once (idempotent — skips if present). You only need to manually rerun `pnpm build:agent` after modifying `vendor/openclaude/src/` source. See [docs/agent-architecture.md](docs/agent-architecture.md) for build details.
 
+### Starting the Classic Web and Studio Separately
+
+The two UIs can run independently and share the same `config.json` and database:
+
+```bash
+# ── Classic web (single process, 4600) ────────────────────
+pnpm dev                     # development
+pnpm build && pnpm start     # production
+
+# ── Studio (backend 4610 + frontend 4710, two terminals) ──
+# Terminal 1: Studio backend (dev)
+PORT=4610 NEXT_DIST_DIR=.next-studio-dev pnpm dev
+# Terminal 2: Studio frontend
+pnpm --filter studio dev
+
+# Studio production
+PORT=4610 NEXT_DIST_DIR=.next-studio pnpm start
+pnpm --filter studio build
+STUDIO_PORT=4710 STUDIO_BACKEND=http://127.0.0.1:4610 pnpm --filter studio preview
+```
+
+Setting environment variables in Windows `cmd`:
+
+```bat
+set PORT=4610
+set NEXT_DIST_DIR=.next-studio-dev
+pnpm dev
+```
+
+> The open-source edition does not include accounts, an admin dashboard, credit billing, or content moderation; system settings (ComfyUI / LLM / workflows / hardware / generation) are open directly.
+>
+> If a production build fails with `EPERM ... Application Data`, Next's file tracing is scanning the user home directory. Point HOME/USERPROFILE at a local directory for the build (already handled in `start-studio-prod.bat`):
+> ```bash
+> HOME="$PWD/.build-home" USERPROFILE="$(cygpath -w "$PWD/.build-home")" pnpm build
+> ```
+
 ## First-Time Configuration
 
 Click ⚙ in the top-right corner:

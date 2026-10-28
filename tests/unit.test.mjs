@@ -22,6 +22,8 @@ import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variant
 import { runExclusiveVideo, concurrencyLimit, holdsRenderSlot } from '../lib/agent/job-runner.js';
 import { guardToolCall } from '../lib/agent/guard.js';
 import { CATEGORIES } from '../app/pages/shared.js';
+import { dbSettings } from '../lib/core/config.js';
+import { toPgSql, translateDdlForPg } from '../lib/core/db-driver.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WF = path.join(__dirname, '..', 'workflows');
@@ -943,7 +945,8 @@ test('filterReferenceImages: 无目标全量 / 指定章过滤', () => {
 
 console.log('全部单元测试通过');
 
-// ================= 阶段调度（分阶段运行） =================
+// ================= 阶段调度（分阶段运行） ==========});
+
 
 test('阶段表：4 项且 each带 need/ck', () => {
   assert.equal(STAGES.length, 4);
@@ -1575,6 +1578,54 @@ test('任务列表：运行中的行内任务（llm/export）不渲染「删除�
   assert.match(delLine, /CANCELLABLE/, '删除按钮必须排除「后端拒绝删除的运行中行内任务」');
 });
 
+// —— 双数据库：SQLite / PostgreSQL ——
+test('PostgreSQL 占位符转换：字符串与注释里的 ? 不处理', () => {
+  assert.equal(toPgSql('SELECT * FROM t WHERE a=? AND b=?'), 'SELECT * FROM t WHERE a=$1 AND b=$2');
+  assert.equal(toPgSql("SELECT '?' AS q, a FROM t WHERE b=?"), "SELECT '?' AS q, a FROM t WHERE b=$1");
+  assert.equal(toPgSql('SELECT 1 -- ?\nWHERE a=?'), 'SELECT 1 -- ?\nWHERE a=$1');
+});
+
+test('PostgreSQL DDL 类型放大：时间戳 INTEGER→BIGINT、REAL→DOUBLE PRECISION', () => {
+  const ddl = translateDdlForPg('CREATE TABLE t (id TEXT, created_at INTEGER, amount REAL)');
+  assert.match(ddl, /created_at BIGINT/);
+  assert.match(ddl, /amount DOUBLE PRECISION/);
+  assert.equal(translateDdlForPg('SELECT created_at FROM t'), 'SELECT created_at FROM t');
+});
+
+test('数据库配置：DATABASE_URL 自动选 PostgreSQL，IC_DB 显式覆盖', () => {
+  const keys = ['IC_DB', 'DATABASE_URL', 'IC_DB_SQLITE_PATH', 'PGHOST', 'PGPORT', 'PGUSER', 'PGPASSWORD', 'PGDATABASE'];
+  const old = {};
+  for (const k of keys) old[k] = process.env[k];
+  try {
+    delete process.env.IC_DB;
+    process.env.DATABASE_URL = 'postgres://u:p@db.example:6543/app';
+    let s = dbSettings();
+    assert.equal(s.provider, 'postgres');
+    assert.equal(s.postgres.url, 'postgres://u:p@db.example:6543/app');
+
+    process.env.IC_DB = 'sqlite';
+    s = dbSettings();
+    assert.equal(s.provider, 'sqlite');
+
+    process.env.IC_DB = 'postgres';
+    delete process.env.DATABASE_URL;
+    process.env.PGHOST = '127.0.0.1';
+    process.env.PGPORT = '55432';
+    process.env.PGUSER = 'ic';
+    process.env.PGDATABASE = 'ic_test';
+    s = dbSettings();
+    assert.equal(s.provider, 'postgres');
+    assert.equal(s.postgres.host, '127.0.0.1');
+    assert.equal(s.postgres.port, 55432);
+    assert.equal(s.postgres.user, 'ic');
+    assert.equal(s.postgres.database, 'ic_test');
+  } finally {
+    for (const k of keys) {
+      if (old[k] === undefined) delete process.env[k];
+      else process.env[k] = old[k];
+    }
+  }
+});
 // —— 小说拆分章节（创建项目时自动拆分长篇小说） ——
 
 test('splitNovelIntoChapters：空文本返回空数组', () => {

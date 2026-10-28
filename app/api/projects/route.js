@@ -40,7 +40,7 @@ export async function POST(req) {
     try {
       // 长篇小说自动拆分：识别章节标题 / 超长按字数均分，单章结果走现状路径（向后兼容）
       const chapters = splitNovelIntoChapters(String(body.novel || ''));
-      const p = Projects.create({ ...body, chapters: chapters.length > 1 ? chapters : null });
+      const p = Projects.create({ ...(body || {}), chapters: chapters.length > 1 ? chapters : null });
       ensureProjectDirs(p.id);
       return NextResponse.json(p);
     } catch (e) {

@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { Assets, withWriteContext } from '@/lib/core/index.js';
+import { Assets, Queue, withWriteContext } from '@/lib/core/index.js';
 import { startAssetVoiceJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
 
@@ -11,6 +11,13 @@ export async function POST(req, { params }) {
   const body = await req.json().catch(() => ({}));
   const a = Assets.get(aid);
   if (!a || a.project_id !== id) return NextResponse.json({ error: '资产不存在' }, { status: 404 });
+  const active = Queue.activeByDedupe('voice:' + aid);
+  if (active) {
+    return NextResponse.json(
+      { error: '该角色已有音色任务在排队或执行中', code: 'ALREADY_RENDERING', jobId: active.jobId, queueId: active.id },
+      { status: 409 },
+    );
+  }
   const text = body?.text != null ? String(body.text) : '';
   const voice_description = body?.voice_description != null ? String(body.voice_description) : '';
   // 没有朗读文案就没有音色样本：直接拒绝，避免生成器跑起来才报错（重试老数据时也可能缺 text）
@@ -19,7 +26,7 @@ export async function POST(req, { params }) {
   withWriteContext('POST /api/projects/:id/assets/:aid/design-voice', () => {
     Assets.update(aid, { params: { text, voice_description }, status: 'generating' });
   });
-  // 提交即入全局队列，逐个执行（不再因已有任务而拒绝）
+  // 去重检查通过后入全局队列，逐个执行
   const job = startAssetVoiceJob({ projectId: id, assetId: aid, text, voiceDescription: voice_description, onProgress: (p) => broadcast(p) });
   return NextResponse.json(job);
 }

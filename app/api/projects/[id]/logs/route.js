@@ -4,7 +4,7 @@ import { Projects, listChanges, countChanges } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
-// 变更日志（内容表的增删改留档，可回滚）。日志随项目删除而清空，不会自动清理。
+
 export async function GET(req, { params }) {
   const { id } = await params;
   if (!Projects.get(id)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });

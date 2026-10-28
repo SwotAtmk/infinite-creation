@@ -1,0 +1,30 @@
+# 构建产物 / 本地运行数据不进镜像
+.git
+.gitignore
+node_modules
+**/node_modules
+.next
+.next-*
+.next-studio.stale-*
+studio/dist
+data
+logs
+config.json
+.env
+.env.*
+!.env.docker.example
+*.log
+.pnpm-store
+.build-home
+tests
+docs
+images
+harness-skills
+comfyui_original_workflows
+cweb
+
+# openclaude 只需要已构建的 sdk.mjs；源码与 node_modules 不进上下文
+vendor/openclaude/*
+!vendor/openclaude/dist/
+vendor/openclaude/dist/*
+!vendor/openclaude/dist/sdk.mjs

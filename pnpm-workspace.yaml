@@ -1,3 +1,6 @@
+packages:
+  - studio
+
 allowBuilds:
   '@heroui/shared-utils': true
   esbuild: true

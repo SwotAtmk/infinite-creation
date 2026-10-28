@@ -202,7 +202,50 @@ pnpm run build && pnpm start
 
 > Windows 用户也可直接双击根目录 `start-infinite-creation.bat` 一键后台启动（自动检测端口/安装依赖/等待就绪，并提示 ComfyUI 状态），停止用 `stop-infinite-creation.bat`。
 
+> **独立 Studio 界面（可选）**：仓库内含一套独立启动的新界面 `studio/`（Vite + React，端口 4710），与经典界面共用同一后端与数据。
+> ```bash
+> start-studio.bat          # 启动后端 + Studio，打开 http://127.0.0.1:4710
+> stop-studio.bat           # 只停止 Studio，后端保持运行
+> ```
+> Studio 配置说明见 [studio/README.md](studio/README.md)。
+
 > Agent 内核 `vendor/openclaude/dist/` 是构建产物、不入库，`pnpm install` 会自动构建一次（幂等，已存在则跳过）。只有当你改动了 `vendor/openclaude/src/` 源码后，才需要手动重跑 `pnpm build:agent`。构建细节见 [docs/agent-architecture.md](docs/agent-architecture.md)。
+
+### 分别启动原版 Web 与 Studio
+
+两套界面可以独立运行，共用同一份 `config.json` 与数据库：
+
+```bash
+# ── 原版 Web（单进程，4600）──────────────────────────────
+pnpm dev                     # 开发模式
+pnpm build && pnpm start     # 生产模式
+
+# ── Studio（后端 4610 + 前端 4710，两个终端）──────────────
+# 终端 1：Studio 后端（开发）
+PORT=4610 NEXT_DIST_DIR=.next-studio-dev pnpm dev
+# 终端 2：Studio 前端
+pnpm --filter studio dev
+
+# Studio 生产
+PORT=4610 NEXT_DIST_DIR=.next-studio pnpm start
+pnpm --filter studio build
+STUDIO_PORT=4710 STUDIO_BACKEND=http://127.0.0.1:4610 pnpm --filter studio preview
+```
+
+Windows `cmd` 里设置环境变量：
+
+```bat
+set PORT=4610
+set NEXT_DIST_DIR=.next-studio-dev
+pnpm dev
+```
+
+> 开源版不包含账号、管理后台、积分计费与内容审核；系统设置（ComfyUI / LLM / 工作流 / 硬件 / 生成参数）直接开放。
+>
+> 若生产构建报 `EPERM ... Application Data`，是 Next 文件追踪扫描用户主目录导致；构建前临时把 HOME/USERPROFILE 指向本地目录即可（`start-studio-prod.bat` 已内置该处理）：
+> ```bash
+> HOME="$PWD/.build-home" USERPROFILE="$(cygpath -w "$PWD/.build-home")" pnpm build
+> ```
 
 ## 首次配置
 
@@ -214,6 +257,49 @@ pnpm run build && pnpm start
 4. 生成维护（可选）：设置「每 N 个生成后释放 ComfyUI 显存」（默认开启 = 3，0 = 关闭），按**所有 ComfyUI 生成任务**计数（文生图/图生图/换装/音色/视频都计入——AMD 显卡 + Dynamic VRAM 下任意连续生成都会逐步变慢）。释放后下一个生成需重新加载模型（多花约 1~3 分钟）。检测到 ComfyUI 未启用 Dynamic VRAM 时界面会提示建议关闭。
 
 配置保存在根目录 config.json（不入库）。生成参数（超时分钟、并发、释放频率）可直接编辑 config.json 的 `generation` 节。
+
+### 数据库：SQLite / PostgreSQL
+
+默认用 SQLite（`data/ic.db`），零安装、直接启动。正式部署可以换成 PostgreSQL，**两套库共用同一份表结构**，业务代码不需要改。
+
+环境变量优先（推荐）：
+
+```bash
+# 快速启动（默认）
+IC_DB=sqlite IC_DB_SQLITE_PATH=/data/ic.db
+
+# 正式部署
+IC_DB=postgres DATABASE_URL=postgres://user:pass@127.0.0.1:5432/infinite_creation
+
+# 媒体文件固定目录（Docker 挂载）
+IC_MEDIA_DIR=/data/projects
+# 配置文件也放挂载卷（否则会写进镜像层）
+IC_CONFIG=/data/config.json
+```
+
+也可以写在 `config.json` 的 `db` 节（参见 `config.example.json`），但环境变量优先。`DATABASE_URL` 存在且没有显式 `IC_DB` 时会自动选 PostgreSQL。
+
+**迁移 / 同步数据**（表结构复用同一份 `initSchema`，不会出现两套 schema 漂移）：
+
+```bash
+# SQLite → PostgreSQL
+node scripts/db-migrate.mjs --from sqlite --to postgres \
+  --to-url postgres://user:pass@127.0.0.1:5432/infinite_creation
+
+# PostgreSQL → SQLite
+node scripts/db-migrate.mjs --from postgres --to sqlite \
+  --from-url postgres://user:pass@127.0.0.1:5432/infinite_creation \
+  --to-sqlite data/ic-pg-copy.db
+
+# 先清空目标表再写入（默认按 id upsert，可重复执行）
+node scripts/db-migrate.mjs --from sqlite --to postgres --replace
+```
+
+迁移按主键 upsert，项目/素材/分镜/任务/队列/变更日志都会拷贝。媒体文件不在数据库里：图片和视频都在 `IC_MEDIA_DIR`（默认 `<data>/projects`）下，换库后继续用同一个目录或 Docker 挂载卷即可，不需要重新生成。
+
+> 说明：PostgreSQL 是通过 worker 线程提供同步门面的（现有业务层是同步 SQL）。这保证了零改造切换，但每次查询会阻塞当前进程事件循环；PostgreSQL 建议和本服务在同一台机器 / Docker 内网，不要接高延迟远程库。后续如果接远程库，可以再把 repository 改成 async。
+>
+> Docker 打包时注意保留 `lib/core/pg-worker.mjs` 和 `node_modules/pg`：PostgreSQL 驱动在 worker 线程里按文件路径加载，不会被 Next 的静态追踪自动收进去。媒体、SQLite 库、配置文件分别用 `IC_MEDIA_DIR`、`IC_DB_SQLITE_PATH`、`IC_CONFIG` 指到挂载卷即可。
 
 ### ComfyUI 所需工作流和模型
 

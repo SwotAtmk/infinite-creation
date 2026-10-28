@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Assets, slugify, uid, resolveProjectPath } from '@/lib/core/index.js';
+import { Assets, Queue, slugify, uid, resolveProjectPath } from '@/lib/core/index.js';
 import { PROJECT_ASSET_SUBDIRS, uploadMediaKind, UPLOAD_MAX_BYTES } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +16,14 @@ export async function POST(req, { params }) {
   const { id, aid } = await params;
   const asset = Assets.get(aid);
   if (!asset || asset.project_id !== id) return NextResponse.json({ error: '资产不存在' }, { status: 404 });
+  // 正在出图 / 设计音色时替换文件，会和任务回写互相覆盖；等渲染完成再替换。
+  const busy = Queue.activeByDedupe('asset:' + aid) || Queue.activeByDedupe('voice:' + aid);
+  if (busy) {
+    return NextResponse.json(
+      { error: '该素材正在生成中，暂时不能替换；请等渲染完成后再上传', code: 'ALREADY_RENDERING', jobId: busy.jobId },
+      { status: 409 },
+    );
+  }
   // 文件名头由客户端编码（界面用 encodeURIComponent）。非法转义（如单个 '%'）会让
   // decodeURIComponent 抛 URIError，本路由原先没有 try/catch → 未捕获异常 → 500。
   let orig = '';

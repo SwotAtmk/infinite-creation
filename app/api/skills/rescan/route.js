@@ -4,6 +4,7 @@ import { scanSkills } from '@/lib/agent/index.js';
 
 export const dynamic = 'force-dynamic';
 
+
 export async function POST() {
   return NextResponse.json(scanSkills());
 }

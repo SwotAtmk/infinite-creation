@@ -4,6 +4,7 @@ import { loadConfig, checkBackend } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
+
 export async function POST(req) {
   const body = await req.json().catch(() => ({}));
   // 优先测试前端输入框当前值（含 provider/apiKey/tier 的未保存状态），未传则回退到已保存配置

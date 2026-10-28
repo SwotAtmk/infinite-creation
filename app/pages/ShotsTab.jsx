@@ -25,6 +25,8 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const [materialPicker, setMaterialPicker] = useState(null);
   // 正在编辑视频提示词的分镜：{ shotId, value }；null 表示未进入编辑态
   const [editPrompt, setEditPrompt] = useState(null);
+  // 正在编辑时长的分镜：{ shotId, value }；null 表示未进入编辑态
+  const [editDuration, setEditDuration] = useState(null);
   // 导出/打包等耗时操作进行中：显示全屏加载层提示等待并阻断重复点击，操作结束后自动消失
   const [busy, setBusy] = useState(null);
   const load = useCallback(() => {
@@ -197,6 +199,22 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
     } catch (e) { toast.error(e.message); }
     finally { setBusy(null); }
   }
+  // 保存手动修改后的分镜时长（秒，1~15）
+  async function saveDuration(shotId, value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 1 || n > 15) {
+      toast.error('时长必须在 1~15 秒之间');
+      return;
+    }
+    setBusy('正在保存时长…');
+    try {
+      await api.patch('/api/projects/' + projectId + '/shots/' + shotId, { duration: n });
+      toast.success('时长已保存');
+      setEditDuration(null);
+      load();
+    } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
+  }
 
   if (loading) {
     return (
@@ -235,7 +253,31 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
                 <b>分镜 {s.idx}{s.chapter ? ' · ' + s.chapter : ''} · {s.scene_name || '未命名'}</b>
                 <Chip size="sm" variant="flat" color={statusColor(s.status)}>{s.status}</Chip>
               </div>
-              <div className="muted">时长 {s.duration}s · 分辨率 {resoLabel} · 比例 {s.aspect_ratio || '16:9'} · seed {s.seed || '-'}</div>
+              <div className="row" style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span className="muted">
+                  时长 {editDuration && editDuration.shotId === s.id ? (
+                    <input
+                      type="number"
+                      min={1}
+                      max={15}
+                      step={0.5}
+                      value={editDuration.value}
+                      onChange={(e) => setEditDuration({ shotId: s.id, value: e.target.value })}
+                      style={{ width: 56, display: 'inline-block' }}
+                    />
+                  ) : (s.duration ?? 5)}s
+                  · 分辨率 {resoLabel} · 比例 {s.aspect_ratio || '16:9'} · seed {s.seed || '-'}
+                </span>
+                {!running && !editDuration && (
+                  <Button size="sm" variant="light" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={() => setEditDuration({ shotId: s.id, value: String(s.duration ?? 5) })}>编辑时长</Button>
+                )}
+                {editDuration && editDuration.shotId === s.id && (
+                  <>
+                    <Button size="sm" color="primary" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={() => saveDuration(s.id, editDuration.value)}>保存</Button>
+                    <Button size="sm" variant="light" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={() => setEditDuration(null)}>取消</Button>
+                  </>
+                )}
+              </div>
 
               <div style={{ marginTop: 8 }}>
                 <div className="row justify-between" style={{ alignItems: 'center', marginBottom: 4 }}>

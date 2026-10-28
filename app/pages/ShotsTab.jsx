@@ -23,6 +23,10 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
   const [ask, setAsk] = useState(null);
   const [loading, setLoading] = useState(true);
   const [materialPicker, setMaterialPicker] = useState(null);
+  // 正在编辑视频提示词的分镜：{ shotId, value }；null 表示未进入编辑态
+  const [editPrompt, setEditPrompt] = useState(null);
+  // 正在编辑时长的分镜：{ shotId, value }；null 表示未进入编辑态
+  const [editDuration, setEditDuration] = useState(null);
   // 导出/打包等耗时操作进行中：显示全屏加载层提示等待并阻断重复点击，操作结束后自动消失
   const [busy, setBusy] = useState(null);
   const load = useCallback(() => {
@@ -179,6 +183,38 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
     } catch (e) { toast.error(e.message); }
     finally { setBusy(null); }
   }
+  // 保存手动修改后的视频提示词；regenerate=true 时保存后直接用该提示词追加生成候选（不经 LLM 改写）
+  async function savePrompt(shotId, value, regenerate) {
+    setBusy(regenerate ? '正在保存提示词并生成候选…' : '正在保存提示词…');
+    try {
+      await api.patch('/api/projects/' + projectId + '/shots/' + shotId, { video_prompt: value });
+      toast.success('提示词已保存');
+      setEditPrompt(null);
+      if (regenerate) {
+        await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { render: true, append: true });
+        toast.success('已提交生成候选');
+        onRefresh && onRefresh();
+      }
+      load();
+    } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
+  }
+  // 保存手动修改后的分镜时长（秒，1~15）
+  async function saveDuration(shotId, value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 1 || n > 15) {
+      toast.error('时长必须在 1~15 秒之间');
+      return;
+    }
+    setBusy('正在保存时长…');
+    try {
+      await api.patch('/api/projects/' + projectId + '/shots/' + shotId, { duration: n });
+      toast.success('时长已保存');
+      setEditDuration(null);
+      load();
+    } catch (e) { toast.error(e.message); }
+    finally { setBusy(null); }
+  }
 
   if (loading) {
     return (
@@ -217,7 +253,31 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
                 <b>分镜 {s.idx}{s.chapter ? ' · ' + s.chapter : ''} · {s.scene_name || '未命名'}</b>
                 <Chip size="sm" variant="flat" color={statusColor(s.status)}>{s.status}</Chip>
               </div>
-              <div className="muted">时长 {s.duration}s · 分辨率 {resoLabel} · 比例 {s.aspect_ratio || '16:9'} · seed {s.seed || '-'}</div>
+              <div className="row" style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span className="muted">
+                  时长 {editDuration && editDuration.shotId === s.id ? (
+                    <input
+                      type="number"
+                      min={1}
+                      max={15}
+                      step={0.5}
+                      value={editDuration.value}
+                      onChange={(e) => setEditDuration({ shotId: s.id, value: e.target.value })}
+                      style={{ width: 56, display: 'inline-block' }}
+                    />
+                  ) : (s.duration ?? 5)}s
+                  · 分辨率 {resoLabel} · 比例 {s.aspect_ratio || '16:9'} · seed {s.seed || '-'}
+                </span>
+                {!running && !editDuration && (
+                  <Button size="sm" variant="light" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={() => setEditDuration({ shotId: s.id, value: String(s.duration ?? 5) })}>编辑时长</Button>
+                )}
+                {editDuration && editDuration.shotId === s.id && (
+                  <>
+                    <Button size="sm" color="primary" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={() => saveDuration(s.id, editDuration.value)}>保存</Button>
+                    <Button size="sm" variant="light" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={() => setEditDuration(null)}>取消</Button>
+                  </>
+                )}
+              </div>
 
               <div style={{ marginTop: 8 }}>
                 <div className="row justify-between" style={{ alignItems: 'center', marginBottom: 4 }}>
@@ -274,8 +334,29 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
                   {s.sub_shots && <div><b>子镜头：</b><pre style={{ whiteSpace: 'pre-wrap' }}>{s.sub_shots}</pre></div>}
                 </div>
                 <div style={{ marginTop: 6 }}>
-                  <b>视频提示词：</b>
-                  <pre className="logbox" style={{ maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{s.video_prompt || '（未生成）'}</pre>
+                  <div className="row justify-between" style={{ alignItems: 'center', marginBottom: 4 }}>
+                    <b>视频提示词：</b>
+                    {!running && !editPrompt && (
+                      <Button size="sm" variant="flat" onPress={() => setEditPrompt({ shotId: s.id, value: s.video_prompt || '' })}>编辑</Button>
+                    )}
+                  </div>
+                  {editPrompt && editPrompt.shotId === s.id ? (
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      <textarea
+                        className="logbox"
+                        style={{ minHeight: 160, width: '100%', padding: 8, whiteSpace: 'pre-wrap', resize: 'vertical' }}
+                        value={editPrompt.value}
+                        onChange={(e) => setEditPrompt({ shotId: s.id, value: e.target.value })}
+                      />
+                      <div className="row" style={{ gap: 6 }}>
+                        <Button size="sm" color="primary" onPress={() => savePrompt(s.id, editPrompt.value, true)}>保存并生成候选</Button>
+                        <Button size="sm" variant="flat" onPress={() => savePrompt(s.id, editPrompt.value, false)}>仅保存</Button>
+                        <Button size="sm" variant="light" onPress={() => setEditPrompt(null)}>取消</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <pre className="logbox" style={{ maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{s.video_prompt || '（未生成）'}</pre>
+                  )}
                 </div>
                 {s.prompt_id && <div className="muted">ComfyUI prompt_id: {s.prompt_id}</div>}
               </details>

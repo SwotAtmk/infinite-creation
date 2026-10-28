@@ -41,6 +41,8 @@ export default function ProjectsPage({ onOpen, type = '', showCreate = true, sho
   const [projects, setProjects] = useState([]);
   const [typeFilter, setTypeFilter] = useState(''); // '' = 全部分类
   const typeParam = showTypeFilter ? typeFilter : type;
+  // 列表标题跟着入口变：Agent无限创作页列的只能是该类型项目，用「所有项目」会让人误以为混进了别的类型
+  const listTitle = type === 'agent' ? 'Agent无限创作项目' : '所有项目';
   // 首次加载标记：数据回来之前不要显示「暂无项目」，否则用户会误以为项目丢了
   const [loading, setLoading] = useState(true);
   // 瀑布流分页：hasMore 决定是否还有下一页，loadingMore 防止滚动时重复请求
@@ -315,7 +317,7 @@ export default function ProjectsPage({ onOpen, type = '', showCreate = true, sho
       <Card>
         <CardBody className="gap-2">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-lg font-semibold m-0">项目列表</h2>
+            <h2 className="text-lg font-semibold m-0">{listTitle}</h2>
             <div className="flex items-center gap-3 flex-wrap">
               {showTypeFilter && (
                 <>

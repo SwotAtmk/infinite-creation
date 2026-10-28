@@ -9,7 +9,12 @@ set "STUDIO_PORT=4710"
 set "LOG_DIR=%~dp0studio\logs"
 set "STUDIO_LOG=%~dp0studio\logs\studio.log"
 set "BACKEND_LOG=%~dp0logs\studio-backend.log"
-set "NEXT_DIST_DIR=.next-studio"
+set "NEXT_DIST_DIR=.next-studio-dev"
+
+rem 长任务（Agent + 多候选渲染）内存峰值较高，避免默认 4GB 堆直接 OOM
+
+set "NODE_OPTIONS=--max-old-space-size=8192"
+rem 开发模式用独立 dist，避免 Next dev 覆盖 start-studio-prod 的 .next-studio 生产构建
 set "HOST=0.0.0.0"
 set "IC_AUTH=1"
 set "IC_MODERATION=1"

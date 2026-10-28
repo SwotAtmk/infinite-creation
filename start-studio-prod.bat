@@ -5,7 +5,9 @@ cd /d "%~dp0"
 
 set "BACKEND_PORT=4610"
 set "STUDIO_PORT=4710"
-set "NEXT_DIST_DIR=.next-studio"
+set "NEXT_DIST_DIR=.next-studio"
+rem 长任务（Agent + 多候选渲染）内存峰值较高，避免默认 4GB 堆直接 OOM
+set "NODE_OPTIONS=--max-old-space-size=8192"
 set "HOST=0.0.0.0"
 set "IC_AUTH=1"
 set "IC_MODERATION=1"

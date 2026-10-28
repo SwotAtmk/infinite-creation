@@ -49,6 +49,7 @@ services:
       target: app
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=8192
       PORT: "4610"
       HOST: "0.0.0.0"
       NEXT_DIST_DIR: .next-studio

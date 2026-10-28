@@ -3,14 +3,14 @@ import { api } from './api.js';
 
 // 后端在线状态 + 是否公开托管模式（公开模式下隐藏管理员设置）
 export function useServerInfo() {
-  const [info, setInfo] = useState({ online: true, publicMode: false });
+  const [info, setInfo] = useState({ online: true, publicMode: false, render: null });
   useEffect(() => {
     let alive = true;
     const ping = () =>
       api
         .get('/api/health')
-        .then((r) => alive && setInfo({ online: !!r.ok, publicMode: !!r.publicMode }))
-        .catch(() => alive && setInfo({ online: false, publicMode: false }));
+        .then((r) => alive && setInfo({ online: !!r.ok, publicMode: !!r.publicMode, render: r.render || null }))
+        .catch(() => alive && setInfo({ online: false, publicMode: false, render: null }));
     ping();
     const t = setInterval(ping, 20000);
     return () => {

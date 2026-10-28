@@ -537,7 +537,7 @@ export default function AdminPage({ onBack }) {
               hint="开启后，导出成片、应用背景音乐重合成会按「合成/导出（每章）」价目记账；下载不另收。"
             />
             <Field
-              label="RunningHub 取消/失败计费"
+              label="云端任务取消/失败计费"
               hint="OpenAPI 只返回任务状态，不返回实际扣点；这里按“是否已开始运行”决定是否仍向用户计费。"
             >
               <Select

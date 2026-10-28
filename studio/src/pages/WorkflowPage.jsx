@@ -123,7 +123,7 @@ export default function WorkflowPage({ projectId, chapters = [], progress, runni
       toast.error('JSON 解析失败：' + e.message);
       return;
     }
-    if (!(await toast.confirm('保存后对「下一次提交」生效。正在 RunningHub 执行中的任务无法热改，需要先取消再重新提交。确定保存？'))) return;
+    if (!(await toast.confirm('保存后对「下一次提交」生效。正在云端执行中的任务无法热改，需要先取消再重新提交。确定保存？'))) return;
     setSaving(true);
     try {
       const r = await api.put('/api/workflows/' + encodeURIComponent(detail.id), { structure: parsed });
@@ -248,6 +248,11 @@ export default function WorkflowPage({ projectId, chapters = [], progress, runni
                   <span>{s.done}/{s.total} · {meta.hint}</span>
                   <span className="font-mono">{s.percent}%</span>
                 </div>
+                {s.todo > 0 && s.items?.length ? (
+                  <p className="m-0 line-clamp-2 text-[10px] leading-relaxed text-[var(--fg-4)]" title={s.items.join('\n')}>
+                    缺：{s.items.slice(0, 3).join('；')}{s.todo > 3 ? ' 等 ' + s.todo + ' 项' : ''}
+                  </p>
+                ) : null}
                 {readOnly || !canGenerate || features.buttons?.generate === false ? null : blocked ? (
                   <>
                     <Button variant="secondary" size="sm" className="mt-0.5 w-full" disabled title={blocked}>
@@ -282,7 +287,7 @@ export default function WorkflowPage({ projectId, chapters = [], progress, runni
           <div className="flex items-center gap-2">
             <Workflow size={14} className="text-[var(--fg-3)]" />
             <h3 className="m-0 text-[13px] font-semibold text-[var(--fg-2)]">工作流结构</h3>
-            <Badge tone={isRunningHub ? 'info' : 'neutral'}>{isRunningHub ? 'RunningHub 云端' : '本地 ComfyUI'}</Badge>
+            <Badge tone={isRunningHub ? 'info' : 'neutral'}>{isRunningHub ? '云端渲染' : '本地 ComfyUI'}</Badge>
           </div>
           <Segmented value={kind} onChange={setKind} options={KIND_OPTIONS} />
         </div>

@@ -129,6 +129,11 @@ export default function ProgressPanel({ progress, activeJob, compact = false, cl
                   <span>未开始</span>
                 )}
               </div>
+              {s.todo > 0 && s.items?.length ? (
+                <p className="m-0 line-clamp-2 text-[9.5px] leading-relaxed text-[var(--fg-4)]" title={s.items.join('\n')}>
+                  缺：{s.items.slice(0, 3).join('；')}{s.todo > 3 ? ' 等 ' + s.todo + ' 项' : ''}
+                </p>
+              ) : null}
             </div>
           );
         })}

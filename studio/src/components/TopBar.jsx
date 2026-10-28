@@ -71,6 +71,14 @@ export default function TopBar({ onHome, onSettings, onAdmin, serverInfo, auth, 
             <span className={clsx('h-1.5 w-1.5 rounded-full', online ? 'bg-[var(--success)]' : 'bg-[var(--danger)]', online && 'animate-pulse-soft')} />
             {online ? (publicMode ? '服务正常' : '主服务在线') : '服务不可用'}
           </span>
+          {serverInfo?.render ? (
+            <span
+              className="hidden h-8 items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 text-[11px] text-[var(--fg-3)] sm:inline-flex"
+              title={'当前执行端：' + serverInfo.render.label + '；有效并发 ' + serverInfo.render.concurrency}
+            >
+              {serverInfo.render.label} · 并发 {serverInfo.render.concurrency}
+            </span>
+          ) : null}
           {publicMode ? (
             <span className="hidden h-8 items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 text-[11px] text-[var(--fg-3)] sm:inline-flex">
               <Lock size={12} />

@@ -191,7 +191,7 @@ export default function SettingsPage({ onBack, publicMode = false }) {
         />
         <Section icon={Cloud} title="生成服务" description="由管理员配置">
           <div className="grid gap-2.5 rounded-xl border border-[var(--line)] bg-white/[0.015] p-3.5 text-[11.5px] sm:grid-cols-2">
-            <ReadonlyRow label="执行端" value={isRunningHub ? 'RunningHub 云端' : '原生 ComfyUI'} />
+            <ReadonlyRow label="执行端" value={isRunningHub ? '云端渲染' : '原生 ComfyUI'} />
             <ReadonlyRow label="云端版本" value={isRunningHub ? cfg.comfyui.tier || 'standard' : '—'} />
             <ReadonlyRow label="LLM 模型" value={cfg.llm.model || '—'} />
             <ReadonlyRow label="视觉输入" value={cfg.llm.vision ? '已开启' : '未开启'} />
@@ -249,6 +249,13 @@ export default function SettingsPage({ onBack, publicMode = false }) {
 
       <Section icon={Server} title="ComfyUI 服务" description="生成图片与视频的执行端">
         <Segmented value={cfg.comfyui.provider || 'native'} onChange={(v) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, provider: v } })} options={PROVIDER_OPTIONS} />
+        <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-4)]">
+          当前执行端：<b className="text-[var(--fg-2)]">{isRunningHub ? '云端渲染' : '本地 ComfyUI'}</b>
+          {' · '}有效并发 <b className="text-[var(--fg-2)]">{isRunningHub ? Math.max(1, Number(cfg.generation?.runninghubConcurrency) || 1) : 1}</b>
+          {isRunningHub
+            ? '（由下方「任务并发数量」控制，保存后立即生效）'
+            : '（本地 ComfyUI 单队列串行，固定为 1；切到云端后按任务并发数量调度）'}
+        </p>
 
         {!isRunningHub ? (
           <>
@@ -276,13 +283,13 @@ export default function SettingsPage({ onBack, publicMode = false }) {
         ) : (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Api-key" hint="RunningHub 云端执行，无需本地显卡。">
+              <Field label="Api-key" hint="云端渲染执行，无需本地显卡。">
                 <div className="flex gap-2">
                   <Input
                     type="password"
                     value={cfg.comfyui.apiKey || ''}
                     onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, apiKey: e.target.value } })}
-                    placeholder="请输入 RunningHub Api-key"
+                    placeholder="请输入云端渲染 Api-key"
                     className="flex-1"
                   />
                   <Button
@@ -521,7 +528,7 @@ export default function SettingsPage({ onBack, publicMode = false }) {
           </Field>
         </div>
         <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-4)]">
-          超出的章节会显示「等待 Agent 槽位」，不会占用模型请求，也不会触发模型停滞看门狗。渲染仍由 RunningHub 队列按并发数控制。
+          超出的章节会显示「等待 Agent 槽位」，不会占用模型请求，也不会触发模型停滞看门狗。渲染仍由云端渲染队列按并发数控制。
         </p>
       </Section>
 

@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { Projects, Assets, Shots, Chapters, ensureChapterPoster, ensureProjectDirs, withWriteContext } from '@/lib/core/index.js';
 import { listAdminUserIds } from '@/lib/core/auth.js';
-import { splitNovelIntoChapters } from '@/lib/shared/index.js';
+import { splitNovelIntoChapters, PROJECT_TYPES } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +15,8 @@ export async function GET(req) {
   // 访客只能看到管理员的作品（展示库）；登录用户看到自己的 + 管理员的（db 层已按角色过滤）
   const isGuest = req.headers.get('x-ic-guest') === '1';
   const adminIds = new Set(listAdminUserIds());
-  const all = isGuest
+  const type = url.searchParams.get('type') || '';
+  let all = isGuest
     ? Projects.list().filter((p) => adminIds.has(p.owner_id) && p.is_public !== false)
     : Projects.list().filter(
         (p) =>
@@ -24,6 +25,8 @@ export async function GET(req) {
           p.owner_id === userId ||
           (adminIds.has(p.owner_id) && p.is_public !== false),
       );
+  // 首页左侧菜单按类型分栏：指定 type 时只列该类型的项目（非法 type 直接忽略，避免报错打扰加载）
+  if (type && PROJECT_TYPES.includes(type)) all = all.filter((p) => (p.type || 'agent') === type);
   const start = (page - 1) * pageSize;
   const items = await Promise.all(all.slice(start, start + pageSize).map(async (p) => {
     const shots = Shots.list(p.id);
@@ -34,7 +37,7 @@ export async function GET(req) {
       poster = firstDone ? await ensureChapterPoster(p.id, firstChapter.id, firstDone) : '';
     }
     return {
-      id: p.id, name: p.name, style: p.style, status: p.status,
+      id: p.id, name: p.name, type: p.type || 'agent', style: p.style, status: p.status,
       owner_id: p.owner_id || '',
       is_public: p.is_public !== false,
       assetCount: Assets.list(p.id).length, shotCount: shots.length,
@@ -62,6 +65,7 @@ export async function POST(req) {
       // 项目级分辨率 / 宽高比枚举、自定义宽高区间（分镜会继承它出片）：底层抛错，这里翻成 400
       if (e && e.code === 'BAD_PROJECT_ENUM') return NextResponse.json({ error: e.message }, { status: 400 });
       if (e && e.code === 'BAD_PROJECT_DIM') return NextResponse.json({ error: e.message }, { status: 400 });
+      if (e && e.code === 'BAD_PROJECT_TYPE') return NextResponse.json({ error: e.message }, { status: 400 });
       throw e;
     }
   });

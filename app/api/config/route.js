@@ -1,6 +1,6 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
-import { loadConfig, saveConfig } from '@/lib/core/index.js';
+import { loadConfig, saveConfig, Jobs, Queue } from '@/lib/core/index.js';
 import { authenticateStrict, resetAuthModeCache } from '@/lib/core/auth.js';
 import { resetModerationCache } from '@/lib/core/moderation.js';
 
@@ -57,6 +57,24 @@ export async function PUT(req) {
   const SECTIONS = ['server', 'comfyui', 'llm', 'hardware', 'generation', 'workflows', 'auth', 'billing', 'features', 'moderation', 'debug'];
   if (!body || typeof body !== 'object' || Array.isArray(body) || !SECTIONS.some((k) => k in body)) {
     return NextResponse.json({ error: '配置内容为空，已拒绝写入' }, { status: 400 });
+  }
+  // 切换执行端（本地 ComfyUI ↔ 云端渲染）时不允许有活动任务：
+  // 否则旧队列条目会留在 DB 里、新 provider 的调度器不接管，任务会永远排队；
+  // 运行中的任务也可能一半走本地、一半走云端。
+  const oldCfg = loadConfig();
+  const oldProvider = oldCfg?.comfyui?.provider === 'runninghub' ? 'runninghub' : 'native';
+  const nextProvider = body?.comfyui?.provider === 'runninghub' ? 'runninghub' : 'native';
+  if (oldProvider !== nextProvider) {
+    const activeJobs = Jobs.list().filter((j) => j.status === 'running' || j.status === 'queued').length;
+    const activeQueue = Queue.running().length + Queue.waiting().length;
+    if (activeJobs || activeQueue) {
+      return NextResponse.json({
+        error: '当前还有 ' + activeJobs + ' 个运行中任务、' + activeQueue + ' 个排队条目。切换执行端会混用本地与云端，请先停止任务或等完成后再切换。',
+        code: 'PROVIDER_BUSY',
+      }, { status: 409 });
+    }
+    // 没有活动任务时清掉旧 provider 遗留的队列条目，避免切换后永远排队。
+    try { Queue.cancelAllPending('切换执行端'); } catch { /* 忽略 */ }
   }
   const saved = saveConfig(body);
   // auth.enabled / moderation.enabled 可能刚被改过：立即清缓存，不用等下一拍。

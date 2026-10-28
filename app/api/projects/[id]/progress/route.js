@@ -9,11 +9,11 @@ export const dynamic = 'force-dynamic';
 
 const IMAGE_ASSET_CATEGORIES = ['character', 'scene', 'prop', 'other'];
 
-function stageOf(todo, total) {
+function stageOf(todo, total, items = []) {
   const t = Math.max(0, Number(total) || 0);
   const td = Math.max(0, Math.min(t || todo, Number(todo) || 0));
   const done = Math.max(0, t - td);
-  return { total: t, done, todo: td, percent: t ? Math.round((done / t) * 100) : 0 };
+  return { total: t, done, todo: td, percent: t ? Math.round((done / t) * 100) : 0, items };
 }
 
 export async function GET(_req, { params }) {
@@ -32,10 +32,10 @@ export async function GET(_req, { params }) {
 
   const llmTotal = imageAssets.length + shots.length + (shots.length ? 0 : 1);
   const stages = {
-    llm: stageOf(pending.llm?.todo || 0, llmTotal),
-    image: stageOf(pending.image?.todo || 0, imageAssets.length),
-    tts: stageOf(pending.tts?.todo || 0, chars.length),
-    video: stageOf(pending.video?.todo || 0, shots.length),
+    llm: stageOf(pending.llm?.todo || 0, llmTotal, pending.llm?.items || []),
+    image: stageOf(pending.image?.todo || 0, imageAssets.length, pending.image?.items || []),
+    tts: stageOf(pending.tts?.todo || 0, chars.length, pending.tts?.items || []),
+    video: stageOf(pending.video?.todo || 0, shots.length, pending.video?.items || []),
   };
 
   const chapterItems = chapters.map((c) => {

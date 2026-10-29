@@ -1,35 +1,56 @@
 import { useEffect, useState } from 'react';
+import { Image as ImageIcon, LayoutGrid, Mic2, Music4, Sparkles, UserRound, Video } from 'lucide-react';
 import { ToastProvider } from './components/toast.jsx';
 import BackToTop from './components/BackToTop.jsx';
 import TopBar from './components/TopBar.jsx';
 import ProjectsPage from './pages/ProjectsPage.jsx';
 import ProjectWorkspace from './pages/ProjectWorkspace.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
+import DigitalHumanPage from './pages/DigitalHumanPage.jsx';
+import ImageGenPage from './pages/ImageGenPage.jsx';
+import VideoGenPage from './pages/VideoGenPage.jsx';
+import MusicGenPage from './pages/MusicGenPage.jsx';
+import VoiceDesignPage from './pages/VoiceDesignPage.jsx';
 import { useServerInfo } from './lib/hooks.js';
 
-function parseView() {
+// 左侧菜单：与经典界面保持一致，每种创作类型对应一个独立工作台。
+const MENU = [
+  { id: 'projects', label: '作品集', icon: LayoutGrid },
+  { id: 'agent', label: 'Agent无限创作', icon: Sparkles },
+  { id: 'digital_human', label: '数字人', icon: UserRound },
+  { id: 'image', label: '图片生成', icon: ImageIcon },
+  { id: 'video', label: '视频生成', icon: Video },
+  { id: 'music', label: '音乐生成', icon: Music4 },
+  { id: 'tts', label: '音色设计', icon: Mic2 },
+];
+
+function parseState() {
   const p = new URLSearchParams(window.location.search);
-  const type = p.get('view');
-  if (type === 'project') {
-    const id = p.get('id');
-    if (id) return { type: 'project', id, tab: p.get('tab') || 'chapters' };
+  const rawMode = p.get('mode');
+  const mode = MENU.some((m) => m.id === rawMode) ? rawMode : 'agent';
+  if (p.get('view') === 'project' && mode === 'agent' && p.get('id')) {
+    return { mode, view: { type: 'project', id: p.get('id'), tab: p.get('tab') || 'chapters' } };
   }
-  if (type === 'settings') return { type: 'settings' };
-  return { type: 'list' };
+  if (p.get('view') === 'settings') return { mode, view: { type: 'settings' } };
+  return { mode, view: { type: 'list' } };
 }
 
-function urlFor(view) {
-  if (view.type === 'project') {
-    let u = '/?view=project&id=' + encodeURIComponent(view.id);
-    if (view.tab) u += '&tab=' + encodeURIComponent(view.tab);
-    return u;
+function urlFor(state) {
+  const q = new URLSearchParams();
+  if (state.mode !== 'agent') q.set('mode', state.mode);
+  if (state.view.type === 'project') {
+    q.set('view', 'project');
+    q.set('id', state.view.id);
+    if (state.view.tab) q.set('tab', state.view.tab);
+  } else if (state.view.type === 'settings') {
+    q.set('view', 'settings');
   }
-  if (view.type === 'settings') return '/?view=settings';
-  return '/';
+  const s = q.toString();
+  return '/' + (s ? '?' + s : '');
 }
 
 export default function App() {
-  const [view, setView] = useState({ type: 'list' });
+  const [state, setState] = useState({ mode: 'agent', view: { type: 'list' } });
   const server = useServerInfo();
   const [features, setFeatures] = useState(null);
   const [ready, setReady] = useState(false);
@@ -50,7 +71,7 @@ export default function App() {
         }
       });
 
-    const sync = () => setView(parseView());
+    const sync = () => setState(parseState());
     sync();
     window.addEventListener('popstate', sync);
     return () => {
@@ -59,24 +80,37 @@ export default function App() {
     };
   }, []);
 
+  const title = (MENU.find((m) => m.id === state.mode) || {}).label || '无限创作 Studio';
+
   useEffect(() => {
-    document.title = view.type === 'project' ? '项目 · 无限创作 Studio' : view.type === 'settings' ? '设置 · 无限创作 Studio' : '无限创作 Studio';
-  }, [view]);
+    if (state.view.type === 'project') document.title = '项目 · 无限创作 Studio';
+    else if (state.view.type === 'settings') document.title = '设置 · 无限创作 Studio';
+    else document.title = title + ' · 无限创作 Studio';
+  }, [state, title]);
 
   const go = (v) => {
     window.history.pushState(null, '', urlFor(v));
-    setView(v);
+    setState(v);
   };
 
+  const goMode = (mode) => go({ mode, view: { type: 'list' } });
+
   const setTab = (tab) => {
-    setView((v) => {
-      const nv = { ...v, tab };
+    setState((v) => {
+      const nv = { ...v, view: { ...v.view, tab } };
       window.history.replaceState(null, '', urlFor(nv));
       return nv;
     });
   };
 
-  const wide = view.type === 'project';
+  const openProject = (id) => go({ mode: 'agent', view: { type: 'project', id, tab: 'chapters' } });
+  // 所有项目列表中：Agent 项目进项目页，其余类型切到对应工作台（与经典界面一致）
+  const openFromAll = (project) => {
+    if ((project.type || 'agent') === 'agent' || !project.type) openProject(project.id);
+    else goMode(project.type);
+  };
+
+  const publicMode = !!server.publicMode;
 
   if (!ready) {
     return (
@@ -90,38 +124,87 @@ export default function App() {
     <ToastProvider>
       <div className="relative z-[1] flex min-h-screen flex-col">
         <TopBar
-          view={view}
-          onHome={() => go({ type: 'list' })}
-          onSettings={() => go({ type: 'settings' })}
+          view={state.view}
+          onHome={() => goMode('agent')}
+          onSettings={() => go({ ...state, view: { type: 'settings' } })}
           serverInfo={server}
           features={features || {}}
           showSettings={!features || features.settings !== false}
         />
-        <main className={wide ? 'mx-auto w-full max-w-[1360px] flex-1 px-5 py-6' : 'mx-auto w-full max-w-[1200px] flex-1 px-5 py-8'}>
-          {view.type === 'list' ? (
-            <ProjectsPage
-              publicMode={server.publicMode}
-              features={features || {}}
-              onOpen={(id) => go({ type: 'project', id, tab: 'chapters' })}
-            />
-          ) : null}
-          {view.type === 'project' ? (
-            <ProjectWorkspace
-              key={view.id}
-              id={view.id}
-              features={features || {}}
-              initialTab={view.tab}
-              onBack={() => go({ type: 'list' })}
-              onTabChange={setTab}
-            />
-          ) : null}
-          {view.type === 'settings' ? (
-            <SettingsPage onBack={() => go({ type: 'list' })} publicMode={server.publicMode} />
-          ) : null}
+
+        <main className="mx-auto w-full max-w-[1360px] flex-1 px-5 py-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+            <aside className="w-full shrink-0 lg:sticky lg:top-[84px] lg:w-[212px]">
+              <nav className="panel p-2">
+                <p className="section-label px-2.5 pb-1.5 pt-2">创作菜单</p>
+                <div className="flex gap-0.5 overflow-x-auto lg:flex-col lg:overflow-visible">
+                  {MENU.map((m) => {
+                    const Icon = m.icon;
+                    const active = state.mode === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        data-active={active}
+                        className="nav-item w-auto shrink-0 lg:w-full"
+                        onClick={() => goMode(m.id)}
+                      >
+                        <Icon size={15} className={active ? 'text-[var(--accent)]' : 'text-[var(--fg-3)]'} />
+                        <span className="flex-1 whitespace-nowrap text-left">{m.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </nav>
+            </aside>
+
+            <div className="min-w-0 flex-1">
+              {state.view.type === 'settings' ? (
+                <SettingsPage onBack={() => go({ ...state, view: { type: 'list' } })} publicMode={publicMode} />
+              ) : null}
+
+              {state.view.type !== 'settings' && state.mode === 'projects' ? (
+                <ProjectsPage
+                  showCreate={false}
+                  showTypeFilter
+                  publicMode={publicMode}
+                  features={features || {}}
+                  onOpen={(p) => openFromAll(p)}
+                />
+              ) : null}
+
+              {state.view.type !== 'settings' && state.mode === 'agent' && state.view.type === 'list' ? (
+                <ProjectsPage
+                  type="agent"
+                  publicMode={publicMode}
+                  features={features || {}}
+                  onOpen={(p) => openProject(p.id)}
+                />
+              ) : null}
+
+              {state.view.type !== 'settings' && state.mode === 'agent' && state.view.type === 'project' ? (
+                <ProjectWorkspace
+                  key={state.view.id}
+                  id={state.view.id}
+                  features={features || {}}
+                  initialTab={state.view.tab}
+                  onBack={() => go({ mode: 'agent', view: { type: 'list' } })}
+                  onTabChange={setTab}
+                />
+              ) : null}
+
+              {state.view.type !== 'settings' && state.mode === 'digital_human' ? <DigitalHumanPage /> : null}
+              {state.view.type !== 'settings' && state.mode === 'image' ? <ImageGenPage /> : null}
+              {state.view.type !== 'settings' && state.mode === 'video' ? <VideoGenPage /> : null}
+              {state.view.type !== 'settings' && state.mode === 'music' ? <MusicGenPage /> : null}
+              {state.view.type !== 'settings' && state.mode === 'tts' ? <VoiceDesignPage /> : null}
+            </div>
+          </div>
         </main>
+
         <footer className="mx-auto w-full max-w-[1360px] px-5 pb-6 pt-2">
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-4 text-[11px] text-[var(--fg-4)]">
-            {server.publicMode ? (
+            {publicMode ? (
               <>
                 <span>托管服务 · 数据由服务端统一保存</span>
                 <span>无限创作 Studio</span>

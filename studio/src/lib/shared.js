@@ -21,6 +21,8 @@ export {
   REFERENCE_IMAGE_MAX_BYTES,
   isVariantAssetCategory,
   SHOT_STATUS,
+  PROJECT_TYPES,
+  PROJECT_TYPE_LABEL,
 } from '@shared';
 
 // 下拉展示用：值 → 显示名，与主界面保持同一份值域（不把 1080P/2K/4K 放进下拉）

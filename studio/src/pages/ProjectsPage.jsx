@@ -8,9 +8,11 @@ import {
   STYLE_CUSTOM,
   resolveStyle,
   VIDEO_RESOLUTION_CUSTOM,
+  PROJECT_TYPES,
+  PROJECT_TYPE_LABEL,
 } from '../lib/shared.js';
 import { RESOLUTION_SELECT_ITEMS, RATIO_SELECT_ITEMS, MetaItem } from '../components/visuals.jsx';
-import { Button, EmptyState, Field, Input, Select, Skeleton, StatusPill, Switch, Textarea } from '../components/ui.jsx';
+import { Badge, Button, EmptyState, Field, Input, Select, Skeleton, StatusPill, Switch, Textarea } from '../components/ui.jsx';
 import { Drawer, FormSection } from '../components/overlays.jsx';
 import ReferencePicker from '../components/ReferencePicker.jsx';
 import { useToast } from '../components/toast.jsx';
@@ -22,8 +24,10 @@ const QUEUE_KIND_LABEL = {
   tts: '音色', voice: '音色', music: '背景音乐', export: '合成/导出',
 };
 
-export default function ProjectsPage({ onOpen, publicMode = false, features = {} }) {
+export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false, showCreate = true, publicMode = false, features = {} }) {
   const toast = useToast();
+  const [typeFilter, setTypeFilter] = useState('');
+  const typeParam = showTypeFilter ? typeFilter : type;
   const [projects, setProjects] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
   const [loading, setLoading] = useState(true);
@@ -39,11 +43,14 @@ export default function ProjectsPage({ onOpen, publicMode = false, features = {}
   const [form, setForm] = useState({ name: '', novel: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true });
   const [refs, setRefs] = useState([]);
 
+  const query = (page) =>
+    '/api/projects?page=' + page + '&pageSize=' + PAGE_SIZE + (typeParam ? '&type=' + encodeURIComponent(typeParam) : '');
+
   const load = useCallback(() => {
     setLoading(true);
     pageRef.current = 1;
     return api
-      .get('/api/projects?page=1&pageSize=' + PAGE_SIZE)
+      .get(query(1))
       .then((r) => {
         setProjects(r.items || []);
         setMeta({ total: r.total || 0 });
@@ -51,14 +58,14 @@ export default function ProjectsPage({ onOpen, publicMode = false, features = {}
       })
       .catch((e) => toast.error(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [typeParam]);
 
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     const next = pageRef.current + 1;
     return api
-      .get('/api/projects?page=' + next + '&pageSize=' + PAGE_SIZE)
+      .get(query(next))
       .then((r) => {
         pageRef.current = next;
         setProjects((prev) => [...prev, ...(r.items || [])]);
@@ -66,7 +73,7 @@ export default function ProjectsPage({ onOpen, publicMode = false, features = {}
       })
       .catch((e) => toast.error(e.message))
       .finally(() => setLoadingMore(false));
-  }, [loadingMore, hasMore]);
+  }, [loadingMore, hasMore, typeParam]);
 
   useEffect(() => {
     load();
@@ -172,19 +179,29 @@ export default function ProjectsPage({ onOpen, publicMode = false, features = {}
       <section className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="eyebrow">Workspace</p>
-          <h1 className="display-title mt-2">作品集</h1>
+          <h1 className="display-title mt-2">{type === 'agent' ? 'Agent无限创作' : '作品集'}</h1>
           <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-[var(--fg-3)]">
-            {publicMode
-              ? '一段小说交给 Agent，拆章节、建素材、写分镜、出视频。项目数据保存在云端。'
-              : '一段小说交给 Agent，拆章节、建素材、写分镜、出视频。所有项目与经典界面共用同一份数据。'}
+            {type === 'agent'
+              ? '一段小说交给 Agent，拆章节、建素材、写分镜、出视频。所有项目与经典界面共用同一份数据。'
+              : '按创作类型归档全部项目，点击非 Agent 项目会直接进入对应工作台。'}
           </p>
         </div>
-        {features.createProject === false ? null : (
-          <Button variant="primary" size="md" onClick={openCreate}>
-            <Plus size={15} />
-            新建项目
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {showTypeFilter ? (
+            <Select
+              className="w-40"
+              value={typeFilter}
+              onChange={setTypeFilter}
+              items={[{ value: '', label: '全部分类' }, ...PROJECT_TYPES.map((t) => ({ value: t, label: PROJECT_TYPE_LABEL[t] || t }))]}
+            />
+          ) : null}
+          {showCreate && features.createProject !== false ? (
+            <Button variant="primary" size="md" onClick={openCreate}>
+              <Plus size={15} />
+              新建项目
+            </Button>
+          ) : null}
+        </div>
       </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -213,7 +230,7 @@ export default function ProjectsPage({ onOpen, publicMode = false, features = {}
               <button
                 key={j.id}
                 type="button"
-                onClick={() => onOpen(j.projectId)}
+                onClick={() => onOpen({ id: j.projectId })}
                 className="flex min-w-0 items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
               >
                 <span className="flex min-w-0 items-center gap-2 text-[11.5px] text-[var(--fg-3)]">
@@ -254,7 +271,7 @@ export default function ProjectsPage({ onOpen, publicMode = false, features = {}
           <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
             {projects.map((p) => (
               <article key={p.id} className="panel panel-hover group relative overflow-hidden">
-                <button type="button" onClick={() => onOpen(p.id)} className="block w-full text-left">
+                <button type="button" onClick={() => onOpen(p)} className="block w-full text-left">
                   <div className="media-hover relative aspect-video overflow-hidden bg-black/40">
                     {p.poster ? (
                       <img src={fileUrl(p.id, p.poster)} alt={p.name} loading="lazy" className="h-full w-full object-cover" />
@@ -273,7 +290,12 @@ export default function ProjectsPage({ onOpen, publicMode = false, features = {}
                     </span>
                   </div>
                   <div className="flex flex-col gap-2 p-3.5">
-                    <span className="truncate text-[14px] font-medium text-[var(--fg)]">{p.name}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-[14px] font-medium text-[var(--fg)]">{p.name}</span>
+                      {showTypeFilter ? (
+                        <Badge className="shrink-0">{PROJECT_TYPE_LABEL[p.type] || p.type || 'Agent无限创作'}</Badge>
+                      ) : null}
+                    </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-2.5 text-[11.5px] text-[var(--fg-3)]">
                         <MetaItem icon={Layers}>{p.assetCount ?? 0}</MetaItem>
@@ -301,13 +323,13 @@ export default function ProjectsPage({ onOpen, publicMode = false, features = {}
             <EmptyState
               icon={Clapperboard}
               title="还没有项目"
-              description="粘贴一段小说或一句话描述故事，Agent 会从章节骨架开始，一路做到成片。"
+              description={type === 'agent' ? '粘贴一段小说或一句话描述故事，Agent 会从章节骨架开始，一路做到成片。' : '这里会汇总全部类型的项目；现在还没有任何项目。'}
               action={
-                features.createProject === false ? null : (
+                showCreate && features.createProject !== false ? (
                   <Button variant="primary" size="md" onClick={openCreate}>
                     <Plus size={15} /> 新建第一个项目
                   </Button>
-                )
+                ) : null
               }
             />
           </div>

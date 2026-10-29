@@ -17,7 +17,7 @@ import { ToastProvider } from './toast';
 
 // 首页左侧菜单：不同类型对应不同工作台页面。
 const MENU = [
-  { id: 'projects', label: '所有项目' },
+  { id: 'projects', label: '作品集' },
   { id: 'agent', label: 'Agent无限创作' },
   { id: 'digital_human', label: '数字人' },
   { id: 'image', label: '图片生成' },

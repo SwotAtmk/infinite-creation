@@ -105,21 +105,18 @@ CPU：不挑处理器
 # 截图演示
 
 1. 项目首页
-   ![项目首页](images/j1.jpg)
+   ![项目首页](images/j1.png)
 2. 章节管理
-   ![章节管理](images/j2.jpg)
+   ![章节管理](images/j2.png)
 3. 服务配置
-   ![服务配置](images/j3.jpg)
-4. 技能管理
-   ![技能管理](images/j4.png)
-5. 资产管理
-   ![资产管理](images/j5.jpg)
-6. 运行日志
-   ![运行日志](images/j6.png)
-7. 分镜审查
-   ![分镜审查](images/j7.png)
-8. 导出成片
-   ![导出成片](images/j8.png)
+   ![服务配置](images/j3.png)
+4. 素材库
+   ![素材库](images/j4.png)
+5. 分镜审查
+   ![分镜审查](images/j5.png)
+6. 导出成片
+   ![导出成片](images/j6.png)
+
 
 ## 技术栈
 
@@ -464,6 +461,7 @@ pnpm test   # node --test tests/unit.test.mjs
 - [OpenClaude：https://github.com/Gitlawb/openclaude](https://github.com/Gitlawb/openclaude) 提供了 Agent 内核和工作流管理功能
 - [Comfy-Org/ComfyUI](https://github.com/Comfy-Org/ComfyUI) 提供了 ComfyUI 工作流和模型架构
 - [deepseek](https://www.deepseek.com/) 感谢Deepseek提供了 deepseek-v4-flash-vision-exp 模型
+- 参考开源Skill技能：[short-drama](https://github.com/0xsline/short-drama)、[manju-laoli-skill](https://github.com/lixiaoxiao9888-create/manju-laoli-skill)
 
 感谢这些项目为我提供了帮助，使项目能够快速迭代和改进。
 

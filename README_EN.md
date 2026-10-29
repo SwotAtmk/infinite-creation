@@ -112,22 +112,18 @@ Hard disk: At least 150G of space is required
 
 # Screenshots
 
-1. Project Home
-   ![Project Home](images/j1.jpg)
+1. Project Homepage
+   ![Project Homepage](images/j1.png)
 2. Chapter Management
-   ![Chapter Management](images/j2.jpg)
+   ![Chapter Management](images/j2.png)
 3. Service Configuration
-   ![Service Configuration](images/j3.jpg)
-4. Skill Management
-   ![Skill Management](images/j4.png)
-5. Asset Management
-   ![Asset Management](images/j5.jpg)
-6. Run Logs
-   ![Run Logs](images/j6.png)
-7. Shot Review
-   ![Shot Review](images/j7.png)
-8. Export Final Film
-   ![Export Final Film](images/j8.png)
+   ![Service Configuration](images/j3.png)
+4. Material Library
+   ![Material Library](images/j4.png)
+5. Storyboard Review
+   ![Storyboard Review](images/j5.png)
+6. Export as a finished product
+   ![Export as a finished product](images/j6.png)
 
 ## Tech Stack
 
@@ -433,6 +429,7 @@ I've collected many useful little tools there — interested in learning more?
 - [OpenClaude: https://github.com/Gitlawb/openclaude](https://github.com/Gitlawb/openclaude) — the Agent kernel and workflow management
 - [Comfy-Org/ComfyUI](https://github.com/Comfy-Org/ComfyUI) — the ComfyUI workflows and model architecture
 - [deepseek](https://www.deepseek.com/) — thanks to DeepSeek for the deepseek-v4-flash-vision-exp model
+- Reference Open-Source Skills: [short-drama](https://github.com/0xsline/short-drama)、[manju-laoli-skill](https://github.com/lixiaoxiao9888-create/manju-laoli-skill)
 
 Thank you to these projects for enabling rapid iteration and improvement.
 

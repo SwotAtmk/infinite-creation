@@ -17,6 +17,7 @@
     "start": "NODE_ENV=production node server.js",
     "install:skills": "node scripts/install-skills.mjs",
     "install:ic-writer": "node scripts/install-writer-skill.mjs",
+    "install:short-drama-packs": "node scripts/install-short-drama-packs.mjs",
     "test": "node --test --test-force-exit \"tests/*.test.mjs\"",
     "docker:migrate": "node scripts/docker-migrate.mjs"
   },

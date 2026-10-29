@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { BookOpen, Clapperboard, GripVertical, Pencil, Play, Plus, SlidersHorizontal, Square, X } from 'lucide-react';
+import { BookOpen, Clapperboard, FileText, GripVertical, Pencil, Play, Plus, SlidersHorizontal, Square, X } from 'lucide-react';
 import { api, uploadForm } from '../lib/api.js';
 import { fileUrl } from '../lib/format.js';
 import { Button, EmptyState, Field, Input, Progress, StatusPill, Textarea } from '../components/ui.jsx';
@@ -8,6 +8,7 @@ import { BusyOverlay, Modal } from '../components/overlays.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import ReferencePicker from '../components/ReferencePicker.jsx';
 import ChapterOps from '../components/ChapterOps.jsx';
+import ScriptDialog from '../components/ScriptDialog.jsx';
 import { useToast } from '../components/toast.jsx';
 
 const GEN_LABEL = { empty: '无分镜', pending: '待生成', running: '生成中', done: '完成', failed: '失败' };
@@ -27,6 +28,7 @@ export default function ChaptersPage({ projectId, chapters, onRefresh, running, 
   const [refs, setRefs] = useState([]);
   const [savedRefs, setSavedRefs] = useState([]);
   const [operating, setOperating] = useState(null);
+  const [scripting, setScripting] = useState(null);
   const [submitting, setSubmitting] = useState(null);
   const [stopping, setStopping] = useState(false);
   const isChapterRunning = (title) =>
@@ -317,6 +319,10 @@ export default function ChaptersPage({ projectId, chapters, onRefresh, running, 
                       </span>
                       <span>{isRunningChapter ? '正在生成' : pct ? pct + '%' : ''}</span>
                     </div>
+                    <div className="flex items-center gap-1 text-[10.5px] text-[var(--fg-4)]">
+                      <FileText size={10} className="opacity-70" />
+                      {c.script ? c.script.length.toLocaleString() + ' 字剧本' : '无剧本'}
+                    </div>
                   </div>
 
                   {canEdit || canGenerate ? (
@@ -341,6 +347,9 @@ export default function ChaptersPage({ projectId, chapters, onRefresh, running, 
                       ) : null}
                       {canEdit ? (
                         <>
+                          <Button variant="secondary" size="iconSm" title="章节剧本" aria-label="章节剧本" onClick={() => setScripting(c)}>
+                            <FileText size={13} />
+                          </Button>
                           <Button variant="secondary" size="iconSm" title="编辑章节" aria-label="编辑章节" onClick={() => openEdit(c)}>
                             <Pencil size={13} />
                           </Button>
@@ -456,6 +465,17 @@ export default function ChaptersPage({ projectId, chapters, onRefresh, running, 
       </Modal>
 
       <BusyOverlay show={!!busy} text={busy} />
+
+      {scripting ? (
+        <ScriptDialog
+          key={scripting.id}
+          projectId={projectId}
+          chapter={scripting}
+          running={isChapterRunning(scripting.title)}
+          onRefresh={onRefresh}
+          onClose={() => setScripting(null)}
+        />
+      ) : null}
     </div>
   );
 }

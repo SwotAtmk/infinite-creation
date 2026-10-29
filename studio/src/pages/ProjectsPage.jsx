@@ -40,7 +40,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
   const [busy, setBusy] = useState(false);
   const [activity, setActivity] = useState(null);
 
-  const [form, setForm] = useState({ name: '', novel: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true });
+  const [form, setForm] = useState({ name: '', novel: '', scriptMode: 'auto', script: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true });
   const [refs, setRefs] = useState([]);
 
   const query = (page) =>
@@ -102,11 +102,14 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
 
   async function create() {
     if (!form.name.trim() || !form.novel.trim()) return;
+    if (form.scriptMode === 'own' && !form.script.trim()) return;
     setBusy(true);
     try {
       const p = await api.post('/api/projects', {
         name: form.name.trim(),
         novel: form.novel,
+        auto_script: form.scriptMode === 'auto',
+        script: form.scriptMode === 'own' ? form.script : '',
         style: resolveStyle(form.style, form.customStyle),
         video_resolution: form.res,
         video_aspect_ratio: form.ratio,
@@ -144,7 +147,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
   }
 
   function resetForm() {
-    setForm({ name: '', novel: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true });
+    setForm({ name: '', novel: '', scriptMode: 'auto', script: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true });
     setRefs([]);
   }
 
@@ -159,7 +162,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
     }
   }
 
-  const canCreate = !!form.name.trim() && !!form.novel.trim();
+  const canCreate = !!form.name.trim() && !!form.novel.trim() && (form.scriptMode === 'auto' || !!form.script.trim());
 
   useEffect(() => {
     let alive = true;
@@ -379,6 +382,32 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
                 className="min-h-[190px]"
               />
             </Field>
+            <Field
+              label="剧本"
+              hint={form.scriptMode === 'auto'
+                ? 'Agent 会先从小说写剧本，再按剧本拆分镜；创建后也可在章节「剧本」里修改。'
+                : '多章请用「第N章」标题分隔，并与小说章节一一对应；单章可直接粘贴整段剧本。'}
+            >
+              <div className="flex flex-wrap gap-1.5">
+                <StyleChip active={form.scriptMode === 'auto'} onClick={() => setForm({ ...form, scriptMode: 'auto' })}>
+                  自动生成剧本
+                </StyleChip>
+                <StyleChip active={form.scriptMode === 'own'} onClick={() => setForm({ ...form, scriptMode: 'own' })}>
+                  我已有剧本
+                </StyleChip>
+              </div>
+            </Field>
+            {form.scriptMode === 'own' ? (
+              <Field label="剧本内容" required hint={form.script ? form.script.length.toLocaleString() + ' 字' : undefined}>
+                <Textarea
+                  rows={8}
+                  value={form.script}
+                  onChange={(e) => setForm({ ...form, script: e.target.value })}
+                  placeholder="粘贴现成剧本…"
+                  className="min-h-[150px]"
+                />
+              </Field>
+            ) : null}
             <p className="m-0 text-[10.5px] leading-relaxed text-[var(--fg-4)]">
             </p>
           </FormSection>

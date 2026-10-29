@@ -30,6 +30,15 @@ export async function POST(req, { params }) {
     for (const s of shots) Shots.remove(s.id);
     Chapters.update(ch.id, { status: 'pending' });
   });
-  const job = startCreateJob({ projectId: id, chapter: ch.title, onProgress: (patch) => broadcast(patch), beforeRun, renderDisabled: true });
+  const job = (() => {
+    try {
+      return startCreateJob({ projectId: id, chapter: ch.title, onProgress: (patch) => broadcast(patch), beforeRun, renderDisabled: true });
+    } catch (e) {
+      // 项目关闭自动生成剧本且本章剧本为空：重新拆分镜会被前置检查拦下，翻成 400 而不是 500
+      if (e && e.code === 'SCRIPT_REQUIRED') return null;
+      throw e;
+    }
+  })();
+  if (!job) return NextResponse.json({ error: '本章还没有剧本，且项目未开启自动生成剧本；请先在章节「剧本」里编写/粘贴，或在项目设置中开启自动生成。' }, { status: 400 });
   return NextResponse.json({ reset: shots.length, chapter: ch.title, mode, job });
 }

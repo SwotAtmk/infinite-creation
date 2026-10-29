@@ -97,7 +97,7 @@ node -e "const fs=require('fs');fetch('http://127.0.0.1:4600/api/projects/PID/ch
 | 要写的东西 | 写到哪 |
 |-----------|--------|
 | 小说原文 | `chapters.novel`（一章一段，用 `POST/PATCH …/chapters`） |
-| 剧本 | `chapters.script`（与 novel 并列的中间层；流水线不隐式消费它） |
+| 剧本 | `chapters.script`（拆分镜前的剧情蓝本；非空时以其为权威、流水线不会自动覆盖；为空时按项目 `auto_script` 决定是否由 Agent 自动生成） |
 | 分镜 | `shots`（`PUT …/chapters/:cid/storyboard`） |
 | 人物圣经 / 风格 / 连续性 | `PUT …/context` |
 

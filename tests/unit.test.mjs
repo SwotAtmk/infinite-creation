@@ -13,10 +13,10 @@ import {
   freeComfy, checkComfyUI, generate, queuePrompt, getHistory, interrupt, deleteQueued, downloadOutput, getObjectInfo, resolveHardwareConfig, HW_PRESETS, loadConfig,
   runFfmpeg,
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
-  runRenderSlot, renderConcurrencyLimit,
+  runRenderSlot, renderConcurrencyLimit, buildChapterScriptMessages,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
-import { parseFrontmatter, routeSkill, installSkillsFromZip } from '../lib/agent/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, attachScriptsToChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
+import { parseFrontmatter, routeSkill, installSkillsFromZip, collectSkillReferences } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
 import { runExclusiveVideo, concurrencyLimit, holdsRenderSlot } from '../lib/agent/job-runner.js';
@@ -811,6 +811,32 @@ test('parseFrontmatter + routeSkill', () => {
   assert.equal(routeSkill('小说改编成剧本', ''), 'novel-to-skitscreenplay');
   assert.equal(routeSkill('漫剧前期策划', ''), 'ai-manga-planner');
   assert.equal(routeSkill('年代一致性优化', ''), 'era-consistency-optimizer');
+  // 漫剧老李套装（新套装优先）
+  assert.equal(routeSkill('漫剧老李全流程', ''), 'short-drama-director');
+  assert.equal(routeSkill('台词诊断', ''), 'sd-script-engine');
+  assert.equal(routeSkill('故事板分镜图', ''), 'sd-storyboard-engine');
+  assert.equal(routeSkill('拆资产三清单', ''), 'sd-asset-engine');
+  assert.equal(routeSkill('玄幻打斗法术对轰', ''), 'sd-xuanhuan-engine');
+  assert.equal(routeSkill('真人打斗MMA', ''), 'sd-real-engine');
+  assert.equal(routeSkill('投喂提示词包', ''), 'sd-feed-engine');
+  assert.equal(routeSkill('质检连续性检查', ''), 'sd-qc-engine');
+  assert.equal(routeSkill('对标爆款采风', ''), 'sd-recon-engine');
+  assert.equal(routeSkill('微短剧分集剧本', ''), 'short-drama-scriptwriting');
+});
+
+test('collectSkillReferences：递归读取 references 子目录，忽略非 md/txt', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-refs-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'style-bible'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'a.md'), 'A', 'utf8');
+    fs.writeFileSync(path.join(dir, 'style-bible', 'b.md'), 'B', 'utf8');
+    fs.writeFileSync(path.join(dir, 'style-bible', 'script.py'), 'no', 'utf8');
+    const refs = collectSkillReferences(dir);
+    assert.deepEqual(refs.map((r) => r.name), ['a.md', 'style-bible/b.md']);
+    assert.equal(refs[1].content, 'B');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('parseFrontmatter: description: > 折叠块只取到 >，单行描述正常', () => {
@@ -1701,6 +1727,58 @@ test('splitNovelIntoChapters：字数兜底按段落（换行符）切分，不�
   }
   const totalParas = out.reduce((s, c) => s + c.novel.split('\n').length, 0);
   assert.equal(totalParas, lines.length, '拆分后段落总数不能丢失');
+});
+
+// —— 创建项目时导入现成剧本 ——
+
+test('attachScriptsToChapters：空剧本原样返回，单章整段写入', () => {
+  const chapters = [{ title: '第1章', novel: '正文' }];
+  assert.deepEqual(attachScriptsToChapters(chapters, ''), chapters);
+  const out = attachScriptsToChapters(chapters, '剧本全文');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].script, '剧本全文');
+  assert.equal(out[0].novel, '正文');
+});
+
+test('attachScriptsToChapters：多章按「第N章」标题对齐', () => {
+  const chapters = [{ title: '第1章', novel: 'A' }, { title: '第2章', novel: 'B' }];
+  const out = attachScriptsToChapters(chapters, '第1章\n剧本A\n第2章\n剧本B');
+  assert.equal(out[0].script, '剧本A');
+  assert.equal(out[1].script, '剧本B');
+});
+
+test('attachScriptsToChapters：多章但剧本段数不一致时报错', () => {
+  const chapters = [{ title: '第1章', novel: 'A' }, { title: '第2章', novel: 'B' }];
+  assert.throws(
+    () => attachScriptsToChapters(chapters, '第1章\n只有一段剧本'),
+    (e) => e.code === 'BAD_SCRIPT_SPLIT' && /剧本未按章拆分/.test(e.message),
+  );
+});
+
+// —— 剧本生成 / 改写提示词 ——
+
+test('buildChapterScriptMessages：generate 带小说原文与格式约束', () => {
+  const msgs = buildChapterScriptMessages({ chapterTitle: '第1章', novel: '小说正文', style: '水墨', mode: 'generate' });
+  assert.equal(msgs.length, 2);
+  assert.match(msgs[0].content, /【第N场｜时间｜地点】/);
+  assert.match(msgs[0].content, /不要输出 JSON/);
+  assert.match(msgs[0].content, /水墨/);
+  assert.match(msgs[1].content, /小说正文/);
+  assert.match(msgs[1].content, /完整剧本正文/);
+});
+
+test('buildChapterScriptMessages：rewrite 带现有剧本与指令（空指令用默认要求）', () => {
+  const withInstruction = buildChapterScriptMessages({ chapterTitle: '第1章', script: '旧剧本', mode: 'rewrite', instruction: '增加反转' });
+  assert.match(withInstruction[1].content, /旧剧本/);
+  assert.match(withInstruction[1].content, /增加反转/);
+  const defaultValue = buildChapterScriptMessages({ chapterTitle: '第1章', script: '旧剧本', mode: 'rewrite' });
+  assert.match(defaultValue[1].content, /润色剧本/);
+});
+
+test('buildChapterScriptMessages：超长小说原文被截断', () => {
+  const msgs = buildChapterScriptMessages({ chapterTitle: '第1章', novel: 'a'.repeat(12050), mode: 'generate' });
+  assert.match(msgs[1].content, /已截断/);
+  assert.ok(msgs[1].content.length < 12300, '截断后不应整段塞入');
 });
 
 test('filterReferenceImages：shared 参考图在所有章节生效', () => {

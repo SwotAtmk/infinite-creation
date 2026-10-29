@@ -18,6 +18,7 @@ export default function ProjectSettingsDialog({ open, onOpenChange, project, onS
   const [ch, setCh] = useState('');
   const [enableBgm, setEnableBgm] = useState(true);
   const [enableSub, setEnableSub] = useState(true);
+  const [autoScript, setAutoScript] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function ProjectSettingsDialog({ open, onOpenChange, project, onS
     setCh(project.video_height ? String(project.video_height) : '');
     setEnableBgm(project.enable_bgm !== false);
     setEnableSub(project.enable_subtitles !== false);
+    setAutoScript(project.auto_script !== false);
   }, [open, project]);
 
   async function save() {
@@ -46,6 +48,7 @@ export default function ProjectSettingsDialog({ open, onOpenChange, project, onS
         video_height: Number(ch) || 0,
         enable_bgm: enableBgm,
         enable_subtitles: enableSub,
+        auto_script: autoScript,
       });
       toast.success('项目设置已保存');
       onOpenChange(false);
@@ -130,6 +133,12 @@ export default function ProjectSettingsDialog({ open, onOpenChange, project, onS
               onChange={setEnableSub}
               label="自动添加字幕"
               hint="导出 / 合并成片时把分镜台词与旁白烧录进画面（不显示角色名）。"
+            />
+            <Switch
+              checked={autoScript}
+              onChange={setAutoScript}
+              label="自动生成剧本"
+              hint="开启后，剧本为空的章节会先由 Agent 写剧本再拆分镜；关闭后需先在章节「剧本」里编写或粘贴。"
             />
           </div>
         </FormSection>

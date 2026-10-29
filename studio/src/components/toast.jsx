@@ -43,6 +43,7 @@ export function ToastProvider({ children }) {
       danger: !!d.danger,
       confirmLabel: d.confirmLabel,
       cancelLabel: d.cancelLabel,
+      discardLabel: d.discardLabel,
       placeholder: d.placeholder || '',
     });
   }, []);
@@ -63,6 +64,7 @@ export function ToastProvider({ children }) {
           danger: !!opts.danger,
           confirmLabel: opts.confirmLabel || '确定',
           cancelLabel: opts.cancelLabel || '取消',
+          discardLabel: opts.discardLabel,
           resolve,
         });
       }),
@@ -141,6 +143,11 @@ export function ToastProvider({ children }) {
               <Button variant="secondary" size="md" onClick={() => answer(dialog.mode === 'prompt' ? null : false)}>
                 {dialog.cancelLabel}
               </Button>
+              {dialog.discardLabel ? (
+                <Button variant="danger" size="md" onClick={() => answer('discard')}>
+                  {dialog.discardLabel}
+                </Button>
+              ) : null}
               <Button
                 variant={dialog.danger ? 'dangerSolid' : 'primary'}
                 size="md"

@@ -1,7 +1,7 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
 import { NextResponse } from 'next/server';
 import { Projects, Assets, Shots, Chapters, ensureChapterPoster, ensureProjectDirs, withWriteContext } from '@/lib/core/index.js';
-import { splitNovelIntoChapters, PROJECT_TYPES } from '@/lib/shared/index.js';
+import { splitNovelIntoChapters, attachScriptsToChapters, PROJECT_TYPES } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +40,15 @@ export async function POST(req) {
     try {
       // 长篇小说自动拆分：识别章节标题 / 超长按字数均分，单章结果走现状路径（向后兼容）
       const chapters = splitNovelIntoChapters(String(body.novel || ''));
-      const p = Projects.create({ ...(body || {}), chapters: chapters.length > 1 ? chapters : null });
+      // 现成剧本：单章整段写入；多章需与小说明文一致地用「第N章」标题分隔
+      const scriptText = String(body.script || '').trim();
+      let rows = chapters;
+      if (scriptText && !rows.length) rows = [{ title: '第1章', novel: '', script: scriptText }];
+      else rows = attachScriptsToChapters(rows, scriptText);
+      // 剧本或有多章时必须显式传章节行（Projects.create 的 chapters 分支才会写入 script）；
+      // 无剧本的单章保持旧路径，继续把正文放在 projects.novel。
+      const chapterRows = (scriptText || chapters.length > 1) ? rows : null;
+      const p = Projects.create({ ...(body || {}), auto_script: body.auto_script !== false, chapters: chapterRows });
       ensureProjectDirs(p.id);
       return NextResponse.json(p);
     } catch (e) {
@@ -48,6 +56,7 @@ export async function POST(req) {
       if (e && e.code === 'BAD_PROJECT_ENUM') return NextResponse.json({ error: e.message }, { status: 400 });
       if (e && e.code === 'BAD_PROJECT_DIM') return NextResponse.json({ error: e.message }, { status: 400 });
       if (e && e.code === 'BAD_PROJECT_TYPE') return NextResponse.json({ error: e.message }, { status: 400 });
+      if (e && e.code === 'BAD_SCRIPT_SPLIT') return NextResponse.json({ error: e.message }, { status: 400 });
       throw e;
     }
   });

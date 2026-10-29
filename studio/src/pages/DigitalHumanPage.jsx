@@ -127,7 +127,7 @@ export default function DigitalHumanPage() {
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" size="sm" onClick={() => avatarRef.current?.click()}>
-              <Upload size={13} /> 上传头像
+              <Upload size={13} /> 上传角色图片
             </Button>
             <Button variant="secondary" size="sm" onClick={() => audioRef.current?.click()}>
               <Upload size={13} /> 上传驱动音频
@@ -169,7 +169,7 @@ export default function DigitalHumanPage() {
             reloadJobs();
           }}
           icon={UserRound}
-          emptyDescription="上传头像和驱动音频后点击生成，数字人视频会出现在这里。"
+          emptyDescription="上传角色图片和驱动音频后点击生成，数字人视频会出现在这里。"
         />
       </section>
     </div>

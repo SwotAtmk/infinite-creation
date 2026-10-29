@@ -5,7 +5,6 @@ import {
   Cloud,
   Cpu,
   Film,
-  KeyRound,
   Lock,
   Save,
   Server,
@@ -117,8 +116,16 @@ export default function SettingsPage({ onBack, publicMode = false }) {
 
   async function canLeave() {
     if (cfg !== savedCfg) {
-      const ok = await toast.confirm('配置有未保存的修改，保存后再返回？', { confirmLabel: '保存并返回', cancelLabel: '取消' });
-      if (!ok) return false;
+      const r = await toast.confirm('配置有未保存的修改，保存后再返回？', {
+        confirmLabel: '保存并返回',
+        cancelLabel: '取消',
+        discardLabel: '放弃修改',
+      });
+      if (r === 'discard') {
+        setCfg(savedCfg);
+        return true;
+      }
+      if (!r) return false;
       const saved = await save();
       if (!saved) return false;
     }
@@ -134,9 +141,9 @@ export default function SettingsPage({ onBack, publicMode = false }) {
     try {
       const r = await api.post('/api/comfyui/test', { comfyui: cfg.comfyui });
       setComfyInfo(r);
-      setTest(r.ok ? '连接成功 · ' + r.system + ' · ' + r.device : '连接失败：' + r.error);
+      setTest(timeLabel() + ' · ' + (r.ok ? '连接成功 · ' + r.system + ' · ' + r.device : '连接失败：' + r.error));
     } catch (e) {
-      setTest('失败：' + e.message);
+      setTest(timeLabel() + ' · 失败：' + e.message);
     }
   }
 
@@ -144,9 +151,9 @@ export default function SettingsPage({ onBack, publicMode = false }) {
     setLlmTest('测试中…');
     try {
       const r = await api.post('/api/llm/test', { llm: cfg.llm });
-      setLlmTest(r.ok ? '连接成功 · ' + r.model : '连接失败：' + r.error);
+      setLlmTest(timeLabel() + ' · ' + (r.ok ? '连接成功 · ' + r.model : '连接失败：' + r.error));
     } catch (e) {
-      setLlmTest('失败：' + e.message);
+      setLlmTest(timeLabel() + ' · 失败：' + e.message);
     }
   }
 
@@ -350,7 +357,15 @@ export default function SettingsPage({ onBack, publicMode = false }) {
 
           {active === 'comfyui' ? (
             <Section icon={Server} title="ComfyUI 服务" description="生成图片与视频的执行端">
-              <Segmented value={cfg.comfyui.provider || 'native'} onChange={(v) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, provider: v } })} options={PROVIDER_OPTIONS} />
+              <Segmented
+                value={cfg.comfyui.provider || 'native'}
+                onChange={(v) => {
+                  setCfg({ ...cfg, comfyui: { ...cfg.comfyui, provider: v } });
+                  setTest('');
+                  setComfyInfo(null);
+                }}
+                options={PROVIDER_OPTIONS}
+              />
               <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-4)]">
                 当前执行端：<b className="text-[var(--fg-2)]">{isRunningHub ? '云端渲染' : '本地 ComfyUI'}</b>
                 {' · '}有效并发 <b className="text-[var(--fg-2)]">{isRunningHub ? Math.max(1, Number(cfg.generation?.runninghubConcurrency) || 1) : 1}</b>
@@ -365,11 +380,11 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                     label="服务地址"
                     hint={
                       <span>
-                        配套工作流可从{' '}
+                        配套ComfyUI本地一键启动整合包可从{' '}
                         <a href="https://pan.quark.cn/s/9748d626c346?pwd=7NcR" target="_blank" rel="noreferrer" className="text-[var(--accent)] hover:underline">
-                          夸克网盘
+                          夸克网盘https://pan.quark.cn/s/9748d626c346?pwd=7NcR
                         </a>{' '}
-                        获取。
+                        ，打开链接即可获取。
                       </span>
                     }
                   >
@@ -385,30 +400,41 @@ export default function SettingsPage({ onBack, publicMode = false }) {
               ) : (
                 <>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Api-key" hint="云端渲染执行，无需本地显卡。">
-                      <div className="flex gap-2">
-                        <Input
-                          type="password"
-                          value={cfg.comfyui.apiKey || ''}
-                          onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, apiKey: e.target.value } })}
-                          placeholder="请输入云端渲染 Api-key"
-                          className="flex-1"
-                        />
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          title="查询 Api-key"
-                          aria-label="查询 Api-key"
-                          onClick={() => window.open('https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer&inviteCode=6to0etcb', '_blank', 'noopener,noreferrer')}
-                        >
-                          <KeyRound size={14} />
-                        </Button>
-                      </div>
+                    <Field
+                      label="Api-key"
+                      hint={
+                        <span>
+                          云端渲染执行，无需本地显卡。可从{' '}
+                          <a
+                            href="https://www.runninghub.cn/call-api/bill-task?tab=keys&type=consumer&inviteCode=6to0etcb"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[var(--accent)] hover:underline"
+                          >
+                            这里查询 Api-key
+                          </a>{' '}
+                          获取。
+                        </span>
+                      }
+                    >
+                      <Input
+                        type="password"
+                        value={cfg.comfyui.apiKey || ''}
+                        onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, apiKey: e.target.value } })}
+                        placeholder="请输入云端渲染 Api-key"
+                      />
                     </Field>
                     <Field label="版本">
                       <Select value={cfg.comfyui.tier || 'standard'} onChange={(v) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, tier: v } })} items={TIER_OPTIONS} />
                     </Field>
                   </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="secondary" size="md" onClick={testComfy}>
+                      测试连接
+                    </Button>
+                    <span className="font-mono text-[10.5px] text-[var(--fg-4)]">最终服务 URL：{comfyBaseUrl(cfg)}</span>
+                  </div>
+                  <TestResult text={test} />
                   <Field label="任务并发数量（Beta）" hint="并发过高可能触发云端限流或排队。">
                     <Input
                       type="number"
@@ -511,13 +537,6 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                       </Field>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="secondary" size="md" onClick={testComfy}>
-                      测试连接
-                    </Button>
-                    <span className="font-mono text-[10.5px] text-[var(--fg-4)]">最终服务 URL：{comfyBaseUrl(cfg)}</span>
-                  </div>
-                  <TestResult text={test} />
                 </>
               )}
             </Section>
@@ -705,13 +724,19 @@ function Section({ icon: Icon, title, description, children }) {
   );
 }
 
+function timeLabel() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 function TestResult({ text }) {
   if (!text) return null;
   const ok = text.includes('成功');
   return (
-    <span className={ok ? 'flex items-center gap-1.5 text-[11.5px] text-[var(--success)]' : 'flex items-center gap-1.5 text-[11.5px] text-[var(--danger)]'}>
-      {ok ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-      {text}
+    <span className={ok ? 'flex items-start gap-1.5 text-[11.5px] text-[var(--success)]' : 'flex items-start gap-1.5 text-[11.5px] text-[var(--danger)]'}>
+      <span className="mt-[1px] shrink-0">{ok ? <CheckCircle2 size={13} /> : <XCircle size={13} />}</span>
+      <span className="break-all">{text}</span>
     </span>
   );
 }

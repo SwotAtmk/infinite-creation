@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, Clapperboard, Clock, Download, Film, Hash, Package, Play, Plus, RefreshCw, Wand2 } from 'lucide-react';
+import { ChevronDown, Clapperboard, Clock, Download, Film, Hash, Package, Pencil, Play, Plus, RefreshCw, Wand2 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import CostButton from '../components/CostButton.jsx';
 import { fileUrl, STATUS_TEXT, withSession } from '../lib/format.js';
 import { asArray, dialogueSpeakers, nameMatches, ASSET_CATEGORY_LABEL } from '../lib/shared.js';
 import { RatioMeta, ResolutionMeta } from '../components/visuals.jsx';
 import { AssetCategoryIcon } from '../components/visuals.jsx';
-import { Badge, Button, EmptyState, Input, Select, Spinner, StatusPill } from '../components/ui.jsx';
+import { Badge, Button, EmptyState, Input, Select, Spinner, StatusPill, Textarea } from '../components/ui.jsx';
 import { BusyOverlay, Modal } from '../components/overlays.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import MaterialPicker from '../components/MaterialPicker.jsx';
@@ -33,6 +33,10 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
   const submitLockRef = useRef(new Set());
   // 提交成功后先把任务记在本地：等父级任务列表刷新的空窗期内，按钮保持禁用，避免二次扣费
   const [localJobs, setLocalJobs] = useState({});
+  // 手动编辑：视频提示词 / 视频时长（与经典界面共用同一套 PATCH 接口）
+  const [editPrompt, setEditPrompt] = useState(null); // { shotId, value } | null
+  const [editDuration, setEditDuration] = useState(null); // { shotId, value } | null
+  const [savingEdit, setSavingEdit] = useState(''); // `${shotId}:prompt` / `${shotId}:duration`
 
   const load = useCallback(() => {
     return Promise.all([
@@ -168,6 +172,51 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
       setShots((list) => list.map((x) => (x.id === shotId ? { ...x, videos, video_path: selected?.video_path || x.video_path } : x)));
     } catch (e) {
       toast.error(e.message);
+    }
+  }
+
+  // 手动修改视频提示词：保存后可直接用这段提示词追加生成候选（不经 LLM 改写）。
+  async function savePrompt(shotId, value, regenerate) {
+    if (submitLockRef.current.has(shotId)) return;
+    submitLockRef.current.add(shotId);
+    setSavingEdit(shotId + ':prompt');
+    try {
+      const updated = await api.patch('/api/projects/' + projectId + '/shots/' + shotId, { video_prompt: value });
+      setShots((list) => list.map((x) => (x.id === shotId ? { ...x, ...updated } : x)));
+      setEditPrompt(null);
+      toast.success('提示词已保存');
+      if (regenerate) {
+        const job = await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/regenerate', { render: true, append: true });
+        if (job && job.id) setLocalJobs((prev) => ({ ...prev, [shotId]: { job, at: Date.now() } }));
+        setShots((list) => list.map((x) => (x.id === shotId ? { ...x, status: 'generating', error: '' } : x)));
+        toast.success('已提交生成候选');
+        setTimeout(loadShots, 2000);
+      }
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      submitLockRef.current.delete(shotId);
+      setSavingEdit('');
+    }
+  }
+
+  // 手动修改视频时长（秒，1~15）：只改分镜时长，不触发生成。
+  async function saveDuration(shotId, value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 1 || n > 15) {
+      toast.error('视频时长必须在 1~15 秒之间');
+      return;
+    }
+    setSavingEdit(shotId + ':duration');
+    try {
+      const updated = await api.patch('/api/projects/' + projectId + '/shots/' + shotId, { duration: n });
+      setShots((list) => list.map((x) => (x.id === shotId ? { ...x, ...updated } : x)));
+      setEditDuration(null);
+      toast.success('视频时长已保存');
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSavingEdit('');
     }
   }
 
@@ -382,10 +431,53 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                     {s.chapter ? <Badge tone="neutral">{s.chapter}</Badge> : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--fg-4)]">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock size={11} className="opacity-70" />
-                      {s.duration}s
-                    </span>
+                    {editDuration?.shotId === s.id ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Clock size={11} className="opacity-70" />
+                        <input
+                          type="number"
+                          min={1}
+                          max={15}
+                          step={0.5}
+                          autoFocus
+                          value={editDuration.value}
+                          onChange={(e) => setEditDuration({ shotId: s.id, value: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveDuration(s.id, editDuration.value);
+                            if (e.key === 'Escape') setEditDuration(null);
+                          }}
+                          className="h-6 w-14 rounded-md border border-[var(--line-strong)] bg-white/[0.04] px-1.5 font-mono text-[10.5px] text-[var(--fg)] focus:border-[color-mix(in_srgb,var(--accent)_55%,transparent)] focus:outline-none"
+                        />
+                        <span>s</span>
+                        <button
+                          type="button"
+                          disabled={savingEdit === s.id + ':duration'}
+                          className="text-[10.5px] text-[var(--accent)] transition-colors hover:underline disabled:opacity-50"
+                          onClick={() => saveDuration(s.id, editDuration.value)}
+                        >
+                          {savingEdit === s.id + ':duration' ? '保存中…' : '保存'}
+                        </button>
+                        <button type="button" className="text-[10.5px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg)]" onClick={() => setEditDuration(null)}>
+                          取消
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        <Clock size={11} className="opacity-70" />
+                        {s.duration}s
+                        {!running && canEdit ? (
+                          <button
+                            type="button"
+                            title="修改视频时长"
+                            aria-label="修改视频时长"
+                            className="ml-0.5 rounded p-0.5 text-[var(--fg-4)] transition-colors hover:text-[var(--accent)]"
+                            onClick={() => setEditDuration({ shotId: s.id, value: String(s.duration ?? 5) })}
+                          >
+                            <Pencil size={10} />
+                          </button>
+                        ) : null}
+                      </span>
+                    )}
                     <ResolutionMeta resolution={s.resolution} width={project?.video_width} height={project?.video_height} />
                     <RatioMeta ratio={s.aspect_ratio || '16:9'} />
                     {s.seed ? (
@@ -555,8 +647,46 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                         {s.narration ? <Detail label="旁白" value={s.narration} /> : null}
                         {s.sub_shots ? <Detail label="子镜头" value={s.sub_shots} pre /> : null}
                         <div>
-                          <span className="text-[var(--fg-4)]">视频提示词</span>
-                          <pre className="logbox mt-1 max-h-[200px] whitespace-pre-wrap text-[11px]">{s.video_prompt || '（未生成）'}</pre>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[var(--fg-4)]">视频提示词</span>
+                            {!running && canEdit && editPrompt?.shotId !== s.id ? (
+                              <button
+                                type="button"
+                                className="rounded px-1 text-[10.5px] text-[var(--accent)] transition-colors hover:underline"
+                                onClick={() => setEditPrompt({ shotId: s.id, value: s.video_prompt || '' })}
+                              >
+                                编辑
+                              </button>
+                            ) : null}
+                          </div>
+                          {editPrompt?.shotId === s.id ? (
+                            <div className="mt-1 flex flex-col gap-2">
+                              <Textarea
+                                rows={8}
+                                autoFocus
+                                value={editPrompt.value}
+                                onChange={(e) => setEditPrompt({ shotId: s.id, value: e.target.value })}
+                                placeholder="填写要提交给 ComfyUI 的视频提示词"
+                                className="min-h-[160px] font-mono text-[11px] leading-relaxed"
+                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button variant="primary" size="sm" disabled={!!savingEdit} onClick={() => savePrompt(s.id, editPrompt.value, true)}>
+                                  <Wand2 size={12} /> {savingEdit === s.id + ':prompt' ? '保存中…' : '保存并生成候选'}
+                                </Button>
+                                <Button variant="secondary" size="sm" disabled={!!savingEdit} onClick={() => savePrompt(s.id, editPrompt.value, false)}>
+                                  仅保存
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => setEditPrompt(null)}>
+                                  取消
+                                </Button>
+                              </div>
+                              <p className="m-0 text-[10.5px] leading-relaxed text-[var(--fg-4)]">
+                                保存后直接用这段提示词追加一条候选视频，不再经过 LLM 改写。
+                              </p>
+                            </div>
+                          ) : (
+                            <pre className="logbox mt-1 max-h-[200px] whitespace-pre-wrap text-[11px]">{s.video_prompt || '（未生成）'}</pre>
+                          )}
                         </div>
                         {s.prompt_id ? <span className="font-mono text-[10px] text-[var(--fg-4)]">ComfyUI prompt_id: {s.prompt_id}</span> : null}
                       </div>

@@ -15,6 +15,22 @@
 - 免费开源本地Agent全自动视频生成的开源项目✨，不用演员、配音、导演和剪辑师就能本地一键生成超长视频。可以做小说生成视频、漫剧广告、故事类讲解视频，让你所想到的故事变成亿帧画面。
 - 小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频
 
+# 截图演示
+
+1. 项目首页
+   ![项目首页](images/j1.png)
+2. 章节管理
+   ![章节管理](images/j2.png)
+3. 服务配置
+   ![服务配置](images/j3.png)
+4. 素材库
+   ![素材库](images/j4.png)
+5. 分镜审查
+   ![分镜审查](images/j5.png)
+6. 导出成片
+   ![导出成片](images/j6.png)
+
+
 ## 生成样例
 - 《妈妈的时间》
 <div align="center">
@@ -101,21 +117,6 @@ CPU：不挑处理器
 - **显存维护**：设置页可配「每 N 个生成后自动释放 ComfyUI 显存」（默认 3，0 = 关闭），覆盖文生图/图生图/换装/音色/视频全部渲染——AMD Dynamic VRAM 的显存累积不只在视频触发；未启用 Dynamic VRAM 时界面会提示关闭。
 - **在线预览**：成片/分镜视频经后端 Range 流式传输，进度条可随意拖动、即时跳转。
 - **外部 Agent 运行时**：除内置 openclaude 外，可在设置页切换到本机已安装的 CLI Agent（Claude Code / Codex CLI / Gemini CLI / Qwen Code / Cursor Agent / Qoder CLI / Grok Build / Hermes / 自定义命令），通过本地 MCP stdio 服务把领域工具暴露给外部 Agent、由其完整接管流水线；模型账号与登录态走各自 CLI。
-
-# 截图演示
-
-1. 项目首页
-   ![项目首页](images/j1.png)
-2. 章节管理
-   ![章节管理](images/j2.png)
-3. 服务配置
-   ![服务配置](images/j3.png)
-4. 素材库
-   ![素材库](images/j4.png)
-5. 分镜审查
-   ![分镜审查](images/j5.png)
-6. 导出成片
-   ![导出成片](images/j6.png)
 
 
 ## 技术栈

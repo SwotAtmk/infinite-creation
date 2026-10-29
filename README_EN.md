@@ -16,6 +16,21 @@
 - An open-source project for fully automated video generation with a free and open-source local agent✨, enabling the creation of ultra-long videos locally with just one click, without requiring actors, voice-overs, directors, or editors. It can be used to generate videos from novels, comic ads, and story-based instructional videos, turning your imagination into billions of frames of visuals.
 - One-click generation of videos from novels, with no time limit. Enter the novel/script and use the local ComfyUI-MiniMaxH3+Agent+Skill to automatically generate unlimited videos with one click
 
+# Screenshots
+
+1. Project Homepage
+   ![Project Homepage](images/j1.png)
+2. Chapter Management
+   ![Chapter Management](images/j2.png)
+3. Service Configuration
+   ![Service Configuration](images/j3.png)
+4. Material Library
+   ![Material Library](images/j4.png)
+5. Storyboard Review
+   ![Storyboard Review](images/j5.png)
+6. Export as a finished product
+   ![Export as a finished product](images/j6.png)
+
 
 ## Sample Output
 
@@ -109,21 +124,6 @@ Hard disk: At least 150G of space is required
 - **VRAM maintenance**: The settings page lets you configure "release ComfyUI VRAM every N generations" (default 3, 0 = off), covering text-to-image / image-to-image / costume change / voice / video rendering — AMD Dynamic VRAM's memory accumulation isn't only triggered by video. When Dynamic VRAM is disabled, the UI shows a prompt recommending it be turned on.
 - **Online preview**: Final films / shot videos are streamed via backend Range requests — drag the progress bar freely and jump instantly.
 - **External Agent runtime**: Besides the built-in openclaude, switch on the settings page to a locally installed CLI agent (Claude Code / Codex CLI / Gemini CLI / Qwen Code / Cursor Agent / Qoder CLI / Grok Build / Hermes / custom command), exposing domain tools to it via a local MCP stdio service so it fully takes over the pipeline; model accounts and sign-in state stay with each CLI.
-
-# Screenshots
-
-1. Project Homepage
-   ![Project Homepage](images/j1.png)
-2. Chapter Management
-   ![Chapter Management](images/j2.png)
-3. Service Configuration
-   ![Service Configuration](images/j3.png)
-4. Material Library
-   ![Material Library](images/j4.png)
-5. Storyboard Review
-   ![Storyboard Review](images/j5.png)
-6. Export as a finished product
-   ![Export as a finished product](images/j6.png)
 
 ## Tech Stack
 

@@ -3,7 +3,8 @@
 独立启动的新界面（Vite + React + Tailwind + Radix），与经典 Next 界面**共用同一套后端、数据库与任务队列**，但拥有独立的启动方式、端口与视觉系统。
 
 - Studio：<http://127.0.0.1:4710>
-- 后端 / 经典界面：<http://127.0.0.1:4600>
+- 后端：<http://127.0.0.1:4610>
+- 经典界面：<http://127.0.0.1:4600>
 - 数据目录：仓库根目录的 `data/`（与经典界面完全相同）
 
 ## 启动
@@ -11,18 +12,24 @@
 在仓库根目录：
 
 ```bash
-# 一键启动（Windows，自动拉起后端 + Studio）
-start-studio.bat
+# 前台启动（日志实时输出，Ctrl+C 同时停止前后端）
+pnpm run dev
 
-# 停止 Studio（后端保持运行）
+# 后台启动（日志写入文件）
+pnpm run dev:background
+./start-studio.sh   # 等价脚本（macOS / Linux）
+./stop-studio.sh    # 停止 Studio
+
+# Windows
+start-studio.bat
 stop-studio.bat
 ```
 
 开发时也可以手动启动：
 
 ```bash
-# 终端 1：后端
-pnpm run dev
+# 终端 1：后端（Studio 独立实例，4610）
+PORT=4610 NEXT_DIST_DIR=.next-studio-dev pnpm run dev:classic
 
 # 终端 2：Studio
 pnpm --filter studio dev

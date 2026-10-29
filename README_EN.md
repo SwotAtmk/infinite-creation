@@ -133,7 +133,7 @@ Hard disk: At least 150G of space is required
 
 - Backend: Node.js (Next.js custom server) + `node:sqlite` + ComfyUI REST/WebSocket + ffmpeg, zero native-compilation dependencies.
 - Agent: built-in openclaude kernel (in-process SDK) + optional external Agent runtime (local CLI via an MCP tool bridge), tool registry + skill engine + skill factory.
-- Frontend: Next.js 15 + React 18 (App Router).
+- Frontend: Next.js 15 + React 18 (classic UI, App Router) · Studio UI: Vite + React 18 (`studio/`).
 - Structure: single package — `app/` (pages + 30+ API endpoints) · `lib/` (reusable core/agent/shared logic) · `server.js` (custom server: WebSocket progress push + `/files` static hosting with Range-based video streaming).
 
 ## Directory Structure
@@ -145,10 +145,12 @@ infinite-creation/
 │   └── agent/external/  #   External Agent runtime: defs/ (one definition file per CLI) · registry · detect · mcp-config · mcp-server (MCP service) · runner
 ├── server.js            # Custom server (WebSocket progress push + /files static hosting, Range streaming)
 ├── workflows/           # ComfyUI workflow templates (MiniMax H3 video / Qwen-Image 2.1 image & text / Krea2 / Qwen3-TTS, incl. GGUF quantized editions)
-├── start-infinite-creation.bat    # Windows one-click background startup (auto-install deps + wait until ready)
+├── start-studio.sh / start-studio.bat   # Background launcher (Studio frontend 4710 + dedicated backend 4610)
+├── start-infinite-creation.bat    # Windows one-click background startup (classic UI, 4600)
 ├── stop-infinite-creation.bat     # Windows service stop
 ├── skills/              # Skill library (9 official + novel-to-video + custom)
 ├── scripts/install-skills.mjs   # Pull MiniMax-H3 official skills
+├── scripts/dev.mjs      # pnpm run dev launcher: foreground with live logs; --background for background startup
 ├── tests/               # Unit tests: unit.test.mjs + external-agents.test.mjs (agent defs / custom command / MCP handshake)
 ├── vendor/openclaude/           # Agent kernel source (dist/ build artifacts not committed; requires local build)
 └── data/                # Runtime (gitignored): SQLite + projects/<id>/…
@@ -198,38 +200,62 @@ pnpm install
 # 2. Pull MiniMax-H3 official skills (optional; repo already contains an offline snapshot)
 pnpm run install:skills
 
-# 3. Dev mode: one command to start (single port 4600, frontend + API + WS + static files all hosted)
+# 3. Dev mode: foreground Studio by default (dedicated backend 4610 + frontend 4710, live logs)
 pnpm run dev
+# Open http://127.0.0.1:4710 in your browser
+# Ctrl+C stops both frontend and backend
+
+# For a background launch (logs written to files)
+pnpm run dev:background
+
+# Classic UI (single port 4600) dev mode
+pnpm run dev:classic
 # Open http://127.0.0.1:4600 in your browser
 
-# 4. Production mode: single port 4600, frontend build artifacts hosted by the backend
+# 4. Production mode
+# Classic UI: single port 4600, frontend build artifacts hosted by the backend
 pnpm run build && pnpm start
 # Open http://127.0.0.1:4600 in your browser
+
+# Studio: build the frontend + dedicated backend (production)
+./start-studio-prod.sh        # Windows: start-studio-prod.bat
+# Open http://127.0.0.1:4710 in your browser
 ```
 
-> Windows users can also double-click `start-infinite-creation.bat` in the root directory for one-click background startup (auto-detects the port / installs dependencies / waits until ready, and reports ComfyUI status). Stop with `stop-infinite-creation.bat`.
+> Windows users can double-click `start-studio.bat` (Studio, backend 4610 + frontend 4710) or `start-infinite-creation.bat` (classic UI, 4600) for one-click background startup; stop them with `stop-studio.bat` / `stop-infinite-creation.bat`.
+
+> **Studio is the default dev UI**: `pnpm run dev` runs the dedicated backend on 4610 and the Studio frontend on 4710 in the foreground, streams logs to your terminal, and stops both on `Ctrl+C`. Use `pnpm run dev:background` for a background launch (it invokes `start-studio.sh` / `start-studio.bat`).
+> ```bash
+> pnpm run dev:background       # background, logs in logs/ and studio/logs/
+> ./start-studio.sh             # equivalent background script (macOS / Linux)
+> ./stop-studio.sh              # stop Studio only
+> ./start-infinite-creation.sh  # classic UI, open http://127.0.0.1:4600
+> ```
+> See [studio/README.md](studio/README.md) for Studio configuration.
 
 > The Agent kernel `vendor/openclaude/dist/` is a build artifact and not committed; `pnpm install` builds it automatically once (idempotent — skips if present). You only need to manually rerun `pnpm build:agent` after modifying `vendor/openclaude/src/` source. See [docs/agent-architecture.md](docs/agent-architecture.md) for build details.
 
-### Starting the Classic Web and Studio Separately
+### Starting Studio and the Classic UI Separately
 
 The two UIs can run independently and share the same `config.json` and database:
 
 ```bash
-# ── Classic web (single process, 4600) ────────────────────
-pnpm dev                     # development
-pnpm build && pnpm start     # production
+# ── Studio (default, backend 4610 + frontend 4710) ────────
+pnpm run dev                 # foreground: live logs, Ctrl+C stops both
+pnpm run dev:background      # background: logs in logs/ and studio/logs/
 
-# ── Studio (backend 4610 + frontend 4710, two terminals) ──
+# Or start manually in two terminals:
 # Terminal 1: Studio backend (dev)
-PORT=4610 NEXT_DIST_DIR=.next-studio-dev pnpm dev
+PORT=4610 NEXT_DIST_DIR=.next-studio-dev pnpm run dev:classic
 # Terminal 2: Studio frontend
 pnpm --filter studio dev
 
 # Studio production
-PORT=4610 NEXT_DIST_DIR=.next-studio pnpm start
-pnpm --filter studio build
-STUDIO_PORT=4710 STUDIO_BACKEND=http://127.0.0.1:4610 pnpm --filter studio preview
+./start-studio-prod.sh       # Windows: start-studio-prod.bat
+
+# ── Classic UI (single process, 4600) ─────────────────────
+pnpm run dev:classic         # development
+pnpm run build && pnpm start # production
 ```
 
 Setting environment variables in Windows `cmd`:
@@ -237,7 +263,7 @@ Setting environment variables in Windows `cmd`:
 ```bat
 set PORT=4610
 set NEXT_DIST_DIR=.next-studio-dev
-pnpm dev
+pnpm run dev:classic
 ```
 
 > The open-source edition does not include accounts, an admin dashboard, credit billing, or content moderation; system settings (ComfyUI / LLM / workflows / hardware / generation) are open directly.
@@ -342,7 +368,7 @@ It writes **text only**: it will not generate images, videos, voices or music, a
 # 1. Install the skill (once; restart your AI tool afterwards so it discovers it)
 pnpm run install:ic-writer     # installs to ~/.agents/skills/ic-writer/ by default
 
-# 2. Start the server (defaults to http://127.0.0.1:4600)
+# 2. Start the service (Studio by default: UI http://127.0.0.1:4710, API 4610)
 pnpm run dev
 
 # 3. Just talk to your AI tool, for example:
@@ -350,6 +376,8 @@ pnpm run dev
 #    "Write 3 chapters of script for this project"
 #    "Rewrite the storyboard of chapter 2"
 ```
+
+> The writer skill connects to `http://127.0.0.1:4600` (classic backend) by default; when using Studio, point it at the Studio backend: `IC_BASE_URL=http://127.0.0.1:4610`.
 
 The skill source lives in this repo: `harness-skills/ic-writer/SKILL.md` (`pnpm run install:ic-writer` copies it into your skills directory). To install it elsewhere: `node scripts/install-writer-skill.mjs --target <your-skills-dir>`.
 
@@ -364,7 +392,7 @@ The skill source lives in this repo: `harness-skills/ic-writer/SKILL.md` (`pnpm 
 
 ### Limits and caveats
 
-- **Local use only**: it talks to `127.0.0.1:4600` by default. That instance has **no authentication** — if you change `server.host` in `config.json` to `0.0.0.0`, you expose an endpoint on your LAN that can read every project, edit content and roll it back. Don't.
+- **Local use only**: the skill talks to `127.0.0.1:4600` by default (Studio backend is `4610`; set `IC_BASE_URL` to override). That instance has **no authentication** — if you change `server.host` in `config.json` to `0.0.0.0`, you expose an endpoint on your LAN that can read every project, edit content and roll it back. Don't.
 - **Don't write while the project is running**: if `status` from `GET /api/projects/:id` is `running`, wait for it to finish (deleting writes are rejected with 409; content writes may be overwritten by the task's stale data, leaving the final film and the storyboard out of sync).
 - **Shots must pass the app's business rules** or the API returns 400: duration 1–15 s; dialogue length ≤ duration × 5.5 (over-fast lines get squeezed into unintelligible audio); at most 2 speakers per shot; resolution / aspect ratio must be one of the fixed enums.
 - **HTTP API only**: read and write through `{base}/api/...`. Never open `data/ic.db` directly (not even read-only) and never hand-edit files under `data/` or `config.json` — bypassing the API means no change log and nothing to roll back.

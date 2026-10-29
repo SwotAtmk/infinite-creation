@@ -48,9 +48,11 @@ pnpm install            # 自动构建 Agent 内核（首次较慢，需 bun）
 pnpm run install:skills # 可选：拉取 MiniMax-H3 官方技能（仓库已含离线快照）
 
 cp config.example.json config.json   # 填 llm.apiKey 与 comfyui.baseUrl
-pnpm run dev                          # 单端口 4600，打开 http://127.0.0.1:4600
+pnpm run dev                          # 前台启动 Studio（后端 4610 + 前端 4710，实时日志），打开 http://127.0.0.1:4710
+pnpm run dev:background               # 后台启动 Studio（日志写入 logs/ 与 studio/logs/）
+pnpm run dev:classic                  # 经典界面：单端口 4600，打开 http://127.0.0.1:4600
 pnpm test                             # 单元测试
-curl http://127.0.0.1:4600/api/health # 期望 {"ok":true}
+curl http://127.0.0.1:4610/api/health # 期望 {"ok":true}
 ```
 
 ### 常见问题

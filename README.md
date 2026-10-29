@@ -125,7 +125,7 @@ CPU：不挑处理器
 
 - 后端：Node.js（Next.js 自定义 server）+ node:sqlite + ComfyUI REST/WebSocket + ffmpeg，零原生编译依赖。
 - Agent：内置 openclaude 内核（进程内 SDK）+ 可选外部 Agent 运行时（本机 CLI 经 MCP 工具桥），工具注册表 + 技能引擎 + 技能工厂。
-- 前端：Next.js 15 + React 18（App Router）。
+- 前端：Next.js 15 + React 18（经典界面，App Router）· Studio 界面：Vite + React 18（`studio/`）。
 - 结构：单包 —— `app/`（页面 + 30+ 个 API 端点）· `lib/`（core/agent/shared 复用逻辑）· `server.js`（自定义 server：WebSocket 进度推送 + `/files` 静态托管，支持 Range 流式播放视频）。
 
 ## 目录结构
@@ -137,10 +137,12 @@ infinite-creation/
 │   └── agent/external/  #   外部 Agent 运行时：defs/（每个 CLI 一个定义文件）· registry（注册表）· detect（检测）· mcp-config · mcp-server（MCP 服务）· runner（执行器）
 ├── server.js            # 自定义 server（WebSocket 进度推送 + /files 静态托管，Range 流式）
 ├── workflows/           # ComfyUI 工作流模板（MiniMax H3 视频 / Qwen-Image 2.1 图·文 / Krea2 / Qwen3-TTS，含 GGUF 量化版）
-├── start-infinite-creation.bat    # Windows 一键后台启动（自动装依赖 + 等服务就绪）
+├── start-studio.sh / start-studio.bat   # 后台启动器（Studio 前端 4710 + 独立后端 4610）
+├── start-infinite-creation.bat    # Windows 一键后台启动（经典界面 4600）
 ├── stop-infinite-creation.bat     # Windows 停止服务
 ├── skills/              # 技能库（9 官方 + novel-to-video + 自定义）
 ├── scripts/install-skills.mjs   # 拉取 MiniMax-H3 官方技能
+├── scripts/dev.mjs      # pnpm run dev 启动器：前台双进程实时日志；--background 后台启动
 ├── tests/               # 单元测试：unit.test.mjs + external-agents.test.mjs（外部 Agent 定义 / 自定义命令 / MCP 握手）
 ├── vendor/openclaude/           # Agent 内核源码（dist/ 构建产物不入库，需本地构建）
 └── data/                # 运行时（gitignore）：SQLite + projects/<id>/…
@@ -191,45 +193,62 @@ pnpm install
 # 2. 拉取 MiniMax-H3 官方技能（可选，仓库已含离线快照）
 pnpm run install:skills
 
-# 3. 开发模式：一条命令启动（单端口 4600，前端+API+WS+静态文件全托管）
+# 3. 开发模式：默认前台启动 Studio（独立后端 4610 + 前端 4710，日志实时输出）
 pnpm run dev
+# 浏览器打开 http://127.0.0.1:4710
+# Ctrl+C 同时停止前端与后端
+
+# 需要后台常驻（日志写入文件）时
+pnpm run dev:background
+
+# 经典界面（旧版单端口 4600）开发模式
+pnpm run dev:classic
 # 浏览器打开 http://127.0.0.1:4600
 
-# 4. 生产模式：单端口 4600，由后端托管前端构建产物
+# 4. 生产模式
+# 经典界面：单端口 4600，由后端托管前端构建产物
 pnpm run build && pnpm start
 # 浏览器打开 http://127.0.0.1:4600
+
+# Studio：构建前端 + 独立后端（生产）
+./start-studio-prod.sh        # Windows：start-studio-prod.bat
+# 浏览器打开 http://127.0.0.1:4710
 ```
 
-> Windows 用户也可直接双击根目录 `start-infinite-creation.bat` 一键后台启动（自动检测端口/安装依赖/等待就绪，并提示 ComfyUI 状态），停止用 `stop-infinite-creation.bat`。
+> Windows 用户可直接双击根目录 `start-studio.bat`（Studio，后端 4610 + 前端 4710）或 `start-infinite-creation.bat`（经典界面 4600）一键后台启动；停止分别用 `stop-studio.bat` / `stop-infinite-creation.bat`。
 
-> **独立 Studio 界面（可选）**：仓库内含一套独立启动的新界面 `studio/`（Vite + React，端口 4710），与经典界面共用同一后端与数据。
+> **Studio 是默认开发界面**：`pnpm run dev` 在前台同时启动独立后端 4610 与 Studio 前端 4710，日志直接输出到终端，`Ctrl+C` 一并停止；需要后台常驻时用 `pnpm run dev:background`（内部调用 `start-studio.sh` / `start-studio.bat`）。
 > ```bash
-> start-studio.bat          # 启动后端 + Studio，打开 http://127.0.0.1:4710
-> stop-studio.bat           # 只停止 Studio，后端保持运行
+> pnpm run dev:background       # 后台启动，日志写入 logs/ 与 studio/logs/
+> ./start-studio.sh             # 等价的后台脚本（macOS / Linux）
+> ./stop-studio.sh              # 只停止 Studio
+> ./start-infinite-creation.sh  # 经典界面，打开 http://127.0.0.1:4600
 > ```
 > Studio 配置说明见 [studio/README.md](studio/README.md)。
 
 > Agent 内核 `vendor/openclaude/dist/` 是构建产物、不入库，`pnpm install` 会自动构建一次（幂等，已存在则跳过）。只有当你改动了 `vendor/openclaude/src/` 源码后，才需要手动重跑 `pnpm build:agent`。构建细节见 [docs/agent-architecture.md](docs/agent-architecture.md)。
 
-### 分别启动原版 Web 与 Studio
+### 分别启动 Studio 与经典界面
 
 两套界面可以独立运行，共用同一份 `config.json` 与数据库：
 
 ```bash
-# ── 原版 Web（单进程，4600）──────────────────────────────
-pnpm dev                     # 开发模式
-pnpm build && pnpm start     # 生产模式
+# ── Studio（默认，后端 4610 + 前端 4710）────────────────
+pnpm run dev                 # 前台：日志实时输出，Ctrl+C 同时停止前后端
+pnpm run dev:background      # 后台：日志写入 logs/ 与 studio/logs/
 
-# ── Studio（后端 4610 + 前端 4710，两个终端）──────────────
+# 也可以手动分两个终端：
 # 终端 1：Studio 后端（开发）
-PORT=4610 NEXT_DIST_DIR=.next-studio-dev pnpm dev
+PORT=4610 NEXT_DIST_DIR=.next-studio-dev pnpm run dev:classic
 # 终端 2：Studio 前端
 pnpm --filter studio dev
 
 # Studio 生产
-PORT=4610 NEXT_DIST_DIR=.next-studio pnpm start
-pnpm --filter studio build
-STUDIO_PORT=4710 STUDIO_BACKEND=http://127.0.0.1:4610 pnpm --filter studio preview
+./start-studio-prod.sh       # Windows：start-studio-prod.bat
+
+# ── 经典界面（旧版单进程，4600）────────────────────────
+pnpm run dev:classic         # 开发模式
+pnpm run build && pnpm start # 生产模式
 ```
 
 Windows `cmd` 里设置环境变量：
@@ -237,7 +256,7 @@ Windows `cmd` 里设置环境变量：
 ```bat
 set PORT=4610
 set NEXT_DIST_DIR=.next-studio-dev
-pnpm dev
+pnpm run dev:classic
 ```
 
 > 开源版不包含账号、管理后台、积分计费与内容审核；系统设置（ComfyUI / LLM / 工作流 / 硬件 / 生成参数）直接开放。
@@ -383,7 +402,7 @@ node scripts/db-migrate.mjs --from sqlite --to postgres --replace
 # 1. 装技能（只需一次；装完重启一下 AI 工具，它才会发现新技能）
 pnpm run install:ic-writer     # 默认装到 ~/.agents/skills/ic-writer/
 
-# 2. 起服务（地址默认 http://127.0.0.1:4600）
+# 2. 起服务（默认启动 Studio：界面 http://127.0.0.1:4710，API 4610）
 pnpm run dev
 
 # 3. 对 AI 工具说人话，例如：
@@ -391,6 +410,8 @@ pnpm run dev
 #    「给这个项目写 3 章剧本」
 #    「把第 2 章的分镜表重写一遍」
 ```
+
+> 写作技能默认连接 `http://127.0.0.1:4600`（经典界面后端）；使用 Studio 时把它指向 Studio 后端即可：`IC_BASE_URL=http://127.0.0.1:4610`。
 
 技能源就在仓库里：`harness-skills/ic-writer/SKILL.md`（`pnpm run install:ic-writer` 就是把它复制到技能目录）。想装到别处：`node scripts/install-writer-skill.mjs --target <你的技能目录>`。
 
@@ -405,7 +426,7 @@ pnpm run dev
 
 ### 限制与注意
 
-- **只对本机用**：默认只连 `127.0.0.1:4600`。这个实例**没有鉴权**——如果把 `config.json` 里的 `server.host` 改成 `0.0.0.0`，等于给局域网开了一个「能读全文、能改内容、能回滚」的入口，别这么配。
+- **只对本机用**：技能默认只连 `127.0.0.1:4600`（Studio 后端为 `4610`，可用 `IC_BASE_URL` 指定）。这个实例**没有鉴权**——如果把 `config.json` 里的 `server.host` 改成 `0.0.0.0`，等于给局域网开了一个「能读全文、能改内容、能回滚」的入口，别这么配。
 - **项目正在跑任务时先别写**：`GET /api/projects/:id` 的 `status` 是 `running` 就等它跑完（删除类写入会被直接拒 409；内容类写入也可能被任务用旧数据覆盖，最后成片和分镜表对不上）。
 - **写进去的分镜要过业务校验**，否则接口直接 400：时长 1~15 秒；台词字数 ≤ 时长 × 5.5（超了会被压成听不清的模糊声）；单个分镜说话人 ≤ 2；分辨率 / 宽高比走固定枚举。
 - **只走 HTTP API**：读写一律通过 `{base}/api/...`。不要直连 `data/ic.db`（只读也不行）、不要手改 `data/` 里的文件和 `config.json`——绕过去就没有变更日志，写错了回滚不了。

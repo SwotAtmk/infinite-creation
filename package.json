@@ -9,7 +9,9 @@
   "scripts": {
     "postinstall": "node scripts/ensure-agent.mjs",
     "build:agent": "node scripts/ensure-agent.mjs",
-    "dev": "node server.js",
+    "dev": "node scripts/dev.mjs",
+    "dev:background": "node scripts/dev.mjs --background",
+    "dev:classic": "node server.js",
     "build": "next build",
     "db:migrate": "node scripts/db-migrate.mjs",
     "start": "NODE_ENV=production node server.js",

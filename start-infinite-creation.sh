@@ -57,7 +57,7 @@ else
 
   mkdir -p "$LOG_DIR"
   echo "[启动] 正在后台启动 ..."
-  nohup bash -c 'printf "y\n" | pnpm run dev' > "$LOG_FILE" 2> "$ERR_LOG" &
+  nohup bash -c 'printf "y\n" | pnpm run dev:classic' > "$LOG_FILE" 2> "$ERR_LOG" &
   echo "[等待] 等待服务就绪 ..."
   wait_for_port "$PORT" 120 "服务" || {
     echo "[错误] 等待超时 120 秒，请查看日志：${LOG_FILE}"

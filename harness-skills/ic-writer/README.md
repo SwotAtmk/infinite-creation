@@ -19,7 +19,7 @@ node scripts/install-writer-skill.mjs --target <你的技能目录>
 
 ## 用
 
-前提：项目实例正在运行。在项目根目录 `pnpm run dev`，默认地址 <http://127.0.0.1:4600>（可用环境变量 `IC_BASE_URL` 覆盖）。
+前提：项目实例正在运行。在项目根目录 `pnpm run dev`（Studio，API 4610）或 `pnpm run dev:classic`（经典界面，API 4600）；技能默认地址 <http://127.0.0.1:4600>，Studio 下用 `IC_BASE_URL=http://127.0.0.1:4610` 覆盖。
 
 然后对 AI 工具说人话就行，例如：
 

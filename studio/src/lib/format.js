@@ -88,6 +88,8 @@ export const JOB_LABEL = {
   export: '导出成片',
   music: '生成背景音乐',
   'music-apply': '应用背景音乐',
+  'voice-clone': '音色克隆',
+  'digital-human-tts': '数字人语音驱动',
 };
 
 export const CANCELLABLE = new Set([
@@ -101,6 +103,8 @@ export const CANCELLABLE = new Set([
   'chapter-video',
   'music',
   'music-apply',
+  'voice-clone',
+  'digital-human-tts',
 ]);
 
 export const JOB_STATUS_META = {

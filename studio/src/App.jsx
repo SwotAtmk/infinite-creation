@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Github, Image as ImageIcon, LayoutGrid, Mic2, Music4, Sparkles, UserRound, Video } from 'lucide-react';
+import { Github, Image as ImageIcon, LayoutGrid, Mic2, Music4, Repeat2, Sparkles, UserRound, Video } from 'lucide-react';
 import { ToastProvider } from './components/toast.jsx';
 import BackToTop from './components/BackToTop.jsx';
 import TopBar from './components/TopBar.jsx';
@@ -11,6 +11,7 @@ import ImageGenPage from './pages/ImageGenPage.jsx';
 import VideoGenPage from './pages/VideoGenPage.jsx';
 import MusicGenPage from './pages/MusicGenPage.jsx';
 import VoiceDesignPage from './pages/VoiceDesignPage.jsx';
+import VoiceClonePage from './pages/VoiceClonePage.jsx';
 import { useServerInfo } from './lib/hooks.js';
 
 // 左侧菜单：与经典界面保持一致，每种创作类型对应一个独立工作台。
@@ -22,6 +23,7 @@ const MENU = [
   { id: 'video', label: '视频生成', icon: Video },
   { id: 'music', label: '音乐生成', icon: Music4 },
   { id: 'tts', label: '音色设计', icon: Mic2 },
+  { id: 'tts_clone', label: '音色克隆', icon: Repeat2 },
 ];
 
 function parseState() {
@@ -197,6 +199,7 @@ export default function App() {
               {state.view.type !== 'settings' && state.mode === 'video' ? <VideoGenPage /> : null}
               {state.view.type !== 'settings' && state.mode === 'music' ? <MusicGenPage /> : null}
               {state.view.type !== 'settings' && state.mode === 'tts' ? <VoiceDesignPage /> : null}
+              {state.view.type !== 'settings' && state.mode === 'tts_clone' ? <VoiceClonePage /> : null}
             </div>
           </div>
         </main>

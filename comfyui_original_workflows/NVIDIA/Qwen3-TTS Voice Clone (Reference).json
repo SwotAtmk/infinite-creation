@@ -1,0 +1,303 @@
+{
+  "id": "9c31c47d-f3d6-43ba-bbe2-63cda1c7abb1",
+  "revision": 0,
+  "last_node_id": 42,
+  "last_link_id": 72,
+  "nodes": [
+    {
+      "id": 6,
+      "type": "LoadAudio",
+      "pos": [
+        -931.272005629772,
+        -356.72269629964006
+      ],
+      "size": [
+        270,
+        136
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            66,
+            69
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "人物参考音色试听.flac",
+        null
+      ],
+      "widgets_values_named": {
+        "audio": "人物参考音色试听.flac",
+        "upload": null
+      }
+    },
+    {
+      "id": 8,
+      "type": "SaveAudio",
+      "pos": [
+        379.19758076967616,
+        -491.97880602742265
+      ],
+      "size": [
+        270,
+        112
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 72
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveAudio"
+      },
+      "widgets_values": [
+        "audio/ComfyUI"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "audio/ComfyUI"
+      }
+    },
+    {
+      "id": 40,
+      "type": "Qwen3TTSSenseVoiceASR",
+      "pos": [
+        -607.5982007304588,
+        -168.64512579787794
+      ],
+      "size": [
+        378.3322251677033,
+        126
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 66
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            71
+          ]
+        },
+        {
+          "name": "suggested_instruct",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSSenseVoiceASR"
+      },
+      "widgets_values": [
+        "iic/SenseVoiceSmall",
+        "auto"
+      ],
+      "widgets_values_named": {
+        "model_id": "iic/SenseVoiceSmall",
+        "language": "auto"
+      }
+    },
+    {
+      "id": 41,
+      "type": "Qwen3TTSModelLoader",
+      "pos": [
+        -532.6776272271738,
+        -663.3528064328776
+      ],
+      "size": [
+        277.015625,
+        154
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "QWEN_TTS_MODEL",
+          "type": "QWEN_TTS_MODEL",
+          "links": [
+            70
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSModelLoader"
+      },
+      "widgets_values": [
+        "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "cuda:0",
+        "bfloat16",
+        true,
+        false
+      ],
+      "widgets_values_named": {
+        "model_name": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "device": "cuda:0",
+        "dtype": "bfloat16",
+        "keep_model_loaded": true,
+        "use_flash_attn": false
+      }
+    },
+    {
+      "id": 42,
+      "type": "Qwen3TTSVoiceClone",
+      "pos": [
+        -147.59005046902251,
+        -518.5983747272213
+      ],
+      "size": [
+        400,
+        354
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "QWEN_TTS_MODEL",
+          "link": 70
+        },
+        {
+          "name": "ref_audio",
+          "type": "AUDIO",
+          "link": 69
+        },
+        {
+          "name": "ref_text",
+          "type": "STRING",
+          "widget": {
+            "name": "ref_text"
+          },
+          "link": 71
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            72
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSVoiceClone"
+      },
+      "widgets_values": [
+        "你好，我是小Q，很高兴认识你",
+        "Transcript of the reference audio",
+        "Auto",
+        229486658477685,
+        "randomize",
+        false,
+        2048,
+        1,
+        0.8,
+        1.1
+      ],
+      "widgets_values_named": {
+        "text": "你好，我是小Q，很高兴认识你",
+        "ref_text": "Transcript of the reference audio",
+        "language": "Auto",
+        "seed": 229486658477685,
+        "control_after_generate": "randomize",
+        "x_vector_only": false,
+        "max_new_tokens": 2048,
+        "temperature": 1,
+        "top_p": 0.8,
+        "repetition_penalty": 1.1
+      }
+    }
+  ],
+  "links": [
+    [
+      66,
+      6,
+      0,
+      40,
+      0,
+      "AUDIO"
+    ],
+    [
+      69,
+      6,
+      0,
+      42,
+      1,
+      "AUDIO"
+    ],
+    [
+      70,
+      41,
+      0,
+      42,
+      0,
+      "QWEN_TTS_MODEL"
+    ],
+    [
+      71,
+      40,
+      0,
+      42,
+      2,
+      "STRING"
+    ],
+    [
+      72,
+      42,
+      0,
+      8,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9658823258433352,
+      "offset": [
+        1002.4182158808969,
+        866.3143196973745
+      ]
+    },
+    "frontendVersion": "1.55.14",
+    "workflowRendererVersion": "LG",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

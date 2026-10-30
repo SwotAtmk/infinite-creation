@@ -1,0 +1,93 @@
+{
+  "6": {
+    "inputs": {
+      "audio": "2ff277b25dc1f6852470ba0bee367807b1e28127029ca7d840009832d87c66c2.flac"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "Load Audio"
+    }
+  },
+  "8": {
+    "inputs": {
+      "filename_prefix": "audio/ComfyUI",
+      "audio": [
+        "45",
+        0
+      ]
+    },
+    "class_type": "SaveAudio",
+    "_meta": {
+      "title": "Save Audio (FLAC) (DEPRECATED)"
+    }
+  },
+  "41": {
+    "inputs": {
+      "模型名称": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+      "运行设备": "cuda",
+      "精度": "fp16"
+    },
+    "class_type": "Qwen3TTSModelLoader",
+    "_meta": {
+      "title": "Qwen3 TTS 模型加载"
+    }
+  },
+  "43": {
+    "inputs": {
+      "model_name": "Qwen3-ASR-1.7B"
+    },
+    "class_type": "Qwen3ASRLoader",
+    "_meta": {
+      "title": "Qwen3-ASR Loader"
+    }
+  },
+  "44": {
+    "inputs": {
+      "language": "Auto",
+      "model": [
+        "43",
+        0
+      ],
+      "audio": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "Qwen3ASRTranscribe",
+    "_meta": {
+      "title": "Qwen3-ASR Transcribe"
+    }
+  },
+  "45": {
+    "inputs": {
+      "文本": "你好，我是小Q，很高兴认识你",
+      "参考文本": [
+        "44",
+        0
+      ],
+      "语言": "自动",
+      "自动卸载模型": true,
+      "最大生成Token数": 2048,
+      "seed": 1053863697590741,
+      "语速": 1,
+      "批量模式": false,
+      "top_p": 0.8,
+      "top_k": 50,
+      "temperature": 0.8,
+      "repetition_penalty": 1.1,
+      "启用高级采样配置": false,
+      "模型": [
+        "41",
+        0
+      ],
+      "参考音频": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "Qwen3TTSVoiceClone",
+    "_meta": {
+      "title": "Qwen3 TTS 声音克隆"
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "6": {
+    "inputs": {
+      "audio": "人物参考音色试听.flac"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "加载音频"
+    }
+  },
+  "8": {
+    "inputs": {
+      "filename_prefix": "audio/ComfyUI",
+      "audio": [
+        "42",
+        0
+      ]
+    },
+    "class_type": "SaveAudio",
+    "_meta": {
+      "title": "保存音频"
+    }
+  },
+  "40": {
+    "inputs": {
+      "model_id": "iic/SenseVoiceSmall",
+      "language": "auto",
+      "audio": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "Qwen3TTSSenseVoiceASR",
+    "_meta": {
+      "title": "Qwen3-TTS SenseVoice ASR 🗣️"
+    }
+  },
+  "41": {
+    "inputs": {
+      "model_name": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+      "device": "cuda:0",
+      "dtype": "bfloat16",
+      "keep_model_loaded": true,
+      "use_flash_attn": false
+    },
+    "class_type": "Qwen3TTSModelLoader",
+    "_meta": {
+      "title": "Qwen3 TTS Model Loader"
+    }
+  },
+  "42": {
+    "inputs": {
+      "text": "你好，我是小Q，很高兴认识你",
+      "ref_text": [
+        "40",
+        0
+      ],
+      "language": "Auto",
+      "seed": 229486658477685,
+      "x_vector_only": false,
+      "max_new_tokens": 2048,
+      "temperature": 1,
+      "top_p": 0.8,
+      "repetition_penalty": 1.1,
+      "model": [
+        "41",
+        0
+      ],
+      "ref_audio": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "Qwen3TTSVoiceClone",
+    "_meta": {
+      "title": "Qwen3 TTS Voice Clone"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Image as ImageIcon, LayoutGrid, Mic2, Music4, Sparkles, UserRound, Video } from 'lucide-react';
+import { Github, Image as ImageIcon, LayoutGrid, Mic2, Music4, Sparkles, UserRound, Video } from 'lucide-react';
 import { ToastProvider } from './components/toast.jsx';
 import BackToTop from './components/BackToTop.jsx';
 import TopBar from './components/TopBar.jsx';
@@ -128,7 +128,6 @@ export default function App() {
           onHome={() => goMode('agent')}
           onSettings={() => go({ ...state, view: { type: 'settings' } })}
           serverInfo={server}
-          features={features || {}}
           showSettings={!features || features.settings !== false}
         />
 
@@ -211,7 +210,21 @@ export default function App() {
               </>
             ) : (
               <>
-                <span>无限创作 Studio · 小说到成片的一站式 AI 创作平台</span>
+                <span className="flex flex-wrap items-center gap-2">
+                  无限创作 Studio · 小说到成片的一站式 AI 创作平台
+                  <a
+                    href="https://github.com/SwotAtmk/infinite-creation"
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="GitHub"
+                    className="flex items-center gap-1.5 text-[var(--fg-4)] no-underline transition-colors hover:text-[var(--fg)]"
+                    style={{ marginLeft: 10, fontSize: 13 }}
+                    title="SwotAtmk/infinite-creation"
+                  >
+                    <Github size={18} />
+                    <span>SwotAtmk/infinite-creation</span>
+                  </a>
+                </span>
                 <span>内容由 AI 生成，请遵守平台规范与当地法律法规</span>
               </>
             )}

@@ -2,22 +2,36 @@ import clsx from 'clsx';
 import { Github, Settings2, Sparkles } from 'lucide-react';
 import { Button } from './ui.jsx';
 
-export default function TopBar({ onHome, onSettings, serverInfo, features = {}, showSettings = true }) {
+export default function TopBar({ onHome, onSettings, serverInfo, showSettings = true }) {
   const online = serverInfo?.online !== false;
   const publicMode = !!serverInfo?.publicMode;
   return (
     <header className="sticky top-0 z-[120] border-b border-[var(--line)] bg-[rgba(10,11,13,.72)] backdrop-blur-xl">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(232,177,92,.35),transparent)]" />
       <div className="mx-auto flex h-16 max-w-[1360px] items-center justify-between gap-4 px-5">
-        <button type="button" onClick={onHome} className="group flex items-center gap-3">
-          <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-[11px] border border-[rgba(232,177,92,.35)] bg-[linear-gradient(145deg,rgba(232,177,92,.22),rgba(232,177,92,.05))] text-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,.14),0_8px_24px_-12px_rgba(232,177,92,.5)] transition-transform duration-200 group-hover:scale-[1.03]">
-            <Sparkles size={17} />
-          </span>
-          <span className="flex items-baseline gap-2">
-            <span className="text-[15px] font-semibold tracking-[-.01em] text-[var(--fg)]">无限创作</span>
-            <span className="rounded border border-[var(--line-strong)] px-1.5 py-0.5 font-mono text-[9.5px] tracking-[.16em] text-[var(--fg-3)]">STUDIO</span>
-          </span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={onHome} className="group flex items-center gap-3">
+            <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-[11px] border border-[rgba(232,177,92,.35)] bg-[linear-gradient(145deg,rgba(232,177,92,.22),rgba(232,177,92,.05))] text-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,.14),0_8px_24px_-12px_rgba(232,177,92,.5)] transition-transform duration-200 group-hover:scale-[1.03]">
+              <Sparkles size={17} />
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span className="text-[15px] font-semibold tracking-[-.01em] text-[var(--fg)]">无限创作</span>
+              <span className="rounded border border-[var(--line-strong)] px-1.5 py-0.5 font-mono text-[9.5px] tracking-[.16em] text-[var(--fg-3)]">STUDIO</span>
+            </span>
+          </button>
+          <a
+            href="https://github.com/SwotAtmk/infinite-creation"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="GitHub"
+            className="flex items-center gap-1.5 text-[var(--fg-3)] no-underline transition-colors hover:text-[var(--fg)]"
+            style={{ marginLeft: 10, fontSize: 13 }}
+            title="SwotAtmk/infinite-creation"
+          >
+            <Github size={18} />
+            <span className="hidden sm:inline">SwotAtmk/infinite-creation</span>
+          </a>
+        </div>
 
         <div className="flex items-center gap-2">
           <span
@@ -45,17 +59,6 @@ export default function TopBar({ onHome, onSettings, serverInfo, features = {}, 
               <Settings2 size={13} />
               系统设置
             </Button>
-          ) : null}
-          {!publicMode && features?.buttons?.github !== false ? (
-            <a
-              href="https://github.com/SwotAtmk/infinite-creation"
-              target="_blank"
-              rel="noreferrer"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] text-[var(--fg-3)] transition-colors hover:border-[var(--line-strong)] hover:text-[var(--fg)]"
-              title="GitHub 仓库"
-            >
-              <Github size={14} />
-            </a>
           ) : null}
         </div>
       </div>

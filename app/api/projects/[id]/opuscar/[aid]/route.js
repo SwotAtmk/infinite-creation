@@ -18,14 +18,16 @@ function activeOpuscarJob(projectId, assetId) {
   );
 }
 
-// 编辑时重排素材：已是 film/materials/ 的保留，uploads/ 的复制进工作区。
-function restage(projectId, references) {
+// 编辑时重排素材：每条记录独立工作区 film/<assetId>/materials/。
+// 已在该工作区里的直接保留，uploads/ 或旧 film/materials/ 的复制进本记录工作区。
+function restage(projectId, assetId, references) {
+  const prefix = 'film/' + assetId + '/materials/';
   const stored = [];
   for (const r of references || []) {
     const rel = String(r.filename || r.path || '').trim();
     if (!rel) continue;
     const type = ['image', 'audio', 'video', 'file'].includes(r.type) ? r.type : 'file';
-    if (rel.startsWith('film/materials/')) {
+    if (rel.startsWith(prefix)) {
       stored.push({ type, filename: rel, name: r.name || '' });
       continue;
     }
@@ -33,7 +35,7 @@ function restage(projectId, references) {
     if (!srcAbs || !fs.existsSync(srcAbs)) throw new Error('素材不存在：' + rel);
     const ext = path.extname(rel);
     const base = path.basename(rel, ext) || 'mat';
-    const destRel = 'film/materials/' + slugify(base) + '_' + uid().slice(0, 6) + ext;
+    const destRel = prefix + slugify(base) + '_' + uid().slice(0, 6) + ext;
     const destAbs = resolveProjectPath(projectId, destRel);
     if (!destAbs) throw new Error('素材路径非法');
     fs.mkdirSync(path.dirname(destAbs), { recursive: true });
@@ -73,13 +75,15 @@ export async function PATCH(req, { params }) {
     let references = body.references !== undefined ? body.references : (old.references || []);
     let storedRefs;
     try {
-      storedRefs = restage(id, references);
+      storedRefs = restage(id, aid, references);
     } catch (e) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
+    // 编辑只改风格/素材，保留已有的对话历史（chat）不被覆盖。
+    const chat = Array.isArray(old.chat) ? old.chat : [];
     patch.params = isCustom
-      ? { style_slug: '__custom__', style_cn: '自定义风格', style_en: 'Custom', cat: '自定义', custom_style: customStyle, references: storedRefs }
-      : { style_slug, style_cn: style ? style.cn : (old.style_cn || ''), style_en: style ? style.en : (old.style_en || ''), cat: style ? style.cat : (old.cat || ''), references: storedRefs };
+      ? { style_slug: '__custom__', style_cn: '自定义风格', style_en: 'Custom', cat: '自定义', custom_style: customStyle, references: storedRefs, chat }
+      : { style_slug, style_cn: style ? style.cn : (old.style_cn || ''), style_en: style ? style.en : (old.style_en || ''), cat: style ? style.cat : (old.cat || ''), references: storedRefs, chat };
   }
 
   if (!Object.keys(patch).length) return NextResponse.json({ error: '无更新字段' }, { status: 400 });

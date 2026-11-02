@@ -1,7 +1,8 @@
 // SwotAtmk/infinite-creation · 开源地址 https://github.com/SwotAtmk/infinite-creation
-// 通用媒体上传：供简单模式页（视频生成 / 数字人）上传参考图片、驱动音频、参考视频等物料。
-// 与 references（仅图片、需章节）和 assets/:aid/upload（需先建资产）不同，这里只落盘并返回
-// 相对路径 + 媒体类型，供后续「视频生成」等接口引用。
+// 通用素材上传：供简单模式页（视频生成 / 数字人 / 无限・秩影）上传任意素材。
+// 图片/音频/视频按类型落盘，其它任意文件（数据/扫描/CAD/字体/文档等）统一归为 file，
+// 供 Agent 在后续流程里按需读取使用。与 references（仅图片、需章节）和 assets/:aid/upload
+// （需先建资产）不同，这里只落盘并返回相对路径 + 类型，供后续接口引用。
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,7 +15,7 @@ function mediaKind(ext) {
   if (VIDEO_EXT_RE.test(ext)) return 'video';
   if (AUDIO_EXT_RE.test(ext)) return 'audio';
   if (REFERENCE_IMAGE_EXTS.includes(ext)) return 'image';
-  return null;
+  return 'file';
 }
 
 export async function POST(req, { params }) {
@@ -28,9 +29,8 @@ export async function POST(req, { params }) {
   const orig = String(file.name || '');
   const ext = (orig && path.extname(orig) || '').toLowerCase();
   const kind = mediaKind(ext);
-  if (!kind) return NextResponse.json({ error: '不支持的文件类型：仅支持图片/音频/视频' }, { status: 400 });
 
-  const limit = UPLOAD_MAX_BYTES[kind];
+  const limit = UPLOAD_MAX_BYTES[kind] || UPLOAD_MAX_BYTES.file;
   const buf = Buffer.from(await file.arrayBuffer());
   if (!buf.length) return NextResponse.json({ error: '缺少文件内容' }, { status: 400 });
   if (buf.length > limit) return NextResponse.json({ error: '文件过大：这类素材上限 ' + Math.round(limit / 1024 / 1024) + 'MB' }, { status: 413 });

@@ -771,16 +771,17 @@ test('imageToDataUrl: png 编码与拒绝分支', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('UPLOAD_MAX_BYTES: 三档上传上限，视频 > 音频 > 图片且都装得进内存', () => {
+test('UPLOAD_MAX_BYTES: 四档上传上限，视频 > 音频 > 图片且都装得进内存', () => {
   // 上传路由把整个请求体读进内存（且默认监听 0.0.0.0）：没有上限时一个误选的大文件
   // 就能把进程撑爆 OOM，所以每一档都必须存在且足够小。
-  assert.deepEqual(Object.keys(UPLOAD_MAX_BYTES).sort(), ['audio', 'image', 'video']);
+  assert.deepEqual(Object.keys(UPLOAD_MAX_BYTES).sort(), ['audio', 'file', 'image', 'video']);
   assert.equal(UPLOAD_MAX_BYTES.image, 20 * 1024 * 1024, '图片 20MB');
   assert.ok(UPLOAD_MAX_BYTES.audio > UPLOAD_MAX_BYTES.image, '音频上限大于图片');
   assert.ok(UPLOAD_MAX_BYTES.video > UPLOAD_MAX_BYTES.audio, '视频上限大于音频');
+  assert.ok(UPLOAD_MAX_BYTES.file >= UPLOAD_MAX_BYTES.video, '任意文件档不小于视频档（素材可以是任意类型）');
   assert.ok(UPLOAD_MAX_BYTES.video <= 512 * 1024 * 1024, '视频档也要能安全读进内存');
   // 上限必须覆盖 uploadMediaKind 的全部取值，否则 route 取到 undefined → 永远超限
-  for (const kind of ['image', 'audio', 'video']) assert.ok(Number.isFinite(UPLOAD_MAX_BYTES[kind]));
+  for (const kind of ['image', 'audio', 'video', 'file']) assert.ok(Number.isFinite(UPLOAD_MAX_BYTES[kind]));
 });
 
 test('SKILL_ZIP_MAX_BYTES: 技能包上传也要有上限（同一类 OOM 面）', () => {

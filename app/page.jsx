@@ -13,12 +13,14 @@ import VideoGenPage from './pages/VideoGenPage';
 import MusicGenPage from './pages/MusicGenPage';
 import VoiceDesignPage from './pages/VoiceDesignPage';
 import DigitalHumanPage from './pages/DigitalHumanPage';
+import RankShadowPage from './pages/RankShadowPage';
 import { ToastProvider } from './toast';
 
 // 首页左侧菜单：不同类型对应不同工作台页面。
 const MENU = [
   { id: 'projects', label: '作品集' },
   { id: 'agent', label: 'Agent无限创作' },
+  { id: 'opuscar', label: '无限・秩影' },
   { id: 'digital_human', label: '数字人' },
   { id: 'image', label: '图片生成' },
   { id: 'video', label: '视频生成' },
@@ -108,6 +110,7 @@ export default function App() {
             {mode === 'video' && <VideoGenPage />}
             {mode === 'music' && <MusicGenPage />}
             {mode === 'tts' && <VoiceDesignPage />}
+            {mode === 'opuscar' && <RankShadowPage />}
             {settingsOpen && <SettingsPage onBack={() => setSettingsOpen(false)} />}
             <BackToTop />
           </main>

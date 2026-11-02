@@ -14,6 +14,7 @@
 ## 项目简介
 - 免费开源本地Agent全自动视频生成的开源项目✨，不用演员、配音、导演和剪辑师就能本地一键生成超长视频。可以做小说生成视频、漫剧广告、故事类讲解视频，让你所想到的故事变成亿帧画面。
 - 小说一键生成视频，不限时长，输入小说/剧本通过本地ComfyUI-MiniMaxH3+Agent+Skill技能一键全自动无限生产视频
+- 内置两个创作工作台：**Agent无限创作**（小说/剧本 → 长视频）与 **无限・秩影**（接入 lemo-opuscar 代码电影技能，66 个风格模板 + 任意素材 + 提示词，Agent 自动渲染风格化成片，无需 ComfyUI）。
 
 # 截图演示
 
@@ -38,6 +39,8 @@
 </div>
 
 [更多样例](docs/run_demo.md)
+
+> 「无限・秩影」内置样例位于 `public/samples/`，在页面右上角「预览样例」可直接播放成片、查看素材与提示词，并「一键试用」。
 
 ## 项目计划
 - [持续进行] 解决项目中存在的BUG
@@ -68,6 +71,7 @@
 - [✅] 上传小说/剧本生成视频本地全链路Agent全自动工作流生成方案
 - [✅] 优化图片素材生成的质量
 - [✅] 优化人物参考音频的声音设计
+- [✅] 新增「无限・秩影」代码电影模式：接入 lemo-opuscar 的 66 个风格模板，支持预设/自定义风格、任意素材上传、样例预览与一键试用、生成记录查询/编辑/重新生成/停止/删除/批量删除
 - [✅] 支持人物服装管理，每个人物可以支持设计多套服装
 
 ## 项目宗旨
@@ -81,6 +85,8 @@
 > 剧本/大纲 → 人物圣经 + 风格指南（一致性锚点）→ 人物/场景/道具/语音资产生成 → 分镜脚本 → 逐镜视频（MiniMax H3 Ref2VA）→ 背景音乐（MiniMax Music3）→ 自审重试 → ffmpeg 合并成片。
 
 **全程无需人工介入**，可以长时托管无需人工干预运行（跑一晚/一整天均可）；完成后可逐段**审查分镜**并对不满意的片段**单独重生成**。
+
+此外还提供 **「无限・秩影」代码电影模式**：不依赖 ComfyUI，由 Agent 驱动本地 lemo-opuscar 技能，用 Node/three.js 代码渲染 + ffmpeg 合成，把用户上传的任意素材按所选风格模板（共 66 个）输出成片。
 
 ## 我的电脑运行配置
 ```text
@@ -117,11 +123,13 @@ CPU：不挑处理器
 - **显存维护**：设置页可配「每 N 个生成后自动释放 ComfyUI 显存」（默认 3，0 = 关闭），覆盖文生图/图生图/换装/音色/视频全部渲染——AMD Dynamic VRAM 的显存累积不只在视频触发；未启用 Dynamic VRAM 时界面会提示关闭。
 - **在线预览**：成片/分镜视频经后端 Range 流式传输，进度条可随意拖动、即时跳转。
 - **外部 Agent 运行时**：除内置 openclaude 外，可在设置页切换到本机已安装的 CLI Agent（Claude Code / Codex CLI / Gemini CLI / Qwen Code / Cursor Agent / Qoder CLI / Grok Build / Hermes / 自定义命令），通过本地 MCP stdio 服务把领域工具暴露给外部 Agent、由其完整接管流水线；模型账号与登录态走各自 CLI。
+- **无限・秩影（代码电影）**：接入 lemo-opuscar 技能，内置 66 个风格模板并支持分类筛选与自定义风格；上传图片/音频/视频/文档等任意素材 + 提示词后，由 Agent 在本机写渲染代码、调用 ffmpeg 输出对应风格成片。内置样例库支持预览与「一键试用」，生成记录支持查询、编辑、重新生成、停止与批量删除，且不占用 ComfyUI 渲染队列。
 
 
 ## 技术栈
 
 - 后端：Node.js（Next.js 自定义 server）+ node:sqlite + ComfyUI REST/WebSocket + ffmpeg，零原生编译依赖。
+- 「无限・秩影」：内置 lemo-opuscar 代码电影技能（Node + three.js + ffmpeg + 可选 Python/Chromium），由 Agent 生成渲染脚本并输出成片，完全不经过 ComfyUI。
 - Agent：内置 openclaude 内核（进程内 SDK）+ 可选外部 Agent 运行时（本机 CLI 经 MCP 工具桥），工具注册表 + 技能引擎 + 技能工厂。
 - 前端：Next.js 15 + React 18（经典界面，App Router）· Studio 界面：Vite + React 18（`studio/`）。
 - 结构：单包 —— `app/`（页面 + 30+ 个 API 端点）· `lib/`（core/agent/shared 复用逻辑）· `server.js`（自定义 server：WebSocket 进度推送 + `/files` 静态托管，支持 Range 流式播放视频）。
@@ -131,6 +139,8 @@ CPU：不挑处理器
 ```
 infinite-creation/
 ├── app/                 # Next.js App Router（页面 + API 端点）
+├── studio/              # Studio 前端（Vite + React 18，默认界面；含「无限・秩影」工作台）
+├── public/samples/      # 内置样例库（每个子目录一份 sample.json + 成片 + 素材，可预览/一键试用）
 ├── lib/                 # 复用逻辑：core（ComfyUI/LLM/DB/ffmpeg）· agent（内置 openclaude + 外部 Agent + 技能）· shared（常量）
 │   └── agent/external/  #   外部 Agent 运行时：defs/（每个 CLI 一个定义文件）· registry（注册表）· detect（检测）· mcp-config · mcp-server（MCP 服务）· runner（执行器）
 ├── server.js            # 自定义 server（WebSocket 进度推送 + /files 静态托管，Range 流式）
@@ -138,7 +148,7 @@ infinite-creation/
 ├── start-studio.sh / start-studio.bat   # 后台启动器（Studio 前端 4710 + 独立后端 4610）
 ├── start-infinite-creation.bat    # Windows 一键后台启动（经典界面 4600）
 ├── stop-infinite-creation.bat     # Windows 停止服务
-├── skills/              # 技能库（9 官方 + novel-to-video + 自定义）
+├── skills/              # 技能库（9 官方 + novel-to-video + lemo-opuscar（66 风格模板）+ 自定义）
 ├── scripts/install-skills.mjs   # 拉取 MiniMax-H3 官方技能
 ├── scripts/dev.mjs      # pnpm run dev 启动器：前台双进程实时日志；--background 后台启动
 ├── tests/               # 单元测试：unit.test.mjs + external-agents.test.mjs（外部 Agent 定义 / 自定义命令 / MCP 握手）
@@ -357,6 +367,16 @@ node scripts/db-migrate.mjs --from sqlite --to postgres --replace
 3. 视频阶段跑完自动生成背景音乐并合并成片；到「分镜审查」逐段预览，对不满意的镜头点 ↻ 重新生成（可填反馈）；「背景音乐」页可手动生成/预览/选择背景音乐并应用到多个章节。
 4. 到「成片」页在线预览（进度条可拖动），按需下载带字幕 / 不带字幕视频或 SRT 字幕文件；不再需要的成片可单个删除或勾选批量删除。
 
+### 无限・秩影（代码电影）使用流程
+
+1. 左侧菜单进入「无限・秩影」，按分类筛选风格卡片（共 66 个模板），点卡片上的「使用风格」；也可以切到「自定义风格」直接填写风格描述。
+2. 在创建弹窗里上传任意素材（图片 / 音频 / 视频 / 文档 / 数据 / 字体等），图片、视频、音频会显示缩略图；填写提示词后点「创建生成任务」。表单支持「清空表单」一键重置。
+3. 也可以点右上角「预览样例」查看内置样例的成片、素材与提示词，并「一键试用」把样例素材上传到当前项目、自动填好表单。
+4. 任务由 Agent 在本机执行 lemo-opuscar 技能渲染，不占用 ComfyUI 队列；「生成记录」可查询、编辑、重新生成、停止、删除或批量删除，运行中的任务可打开「运行日志」查看实时输出。
+
+> 首次使用「无限・秩影」需要安装技能依赖（Node.js、ffmpeg、Python，以及 Chromium headless 渲染浏览器）：
+> `sh skills/lemo-opuscar/plugin/skills/lemo-opuscar/scripts/setup.sh deps`（TTS/音乐需要时再加 `voice` / `music`）。
+
 ## 自迭代：新工作流 → 新技能
 
 工作流 页粘贴新的 ComfyUI 工作流 JSON → 「分析节点/角色」→「注册工作流 + 生成技能」。系统会：解析节点（加载器/提示词/尺寸/种子/保存…）→ 推导工作流规格（roles/media/outputs）→ 注册到 workflows/ + DB → 调用 LLM 起草 SKILL.md 并安装为可路由技能 → Agent 即可把它当作新的「工作模式」调用。
@@ -383,6 +403,10 @@ node scripts/db-migrate.mjs --from sqlite --to postgres --replace
 | PATCH    | /api/projects/:id/shots/:sid            | 改单个分镜正文（生成结果字段不可写） |
 | GET      | /api/projects/:id/logs                  | 变更日志：谁在什么时候改了什么（回滚依据） |
 | POST     | /api/projects/:id/logs/rollback         | 回滚：单条 / 整批 / 按时间点 |
+| POST     | /api/projects/:id/jobs/:jobId/cancel    | 取消 / 停止任务（含「无限・秩影」任务） |
+| GET      | /api/opuscar/styles                     | 「无限・秩影」风格模板列表（lemo-opuscar，含分类与预览图） |
+| GET      | /api/opuscar/samples                    | 内置样例库（`public/samples/`，返回成片与素材 URL） |
+| GET/POST | /api/projects/:id/opuscar               | 记录列表 / 创建生成（传 `asset_id` 为重新生成） |
 | GET      | /api/skills                             | 技能列表            |
 | GET/POST | /api/workflows                          | 工作流列表 / 注册（自迭代） |
 | GET/PUT  | /api/config                             | 配置              |
@@ -463,6 +487,7 @@ pnpm test   # node --test tests/unit.test.mjs
 - [Comfy-Org/ComfyUI](https://github.com/Comfy-Org/ComfyUI) 提供了 ComfyUI 工作流和模型架构
 - [deepseek](https://www.deepseek.com/) 感谢Deepseek提供了 deepseek-v4-flash-vision-exp 模型
 - 参考开源Skill技能：[short-drama](https://github.com/0xsline/short-drama)、[manju-laoli-skill](https://github.com/lixiaoxiao9888-create/manju-laoli-skill)
+- [lemomo-ai/lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar) 为无限·秩影提供了核心框架
 
 感谢这些项目为我提供了帮助，使项目能够快速迭代和改进。
 

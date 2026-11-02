@@ -15,6 +15,7 @@
 
 - An open-source project for fully automated video generation with a free and open-source local agent✨, enabling the creation of ultra-long videos locally with just one click, without requiring actors, voice-overs, directors, or editors. It can be used to generate videos from novels, comic ads, and story-based instructional videos, turning your imagination into billions of frames of visuals.
 - One-click generation of videos from novels, with no time limit. Enter the novel/script and use the local ComfyUI-MiniMaxH3+Agent+Skill to automatically generate unlimited videos with one click
+- Two built-in creation workspaces: **Agent Infinite Creation** (novel/script → long video) and **Rank Shadow (无限・秩影)** (powered by the lemo-opuscar code-film skill: 66 style templates + any materials + a prompt, with the Agent rendering a styled film locally — no ComfyUI required).
 
 # Screenshots
 
@@ -41,6 +42,8 @@
 </div>
 
 [More samples](docs/run_demo.md)
+
+> Rank Shadow ships built-in samples under `public/samples/`: click "Preview samples" in the top-right corner to play the film, inspect its materials and prompt, and try it with one click.
 
 ## Roadmap
 - [Ongoing] Addressing BUGs in the project
@@ -71,6 +74,7 @@
 - [✅] Upload novels/scripts to generate videos via a local, fully automated end-to-end Agent workflow
 - [✅] Optimized image asset generation quality
 - [✅] Optimized sound design for character reference audio
+- [✅] New "Rank Shadow" code-film mode: integrates lemo-opuscar's 66 style templates, with preset/custom styles, upload of any materials, sample preview and one-click trial, plus generation records (query / edit / regenerate / stop / delete / batch delete)
 - [✅] Support for character costume management — each character can be designed with multiple outfits
 
 ## Mission
@@ -86,6 +90,8 @@ Just paste a novel/script into the project and click "Start" — the Agent fully
 > Script/Outline → Character Bible + Style Guide (consistency anchors) → Character/Scene/Prop/Voice asset generation → Storyboard script → Per-shot video (MiniMax H3 Ref2VA) → Background music (MiniMax Music3) → Self-review & retry → ffmpeg merge into final film.
 
 **No manual intervention required.** It can run unattended for long periods (overnight or all day); when finished, you can review shots segment by segment and regenerate any unsatisfactory clip individually.
+
+It also ships a **"Rank Shadow" code-film mode**: independent of ComfyUI, the Agent drives the local lemo-opuscar skill to render with Node/three.js code and mux with ffmpeg, turning any uploaded materials into a film in one of 66 built-in styles.
 
 ## My Machine Specs
 
@@ -124,10 +130,12 @@ Hard disk: At least 150G of space is required
 - **VRAM maintenance**: The settings page lets you configure "release ComfyUI VRAM every N generations" (default 3, 0 = off), covering text-to-image / image-to-image / costume change / voice / video rendering — AMD Dynamic VRAM's memory accumulation isn't only triggered by video. When Dynamic VRAM is disabled, the UI shows a prompt recommending it be turned on.
 - **Online preview**: Final films / shot videos are streamed via backend Range requests — drag the progress bar freely and jump instantly.
 - **External Agent runtime**: Besides the built-in openclaude, switch on the settings page to a locally installed CLI agent (Claude Code / Codex CLI / Gemini CLI / Qwen Code / Cursor Agent / Qoder CLI / Grok Build / Hermes / custom command), exposing domain tools to it via a local MCP stdio service so it fully takes over the pipeline; model accounts and sign-in state stay with each CLI.
+- **Rank Shadow (code film)**: Integrates the lemo-opuscar skill with 66 style templates (category filtering + custom style). Upload any images / audio / video / documents plus a prompt, and the Agent writes the render code locally and muxes the result with ffmpeg. Built-in samples support preview and one-click trial; generation records support query, edit, regenerate, stop and batch delete, and never occupy the ComfyUI render queue.
 
 ## Tech Stack
 
 - Backend: Node.js (Next.js custom server) + `node:sqlite` + ComfyUI REST/WebSocket + ffmpeg, zero native-compilation dependencies.
+- Rank Shadow: bundled lemo-opuscar code-film skill (Node + three.js + ffmpeg + optional Python/Chromium); the Agent generates render scripts and produces the film entirely without ComfyUI.
 - Agent: built-in openclaude kernel (in-process SDK) + optional external Agent runtime (local CLI via an MCP tool bridge), tool registry + skill engine + skill factory.
 - Frontend: Next.js 15 + React 18 (classic UI, App Router) · Studio UI: Vite + React 18 (`studio/`).
 - Structure: single package — `app/` (pages + 30+ API endpoints) · `lib/` (reusable core/agent/shared logic) · `server.js` (custom server: WebSocket progress push + `/files` static hosting with Range-based video streaming).
@@ -137,6 +145,8 @@ Hard disk: At least 150G of space is required
 ```
 infinite-creation/
 ├── app/                 # Next.js App Router (pages + API endpoints)
+├── studio/              # Studio frontend (Vite + React 18; default UI, includes the Rank Shadow workspace)
+├── public/samples/      # Built-in sample library (one sample.json + film + materials per folder; preview / one-click trial)
 ├── lib/                 # Reusable logic: core (ComfyUI/LLM/DB/ffmpeg) · agent (built-in openclaude + external agents + skills) · shared (constants)
 │   └── agent/external/  #   External Agent runtime: defs/ (one definition file per CLI) · registry · detect · mcp-config · mcp-server (MCP service) · runner
 ├── server.js            # Custom server (WebSocket progress push + /files static hosting, Range streaming)
@@ -144,7 +154,7 @@ infinite-creation/
 ├── start-studio.sh / start-studio.bat   # Background launcher (Studio frontend 4710 + dedicated backend 4610)
 ├── start-infinite-creation.bat    # Windows one-click background startup (classic UI, 4600)
 ├── stop-infinite-creation.bat     # Windows service stop
-├── skills/              # Skill library (9 official + novel-to-video + custom)
+├── skills/              # Skill library (9 official + novel-to-video + lemo-opuscar (66 styles) + custom)
 ├── scripts/install-skills.mjs   # Pull MiniMax-H3 official skills
 ├── scripts/dev.mjs      # pnpm run dev launcher: foreground with live logs; --background for background startup
 ├── tests/               # Unit tests: unit.test.mjs + external-agents.test.mjs (agent defs / custom command / MCP handshake)
@@ -321,6 +331,16 @@ Register now and you can receive 500 RH coins, which can be used to generate ple
 3. After the video stage finishes, background music is generated automatically and the film is merged; go to "Shot Review" to preview segment by segment and click ↻ to regenerate any unsatisfactory shot (optional feedback); the "Background Music" page lets you manually generate / preview / select a track and apply it to multiple chapters.
 4. Go to the "Final Film" page to preview online (draggable progress bar) and download the subtitled video, the subtitle-free video, or the SRT as needed; delete unwanted exports individually or in batch.
 
+### Rank Shadow (Code Film) Usage Flow
+
+1. Open **Rank Shadow** from the left menu, filter style cards by category (66 templates), and click "Use this style"; or switch to "Custom style" and describe the look yourself.
+2. In the create dialog, upload any materials (images / audio / video / documents / data / fonts, etc.); images, videos and audio show thumbnails. Fill in the prompt and click "Create job". "Clear form" resets everything in one click.
+3. Click "Preview samples" in the top-right corner to watch a built-in sample film, inspect its materials and prompt, and use "Try it now" to upload the sample materials into the current project and prefill the form.
+4. The Agent renders the film locally through the lemo-opuscar skill and does not occupy the ComfyUI queue. In "Generation records" you can query, edit, regenerate, stop, delete or batch-delete jobs; running jobs expose a live "Run log".
+
+> The first use of Rank Shadow requires installing the skill dependencies (Node.js, ffmpeg, Python, and a headless Chromium for rendering):
+> `sh skills/lemo-opuscar/plugin/skills/lemo-opuscar/scripts/setup.sh deps` (append `voice` / `music` only if you need TTS / music).
+
 ## Self-Iteration: New Workflow → New Skill
 
 On the Workflows page, paste a new ComfyUI workflow JSON → "Analyze nodes/roles" → "Register workflow + generate skill". The system: parses nodes (loaders / prompts / sizes / seeds / saves…) → derives the workflow spec (roles/media/outputs) → registers it to `workflows/` + DB → calls the LLM to draft a `SKILL.md` and installs it as a routable skill → the Agent can then call it as a new "work mode".
@@ -347,6 +367,10 @@ On the Workflows page, paste a new ComfyUI workflow JSON → "Analyze nodes/role
 | PATCH    | /api/projects/:id/shots/:sid              | Edit a single shot's content (generated-result fields are not writable) |
 | GET      | /api/projects/:id/logs                    | Change log: who changed what, when (the basis for rollback) |
 | POST     | /api/projects/:id/logs/rollback           | Roll back: one entry / a whole batch / everything since a timestamp |
+| POST     | /api/projects/:id/jobs/:jobId/cancel      | Cancel / stop a job (including Rank Shadow jobs) |
+| GET      | /api/opuscar/styles                       | Rank Shadow style templates (from lemo-opuscar, with categories and preview images) |
+| GET      | /api/opuscar/samples                      | Built-in samples (`public/samples/`, returns film and material URLs) |
+| GET/POST | /api/projects/:id/opuscar                 | List records / create a render (pass `asset_id` to regenerate) |
 | GET      | /api/skills                               | Skill list                           |
 | GET/POST | /api/workflows                            | Workflow list / register (self-iteration) |
 | GET/PUT  | /api/config                               | Configuration                        |
@@ -430,6 +454,7 @@ I've collected many useful little tools there — interested in learning more?
 - [Comfy-Org/ComfyUI](https://github.com/Comfy-Org/ComfyUI) — the ComfyUI workflows and model architecture
 - [deepseek](https://www.deepseek.com/) — thanks to DeepSeek for the deepseek-v4-flash-vision-exp model
 - Reference Open-Source Skills: [short-drama](https://github.com/0xsline/short-drama)、[manju-laoli-skill](https://github.com/lixiaoxiao9888-create/manju-laoli-skill)
+- [lemomo-ai/lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar) — Provided a core framework for Infinite·Rank Shadow
 
 Thank you to these projects for enabling rapid iteration and improvement.
 

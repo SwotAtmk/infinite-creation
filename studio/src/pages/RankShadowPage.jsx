@@ -2,9 +2,9 @@
 // 交互：主页面只留风格库（卡片 + 分类筛选）；点「使用风格」弹创建表单弹窗；
 // 顶部右上角「生成记录」按钮弹记录弹窗（搜索/状态筛选/编辑/重新生成/删除/批量删除）。
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AudioLines, Clapperboard, Eye, ExternalLink, History, Paperclip, Pencil, Play, Plus, RefreshCw, ScrollText, Sparkles, Square, Terminal, Trash2, WandSparkles, X } from 'lucide-react';
+import { AudioLines, Clapperboard, Eye, ExternalLink, History, Paperclip, Pencil, Play, Plus, RefreshCw, Send, Sparkles, Square, Terminal, Trash2, WandSparkles, X } from 'lucide-react';
 import { api, uploadForm } from '../lib/api.js';
-import { Badge, Button, Checkbox, EmptyState, Field, Input, SearchInput, Select, Skeleton, StatusPill, Textarea } from '../components/ui.jsx';
+import { Badge, Button, Checkbox, EmptyState, Field, Input, SearchInput, Select, Skeleton, Spinner, StatusPill, Textarea } from '../components/ui.jsx';
 import { Modal } from '../components/overlays.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { FilePill, useAutoProject, useJobs } from '../components/simpleStudio.jsx';
@@ -83,12 +83,17 @@ export default function RankShadowPage() {
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
 
-  // 记录弹窗
+  // 记录弹窗（Agent 聊天窗）：左侧任务列表，右侧输入摘要 + 对话 + Agent 执行日志
   const [recordsOpen, setRecordsOpen] = useState(false);
   const [records, setRecords] = useState([]);
   const [kw, setKw] = useState('');
   const [status, setStatus] = useState('all');
   const [selected, setSelected] = useState([]);
+  const [activeRecordId, setActiveRecordId] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [jobLogs, setJobLogs] = useState({}); // jobId -> 完整日志文本
+  const chatScrollRef = useRef(null);
 
   // 样例预览弹窗（内置样例库来自 public/samples/，与项目 data 目录解耦）
   const [samples, setSamples] = useState([]);
@@ -258,6 +263,84 @@ export default function RankShadowPage() {
     return m;
   }, [jobs]);
 
+  // ── 聊天窗：当前记录 / 对话历史 / 每轮对应的任务与日志 ──
+  const activeRecord = useMemo(() => records.find((r) => r.id === activeRecordId) || null, [records, activeRecordId]);
+
+  // 打开弹窗或当前记录被删除后，自动选中列表第一条
+  useEffect(() => {
+    if (!recordsOpen || activeRecord || !records.length) return;
+    setActiveRecordId(records[0].id);
+  }, [recordsOpen, activeRecord, records]);
+
+  // 当前记录的对话历史（params.chat，越靠后越新）
+  const chatMessages = useMemo(
+    () => (Array.isArray(activeRecord && activeRecord.params && activeRecord.params.chat) ? activeRecord.params.chat : []),
+    [activeRecord],
+  );
+
+  // 兼容旧记录（没有写入 chat）：用初始提示词兜底成第一条用户消息
+  const chatTurns = useMemo(() => {
+    if (chatMessages.length) return chatMessages;
+    if (!activeRecord) return [];
+    return [{ role: 'user', text: activeRecord.prompt || '（无提示词）', at: activeRecord.created_at }];
+  }, [chatMessages, activeRecord]);
+
+  // 当前记录的输入摘要（风格 / 提示词 / 素材）与成片地址
+  const activeParams = (activeRecord && activeRecord.params) || {};
+  const activeRefs = Array.isArray(activeParams.references) ? activeParams.references : [];
+  const activeVideoUrl = activeRecord && activeRecord.video_path ? fileUrl(projectId, activeRecord.video_path) : '';
+
+  // 当前记录的全部 opuscar 任务（jobs 已按 started_at 倒序，第一个即最近一次）
+  const recordJobs = useMemo(
+    () => (jobs || []).filter((j) => j.type === 'opuscar' && (j.checkpoint || {}).subject === (activeRecord ? activeRecord.id : '')),
+    [jobs, activeRecord],
+  );
+
+  // 对话轮次 -> 任务：checkpoint.turn 指向 params.chat 的下标；同一轮多次重试只取最新一次
+  const jobByTurn = useMemo(() => {
+    const m = new Map();
+    for (const j of recordJobs) {
+      const turn = Number((j.checkpoint || {}).turn);
+      const key = Number.isFinite(turn) ? turn : 0;
+      if (!m.has(key)) m.set(key, j);
+    }
+    return m;
+  }, [recordJobs]);
+
+  const recordRunning = !!(activeRecord && runningIds.has(activeRecord.id));
+
+  // 拉取当前记录每一次任务的完整日志；有运行中的任务时每 4s 刷新
+  const recordJobsKey = recordJobs.map((j) => j.id + ':' + j.status).join('|');
+  useEffect(() => {
+    if (!recordsOpen || !projectId || !recordJobs.length) {
+      setJobLogs({});
+      return undefined;
+    }
+    let cancelled = false;
+    const load = () => {
+      Promise.all(
+        recordJobs.map((j) =>
+          api.get('/api/projects/' + projectId + '/jobs/' + j.id + '/log')
+            .then((r) => [j.id, (r && r.text) || ''])
+            .catch(() => [j.id, '']),
+        ),
+      ).then((pairs) => {
+        if (!cancelled) setJobLogs(Object.fromEntries(pairs));
+      });
+    };
+    load();
+    const live = recordJobs.some((j) => j.status === 'running' || j.status === 'queued');
+    if (!live) return () => { cancelled = true; };
+    const t = setInterval(load, 4000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [recordsOpen, projectId, activeRecordId, recordJobsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 新消息 / 日志更新时把聊天区滚到底部
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [recordsOpen, activeRecordId, chatMessages.length, jobLogs]);
+
   // 点「使用风格」→ 打开创建弹窗并预填预设风格
   function pickStyle(s) {
     setPicked(s);
@@ -329,11 +412,15 @@ export default function RankShadowPage() {
         references: materials,
       };
       if (styleMode === 'custom') body.custom_style = customStyle.trim();
-      await api.post('/api/projects/' + projectId + '/opuscar', body);
+      const job = await api.post('/api/projects/' + projectId + '/opuscar', body);
       toast.success('已创建生成任务');
       setPrompt('');
       setMaterials([]);
       setCreateOpen(false);
+      // 提交后直接进入该记录的 Agent 聊天窗，观察执行过程并在完成后继续修改
+      const aid = job && job.checkpoint && job.checkpoint.subject;
+      if (aid) setActiveRecordId(aid);
+      setRecordsOpen(true);
       loadRecords();
       reloadJobs();
     } catch (e) {
@@ -355,8 +442,11 @@ export default function RankShadowPage() {
         references: p.references || [],
       };
       if (p.style_slug === '__custom__') body.custom_style = p.custom_style || '';
-      await api.post('/api/projects/' + projectId + '/opuscar', body);
+      const job = await api.post('/api/projects/' + projectId + '/opuscar', body);
       toast.success('已重新生成');
+      const aid = job && job.checkpoint && job.checkpoint.subject;
+      if (aid) setActiveRecordId(aid);
+      setRecordsOpen(true);
       loadRecords();
       reloadJobs();
     } catch (e) {
@@ -381,6 +471,29 @@ export default function RankShadowPage() {
       reloadJobs();
     } catch (e) {
       toast.error(e.message);
+    }
+  }
+
+  // 聊天底部继续输入：在已有记录上追加一条修改要求，Agent 会在上一版成片上继续改
+  async function sendContinue() {
+    if (!projectId || !activeRecord) return;
+    const msg = chatInput.trim();
+    if (!msg) return;
+    if (recordRunning) {
+      toast.error('该记录正在生成中，请等它结束或先停止');
+      return;
+    }
+    setSending(true);
+    try {
+      await api.post('/api/projects/' + projectId + '/opuscar', { asset_id: activeRecord.id, message: msg });
+      setChatInput('');
+      toast.success('已提交修改要求');
+      loadRecords();
+      reloadJobs();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSending(false);
     }
   }
 
@@ -697,95 +810,262 @@ export default function RankShadowPage() {
         </div>
       </Modal>
 
-      {/* ===== 生成记录弹窗 ===== */}
+      {/* ===== 生成记录 · Agent 聊天窗 ===== */}
       <Modal
         open={recordsOpen}
         onOpenChange={(v) => { if (!v) setRecordsOpen(false); }}
-        title="生成记录"
-        description="查看、编辑、重新生成或删除「无限・秩影」的成片记录。"
+        title="生成记录 · Agent 聊天窗"
+        description="左侧选择任务，右侧查看用户输入摘要、对话与 Agent 执行日志；成片产出后可在底部继续提出修改要求。"
         size="5xl"
+        className="h-[88vh]"
         footer={
           <Button variant="secondary" size="md" onClick={() => setRecordsOpen(false)}>关闭</Button>
         }
       >
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <SearchInput value={kw} onChange={setKw} placeholder="搜索名称 / 提示词 / 风格" className="w-56" />
-              <Select value={status} onChange={setStatus} items={STATUS_OPTIONS} size="sm" className="w-32" />
-            </div>
-            <Button variant="danger" size="xs" disabled={!selected.length} onClick={batchDelete}>
-              <Trash2 size={11} /> 批量删除（{selected.length}）
-            </Button>
-          </div>
-
-          {!filtered.length ? (
-            <EmptyState icon={Clapperboard} title="暂无记录" description="选一个风格、上传素材并写下提示词，生成的成片会出现在这里。" />
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3 px-1">
-                <Checkbox checked={allSelected} onChange={toggleAll} label="全选" />
-                <span className="text-[11px] text-[var(--fg-4)]">生成中的记录会自动跳过批量删除</span>
+        <div className="flex h-full min-h-0 flex-col gap-3 md:flex-row">
+          {/* 左：任务列表（标题 + 摘要 + 状态） */}
+          <aside className="flex max-h-[38%] shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-white/[0.02] md:max-h-none md:w-[272px]">
+            <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--line)] p-2.5">
+              <SearchInput value={kw} onChange={setKw} placeholder="搜索名称 / 提示词 / 风格" />
+              <div className="flex items-center gap-1.5">
+                <Select value={status} onChange={setStatus} items={STATUS_OPTIONS} size="sm" className="min-w-0 flex-1" />
+                <Button variant="danger" size="xs" disabled={!selected.length} onClick={batchDelete}>
+                  <Trash2 size={11} /> 删除（{selected.length}）
+                </Button>
               </div>
-
-              {filtered.map((r) => {
-                const p = r.params || {};
-                const running = runningIds.has(r.id);
-                const url = r.video_path ? fileUrl(projectId, r.video_path) : '';
-                return (
-                  <article key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--line)] bg-white/[0.02] p-2.5">
-                    <Checkbox checked={selected.includes(r.id)} onChange={() => toggleOne(r.id)} disabled={running} />
-
-                    <div className="h-16 w-28 shrink-0 overflow-hidden rounded-lg bg-black/40">
-                      {url ? (
-                        <video src={url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[10.5px] text-[var(--fg-4)]">
-                          {running ? '生成中…' : '无成片'}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="min-w-[180px] flex-1">
-                      <div className="truncate text-[13px] font-medium text-[var(--fg)]" title={r.name}>{r.name || '（未命名）'}</div>
-                      <div className="truncate text-[11px] text-[var(--fg-3)]">风格：{p.style_cn || p.style_slug || '—'}{p.cat ? ' · ' + p.cat : ''}</div>
-                      <div className="truncate text-[11px] text-[var(--fg-4)]" title={r.prompt}>{r.prompt || '（无提示词）'}</div>
-                    </div>
-
-                    <StatusPill status={r.status}>{STATUS_TEXT[r.status] || r.status || '排队中'}</StatusPill>
-                    <span className="shrink-0 text-[11px] text-[var(--fg-4)]">{fmtTime(r.created_at)}</span>
-
-                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                      {url ? (
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex h-7 items-center rounded-lg border border-[var(--line)] bg-white/[0.04] px-2.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:border-[var(--line-strong)] hover:bg-white/[0.07]"
-                        >
-                          预览 / 下载
-                        </a>
-                      ) : null}
-                      {running ? (
-                        <Button variant="secondary" size="xs" onClick={() => stopOne(r)}>
-                          <Square size={11} /> 停止
-                        </Button>
-                      ) : null}
-                      <Button variant="secondary" size="xs" disabled={running} onClick={() => openEdit(r)}>
-                        <Pencil size={11} /> 编辑
-                      </Button>
-                      <Button variant="secondary" size="xs" disabled={running || busy} onClick={() => regenerate(r)}>
-                        <RefreshCw size={11} /> 重新生成
-                      </Button>
-                      <Button variant="ghost" size="xs" className="text-[var(--fg-3)] hover:text-[var(--danger)]" disabled={running} onClick={() => removeOne(r)}>
-                        <Trash2 size={11} />
-                      </Button>
-                    </div>
-                  </article>
-                );
-              })}
+              <div className="flex items-center gap-2">
+                <Checkbox checked={allSelected} onChange={toggleAll} label="全选" />
+                <span className="truncate text-[10.5px] text-[var(--fg-4)]">生成中的记录自动跳过批量删除</span>
+              </div>
             </div>
-          )}
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              {!filtered.length ? (
+                <EmptyState
+                  icon={Clapperboard}
+                  title="暂无记录"
+                  description="选一个风格、上传素材并写下提示词，生成的成片会出现在这里。"
+                  className="py-8"
+                />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {filtered.map((r) => {
+                    const running = runningIds.has(r.id);
+                    const url = r.video_path ? fileUrl(projectId, r.video_path) : '';
+                    const active = r.id === activeRecordId;
+                    return (
+                      <article
+                        key={r.id}
+                        onClick={() => setActiveRecordId(r.id)}
+                        className={
+                          'flex cursor-pointer items-center gap-2 rounded-lg border p-2 transition-colors ' +
+                          (active
+                            ? 'border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)]'
+                            : 'border-transparent hover:border-[var(--line)] hover:bg-white/[0.03]')
+                        }
+                      >
+                        <Checkbox checked={selected.includes(r.id)} onChange={() => toggleOne(r.id)} disabled={running} />
+                        <div className="h-12 w-[68px] shrink-0 overflow-hidden rounded-md bg-black/40">
+                          {url ? (
+                            <video src={url + '#t=0.1'} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] text-[var(--fg-4)]">
+                              {running ? '生成中' : '无成片'}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-[12.5px] font-medium text-[var(--fg)]" title={r.name}>{r.name || '（未命名）'}</span>
+                            {running ? <Spinner size={11} /> : null}
+                          </div>
+                          <div className="line-clamp-2 text-[10.5px] leading-snug text-[var(--fg-4)]" title={r.prompt}>{r.prompt || '（无提示词）'}</div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <StatusPill status={r.status}>{STATUS_TEXT[r.status] || r.status || '排队中'}</StatusPill>
+                            <span className="truncate text-[10px] text-[var(--fg-4)]">{fmtTime(r.created_at)}</span>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* 右：用户输入摘要 + 对话 + Agent 日志 + 底部继续输入 */}
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-black/10">
+            {!activeRecord ? (
+              <EmptyState
+                icon={Clapperboard}
+                title="选择一条记录"
+                description="从左侧选择一条生成记录，查看它的输入内容、Agent 执行日志，并在底部继续提出修改。"
+              />
+            ) : (
+              <>
+                <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] bg-white/[0.02] px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-[13px] font-semibold text-[var(--fg)]" title={activeRecord.name}>{activeRecord.name || '（未命名）'}</span>
+                      <StatusPill status={activeRecord.status}>{STATUS_TEXT[activeRecord.status] || activeRecord.status || '排队中'}</StatusPill>
+                    </div>
+                    <div className="mt-0.5 truncate text-[10.5px] text-[var(--fg-4)]">
+                      风格：{activeParams.style_cn || activeParams.style_slug || '—'}{activeParams.cat ? ' · ' + activeParams.cat : ''} · 对话 {chatTurns.length} 轮 · {fmtTime(activeRecord.created_at)}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                    {activeVideoUrl ? (
+                      <a
+                        href={activeVideoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex h-7 items-center rounded-lg border border-[var(--line)] bg-white/[0.04] px-2.5 text-[12px] font-medium text-[var(--fg)] transition-colors hover:border-[var(--line-strong)] hover:bg-white/[0.07]"
+                      >
+                        预览 / 下载
+                      </a>
+                    ) : null}
+                    {recordRunning ? (
+                      <Button variant="secondary" size="xs" onClick={() => stopOne(activeRecord)}>
+                        <Square size={11} /> 停止
+                      </Button>
+                    ) : null}
+                    <Button variant="secondary" size="xs" disabled={recordRunning} onClick={() => openEdit(activeRecord)}>
+                      <Pencil size={11} /> 编辑
+                    </Button>
+                    <Button variant="secondary" size="xs" disabled={recordRunning || busy} onClick={() => regenerate(activeRecord)}>
+                      <RefreshCw size={11} /> 重新生成
+                    </Button>
+                    <Button variant="ghost" size="xs" className="text-[var(--fg-3)] hover:text-[var(--danger)]" disabled={recordRunning} onClick={() => removeOne(activeRecord)}>
+                      <Trash2 size={11} />
+                    </Button>
+                  </div>
+                </header>
+
+                <div ref={chatScrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-3">
+                  {/* 用户输入摘要：风格 / 提示词 / 素材 */}
+                  <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-medium text-[var(--fg-3)]">用户输入</span>
+                      <Badge tone="accent">{activeParams.style_slug === '__custom__' ? '自定义风格' : (activeParams.style_cn || activeParams.style_slug || '—')}</Badge>
+                      {activeParams.cat && activeParams.style_slug !== '__custom__' ? <Badge tone="neutral">{activeParams.cat}</Badge> : null}
+                      <span className="text-[10.5px] text-[var(--fg-4)]">素材 {activeRefs.length}</span>
+                    </div>
+                    {activeParams.style_slug === '__custom__' && activeParams.custom_style ? (
+                      <div className="logbox mb-2 max-h-[120px] text-[11.5px]">{activeParams.custom_style}</div>
+                    ) : null}
+                    <div className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-[var(--fg-2)]">{activeRecord.prompt || '（无提示词）'}</div>
+                    {activeRefs.length ? (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {activeRefs.map((m, i) =>
+                          PREVIEW_KINDS.has(m.type) && projectId && m.filename ? (
+                            <MaterialTile key={i} kind={m.type} name={m.name || m.filename} src={fileUrl(projectId, m.filename)} />
+                          ) : (
+                            <span key={i} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[var(--line)] bg-white/[0.03] px-2.5 text-[11.5px] text-[var(--fg-2)]">
+                              <span className="truncate">[{KIND_LABEL[m.type] || '文件'}] {m.name || m.filename}</span>
+                            </span>
+                          ),
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* 对话：每条用户消息 + 该轮 Agent 执行日志 */}
+                  {chatTurns.map((m, i) => {
+                    const job = jobByTurn.get(i);
+                    // 本轮成片：优先用该轮写回的 video_path（每次修改各自一份）；
+                    // 旧记录没有按轮记录时，最后一轮回退到记录当前成片。
+                    const turnVideo = m.video_path
+                      ? fileUrl(projectId, m.video_path)
+                      : (i === chatTurns.length - 1 && !m.status ? activeVideoUrl : '');
+                    return (
+                      <div key={i} className="flex flex-col gap-2">
+                        <div className="flex justify-end">
+                          <div className="max-w-[88%] rounded-2xl rounded-br-sm border border-[color-mix(in_srgb,var(--accent)_30%,transparent)] bg-[color-mix(in_srgb,var(--accent)_9%,transparent)] px-3 py-2">
+                            <div className="mb-0.5 text-[10px] font-medium tracking-wide text-[var(--accent)]">
+                              {i === 0 ? '初始需求' : '修改要求 ' + (i + 1)}
+                            </div>
+                            <div className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-[var(--fg)]">{m.text}</div>
+                            {m.at ? <div className="mt-1 text-right text-[10px] text-[var(--fg-4)]">{fmtTime(m.at)}</div> : null}
+                          </div>
+                        </div>
+
+                        <div className="flex justify-start">
+                          <div className="w-full max-w-[94%] rounded-2xl rounded-bl-sm border border-[var(--line)] bg-white/[0.03] px-3 py-2">
+                            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                              <span className="text-[11] font-medium text-[var(--fg-2)]">Agent</span>
+                              {job ? (
+                                <>
+                                  <StatusPill status={job.status}>{JOB_STATUS_META[job.status]?.label || job.status}</StatusPill>
+                                  {job.phase ? <span className="truncate text-[10.5px] text-[var(--fg-4)]">{job.phase}</span> : null}
+                                </>
+                              ) : (
+                                <Badge tone="neutral">未执行</Badge>
+                              )}
+                            </div>
+                            {job ? (
+                              <pre className="logbox max-h-[220px] text-[11px]">{jobLogs[job.id] || (job.status === 'running' || job.status === 'queued' ? '（正在执行，日志加载中…）' : '（暂无日志）')}</pre>
+                            ) : (
+                              <span className="text-[11px] text-[var(--fg-4)]">本轮还没有执行任务。</span>
+                            )}
+                            {job && job.detail ? <p className="m-0 mt-1.5 line-clamp-2 text-[10.5px] leading-relaxed text-[var(--fg-4)]">{job.detail}</p> : null}
+                            {job && job.error ? <p className="m-0 mt-1.5 break-words text-[10.5px] leading-relaxed text-[var(--danger)]">{job.error}</p> : null}
+                          </div>
+                        </div>
+
+                        {/* 成片单独一个气泡，排在执行日志之后 */}
+                        {turnVideo ? (
+                          <div className="flex justify-start">
+                            <div className="w-full max-w-[94%] rounded-2xl rounded-bl-sm border border-[var(--line)] bg-white/[0.03] px-3 py-2">
+                              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                                <span className="text-[11px] font-medium text-[var(--fg-2)]">Agent · 成片输出</span>
+                                {m.status ? <StatusPill status={m.status}>{STATUS_TEXT[m.status] || m.status}</StatusPill> : null}
+                                {m.finished_at ? <span className="text-[10.5px] text-[var(--fg-4)]">{fmtTime(m.finished_at)}</span> : null}
+                              </div>
+                              <div className="overflow-hidden rounded-lg border border-[var(--line)] bg-black/50">
+                                <video src={turnVideo} controls playsInline preload="metadata" className="block max-h-[320px] w-full bg-black object-contain" />
+                              </div>
+                              <div className="mt-1.5 flex justify-end">
+                                <a href={turnVideo} target="_blank" rel="noreferrer" className="text-[11px] text-[var(--accent)] no-underline hover:underline">
+                                  预览 / 下载
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 底部继续输入：追加修改要求，Agent 在上一版成片上继续改 */}
+                <footer className="shrink-0 border-t border-[var(--line)] bg-black/20 p-3">
+                  <div className="flex items-end gap-2">
+                    <Textarea
+                      rows={2}
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          if (!recordRunning && !sending && chatInput.trim()) sendContinue();
+                        }
+                      }}
+                      disabled={recordRunning || sending}
+                      placeholder={recordRunning ? 'Agent 正在执行，完成后可继续提出修改…' : '继续描述需要修改的地方，例如：把结尾改成分镜快切，背景音乐换成更舒缓的…'}
+                      className="min-h-[60px] flex-1"
+                      style={{ resize: 'none' }}
+                    />
+                    <Button variant="primary" size="md" loading={sending} disabled={sending || recordRunning || !chatInput.trim()} onClick={sendContinue}>
+                      <Send size={14} /> 发送
+                    </Button>
+                  </div>
+                  <div className="mt-1.5 text-[10.5px] text-[var(--fg-4)]">
+                    Enter 发送 · Shift + Enter 换行{recordRunning ? ' · 生成中暂不可发送，可先停止生成' : ''}
+                  </div>
+                </footer>
+              </>
+            )}
+          </section>
         </div>
       </Modal>
 

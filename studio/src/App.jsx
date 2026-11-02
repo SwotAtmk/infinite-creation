@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Github, Image as ImageIcon, LayoutGrid, Mic2, Music4, Repeat2, Sparkles, UserRound, Video } from 'lucide-react';
+import { Clapperboard, Github, Image as ImageIcon, LayoutGrid, Mic2, Music4, Repeat2, Sparkles, UserRound, Video } from 'lucide-react';
 import { ToastProvider } from './components/toast.jsx';
 import BackToTop from './components/BackToTop.jsx';
 import TopBar from './components/TopBar.jsx';
@@ -12,12 +12,14 @@ import VideoGenPage from './pages/VideoGenPage.jsx';
 import MusicGenPage from './pages/MusicGenPage.jsx';
 import VoiceDesignPage from './pages/VoiceDesignPage.jsx';
 import VoiceClonePage from './pages/VoiceClonePage.jsx';
+import RankShadowPage from './pages/RankShadowPage.jsx';
 import { useServerInfo } from './lib/hooks.js';
 
 // 左侧菜单：与经典界面保持一致，每种创作类型对应一个独立工作台。
 const MENU = [
   { id: 'projects', label: '作品集', icon: LayoutGrid },
   { id: 'agent', label: 'Agent无限创作', icon: Sparkles },
+  { id: 'opuscar', label: '无限・秩影', icon: Clapperboard, beta: true },
   { id: 'digital_human', label: '数字人', icon: UserRound },
   { id: 'image', label: '图片生成', icon: ImageIcon },
   { id: 'video', label: '视频生成', icon: Video },
@@ -152,6 +154,9 @@ export default function App() {
                       >
                         <Icon size={15} className={active ? 'text-[var(--accent)]' : 'text-[var(--fg-3)]'} />
                         <span className="flex-1 whitespace-nowrap text-left">{m.label}</span>
+                        {m.beta ? (
+                          <span className="shrink-0 rounded-full border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--accent)]">beta</span>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -200,6 +205,7 @@ export default function App() {
               {state.view.type !== 'settings' && state.mode === 'music' ? <MusicGenPage /> : null}
               {state.view.type !== 'settings' && state.mode === 'tts' ? <VoiceDesignPage /> : null}
               {state.view.type !== 'settings' && state.mode === 'tts_clone' ? <VoiceClonePage /> : null}
+              {state.view.type !== 'settings' && state.mode === 'opuscar' ? <RankShadowPage /> : null}
             </div>
           </div>
         </main>

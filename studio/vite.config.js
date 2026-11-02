@@ -15,6 +15,8 @@ const STUDIO_HOST = process.env.STUDIO_HOST || '0.0.0.0';
 const proxy = {
   '/api': { target: BACKEND, changeOrigin: false },
   '/files': { target: BACKEND, changeOrigin: false },
+  // 内置样例库：public/samples/ 由后端静态托管，Studio 直接代理
+  '/samples': { target: BACKEND, changeOrigin: false },
   '/ws': { target: BACKEND.replace(/^http/, 'ws'), ws: true },
 };
 

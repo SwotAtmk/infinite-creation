@@ -90,6 +90,7 @@ export const JOB_LABEL = {
   'music-apply': '应用背景音乐',
   'voice-clone': '音色克隆',
   'digital-human-tts': '数字人语音驱动',
+  opuscar: '无限・秩影生成',
 };
 
 export const CANCELLABLE = new Set([
@@ -105,6 +106,7 @@ export const CANCELLABLE = new Set([
   'music-apply',
   'voice-clone',
   'digital-human-tts',
+  'opuscar',
 ]);
 
 export const JOB_STATUS_META = {

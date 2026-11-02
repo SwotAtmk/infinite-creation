@@ -1,0 +1,18 @@
+{
+ "slug": "living-screencast",
+ "num": "46",
+ "en": "Living Screencast",
+ "cn": "活体实机录屏",
+ "category_en": "Information & Keynote",
+ "category_cn": "信息与发布",
+ "film": "Clawd Moves In",
+ "line": "Clawd hops out of the terminal into the Claude app and acts out plan mode and self-checks in one take.",
+ "line_cn": "像素小人 Clawd 搬进 Claude 应用，一镜到底演示 Plan 模式和自检。",
+ "uses": [
+  "Product tutorials",
+  "Feature launches",
+  "Onboarding"
+ ],
+ "frame_sec": 5.94,
+ "dur": 59.4
+}

@@ -17,5 +17,7 @@ studio/dist/
 .trae/
 __pycache__/
 *.pyc
+# lemo-opuscar 技能库的 Python 虚拟环境（运行 setup.sh deps 生成，体积大，不入库）
+.venv/
 # 测试素材（本地使用，不入库）
 docs/test/

@@ -1,0 +1,18 @@
+{
+ "slug": "microscope",
+ "num": "61",
+ "en": "Microscope Story",
+ "cn": "显微叙事",
+ "category_en": "Evidence Films",
+ "category_cn": "实证影像",
+ "film": "Measured Blue",
+ "line": "One continuous move from a liver slide to a single nucleus; two circles, counted pixel by pixel, differ 2.4 times in blue.",
+ "line_cn": "一镜从肝组织玻片推到单个细胞核，两个圆逐像素数出 2.4 倍的蓝。",
+ "uses": [
+  "Biomedicine",
+  "Materials science",
+  "Skincare science"
+ ],
+ "frame_sec": 24.6,
+ "dur": 39.5
+}

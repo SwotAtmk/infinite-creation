@@ -1,0 +1,69 @@
+1
+00:00:00,680 --> 00:00:04,692
+你给朋友发了张猫，叮的一声，对面马上就收到了。
+You send a friend a cat photo. Ding, it arrives right away.
+
+2
+00:00:04,692 --> 00:00:07,646
+可这张照片，并没有直接飞过去。
+But the photo didn't fly straight there.
+
+3
+00:00:07,646 --> 00:00:10,773
+按下发送的那一刻，第一步，是压小。
+The moment you hit send, step one: make it smaller.
+
+4
+00:00:10,773 --> 00:00:17,375
+原图太大、传得太慢，软件会先把它悄悄压缩，体积小了，看着却差不多。
+The original is too big and slow to send, so the app quietly compresses it: smaller, yet it looks about the same.
+
+5
+00:00:17,375 --> 00:00:20,474
+接着，照片来到第二站，服务器。
+Next, the photo reaches stop two: the server.
+
+6
+00:00:20,474 --> 00:00:26,119
+也就是聊天软件的云端中转站，照片先存放在这儿，等着对面来取。
+That's the chat app's relay station in the cloud. The photo waits here to be picked up.
+
+7
+00:00:26,119 --> 00:00:28,299
+第三步，才轮到发通知。
+Only then comes step three: the notification.
+
+8
+00:00:28,299 --> 00:00:32,204
+服务器拍了拍朋友的手机，嘿，有张照片找你。
+The server taps your friend's phone: "Hey, a photo for you."
+
+9
+00:00:32,204 --> 00:00:34,762
+这时候，手机才响了一声。
+That's when the phone goes ding.
+
+10
+00:00:34,762 --> 00:00:39,480
+收到通知后，朋友的手机才真正去服务器，把照片取回来。
+After the notification, your friend's phone goes to the server and fetches the photo.
+
+11
+00:00:39,480 --> 00:00:44,691
+所以网慢的时候，你会看到它先糊一下，再瞬间变清楚。
+So on a slow connection, you see it blurry for a moment, then suddenly sharp.
+
+12
+00:00:44,691 --> 00:00:47,993
+一声叮的背后，其实是一场无声的接力。
+Behind that one ding is a silent relay.
+
+13
+00:00:47,993 --> 00:00:52,187
+如果你没勾原图，朋友收到的，只是那只猫的压缩版。
+Unless you ticked "Original", what your friend gets is just a compressed copy of the cat.
+
+14
+00:00:52,187 --> 00:00:55,600
+而真正的原图，一直都在你的手机里。
+The real original has been on your phone all along.

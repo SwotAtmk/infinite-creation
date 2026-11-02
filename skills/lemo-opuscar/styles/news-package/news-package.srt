@@ -1,0 +1,104 @@
+1
+00:00:01,600 --> 00:00:04,800
+这里是 Lemo AI 新闻，本周 AI 四件事。
+This is Lemo AI News: four stories from the week in AI.
+
+2
+00:00:06,000 --> 00:00:06,100
+SOURCE: GOOGLE GEMINI API CHANGELOG
+来源：Google · Gemini API 更新日志
+
+3
+00:00:06,100 --> 00:00:09,300
+谷歌向全部开发者开放了 Gemini 4 Argon，
+Google has opened Gemini 4 Argon to every developer,
+
+4
+00:00:09,300 --> 00:00:12,800
+入门价每百万输入 token 2 美元，12 月起翻倍。
+at $2 per million input tokens, doubling from December.
+
+5
+00:00:13,000 --> 00:00:13,100
+KRX DATA VIA NAVER · KOREA HERALD
+韩国交易所数据 · Korea Herald
+
+6
+00:00:13,100 --> 00:00:17,000
+在首尔，韩国综合股价指数单日跌超 7.5%，
+In Seoul, the Kospi fell more than 7.5% in a day,
+
+7
+00:00:17,000 --> 00:00:19,800
+较 9 月高点跌去两成多，跌入熊市。
+over 20% below its September high: a bear market.
+
+8
+00:00:20,000 --> 00:00:20,100
+SOURCE: KOREA HERALD · BLOOMBERG
+来源：Korea Herald · Bloomberg
+
+9
+00:00:20,100 --> 00:00:23,400
+三星和 SK 海力士单日都跌了 9% 以上。
+Samsung and SK hynix each lost more than 9%.
+
+10
+00:00:24,000 --> 00:00:24,100
+REPORTED BY EURONEWS · NATURAL EARTH
+据 Euronews 报道 · 地图 Natural Earth
+
+11
+00:00:24,100 --> 00:00:27,600
+欧盟 AI 办公室向 OpenAI 和 Anthropic 发出问询，
+The EU's AI Office has sent questions to OpenAI and Anthropic,
+
+12
+00:00:27,600 --> 00:00:29,400
+据欧洲新闻台报道。
+Euronews reports.
+
+13
+00:00:30,500 --> 00:00:30,600
+SOURCE: EUROPEAN COMMISSION SPEECH
+来源：欧盟委员会 讲话全文
+
+14
+00:00:30,600 --> 00:00:31,900
+维尔库宁在都柏林说：
+In Dublin, Virkkunen said:
+
+15
+00:00:31,900 --> 00:00:34,800
+AI 办公室已开始执行这些规则。
+"Our AI Office has started enforcing these rules."
+
+16
+00:00:35,500 --> 00:00:35,600
+SOURCE: META AI RESEARCH BLOG
+来源：Meta AI 研究博客
+
+17
+00:00:35,600 --> 00:00:38,200
+Meta 开放了 Muse Spark Open 的权重，
+Meta has released the weights of Muse Spark Open:
+
+18
+00:00:38,200 --> 00:00:40,200
+总参数 8160 亿，
+816B parameters in total,
+
+19
+00:00:40,200 --> 00:00:42,300
+每个 token 只激活 420 亿，
+only 42B active per token,
+
+20
+00:00:42,300 --> 00:00:43,900
+两台 Mac Studio 就能跑。
+and it runs on two Mac Studios.
+
+21
+00:00:45,100 --> 00:00:48,000
+本周就到这里。这里是 Lemo AI 新闻。
+That's the week. This is Lemo AI News.

@@ -1,0 +1,54 @@
+1
+00:00:00,400 --> 00:00:03,457
+从空中看，这里只是一片森林。
+From the air, it's only forest.
+
+2
+00:00:03,900 --> 00:00:07,160
+但激光能从叶隙间穿过，
+But laser light slips between the leaves,
+
+3
+00:00:07,200 --> 00:00:10,160
+有一部分打到了地面。
+and some of it reaches the ground.
+
+4
+00:00:10,200 --> 00:00:13,692
+去掉每一个打在树上的回波。
+Remove every return that hit a tree.
+
+5
+00:00:14,500 --> 00:00:16,910
+地面还记得。
+And the ground remembers.
+
+6
+00:00:16,950 --> 00:00:20,810
+是石墙。一块块旧田，都在树下。
+Stone walls. Old fields, under the trees.
+
+7
+00:00:20,850 --> 00:00:24,610
+我们描出了 3.4 公里石墙。
+We traced 3.4 km of wall.
+
+8
+00:00:24,850 --> 00:00:27,648
+高半米出头。
+Just over half a metre high.
+
+9
+00:00:28,850 --> 00:00:33,110
+1870 年，阿什福德三分之二是农田。
+In 1870, two-thirds of Ashford was farmland.
+
+10
+00:00:33,150 --> 00:00:37,210
+到 2006 年，五分之四已是森林。
+By 2006, four-fifths was forest.
+
+11
+00:00:37,250 --> 00:00:39,866
+森林替它保存了地图。
+The forest kept the map.

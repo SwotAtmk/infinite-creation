@@ -1,0 +1,8 @@
+# Core tier: sound effects, the mix, subtitles, contact sheets. Install: sh plugin/skills/lemo-opuscar/scripts/setup.sh deps
+# More tiers: requirements-voice.txt (deps voice), requirements-music.txt (deps music), requirements-dev.txt (maintainers).
+numpy
+scipy
+soundfile
+soxr
+pillow
+fonttools

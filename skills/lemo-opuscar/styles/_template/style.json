@@ -1,0 +1,18 @@
+{
+ "slug": "my-style",
+ "num": "99",
+ "en": "My Style",
+ "cn": "我的风格",
+ "category_en": "Graphic & Type",
+ "category_cn": "图形与排版",
+ "film": "Title of the Demo Film",
+ "line": "One sentence: what happens in the demo film.",
+ "line_cn": "一句话：demo 片里发生了什么。",
+ "uses": [
+  "Use one",
+  "Use two",
+  "Use three"
+ ],
+ "frame_sec": 12.0,
+ "dur": 0
+}

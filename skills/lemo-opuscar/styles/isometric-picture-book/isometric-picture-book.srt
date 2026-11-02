@@ -1,0 +1,64 @@
+1
+00:00:00,400 --> 00:00:02,738
+每次登机，为什么总要排那么久？
+Why does boarding always take so long?
+
+2
+00:00:03,650 --> 00:00:08,500
+让后排乘客先上，听起来很合理，后排坐好了，就不会挡着前排的路。
+Back rows first sounds sensible: once they sit down, they are out of everyone’s way.
+
+3
+00:00:08,730 --> 00:00:11,928
+可机舱里只有一条过道，窄得只够一个人走。
+But the cabin has one aisle, just wide enough for one person.
+
+4
+00:00:12,158 --> 00:00:16,187
+只要前面有一个人停下来放箱子，后面所有人都得干等着。
+When one person stops to stow a bag, everyone behind has to wait.
+
+5
+00:00:16,417 --> 00:00:21,707
+因为叫的都是相邻那几排，大家全挤在同一个地方，只能一个接一个来。
+They were called for the same few rows, so they crowd one spot and go one by one.
+
+6
+00:00:21,937 --> 00:00:24,634
+全部坐满，足足用了六分五十四秒。
+Filling every seat took a full 6 minutes 54 seconds.
+
+7
+00:00:25,287 --> 00:00:26,644
+那如果换个顺序呢？
+What if we change the order?
+
+8
+00:00:27,737 --> 00:00:31,691
+让靠窗的人先上，而且前后两个人之间，刚好隔开一排。
+Window seats first, and each person sits one row apart from the next in line.
+
+9
+00:00:31,921 --> 00:00:36,810
+这样一来，六个人就能同时在六个不同的排数放箱子，谁也不挡谁的路。
+Now six people stow bags in six different rows at once, and nobody blocks anybody.
+
+10
+00:00:38,681 --> 00:00:41,491
+结果全部坐满，只花了三分三十六秒。
+Every seat was filled in just 3 minutes 36 seconds.
+
+11
+00:00:42,271 --> 00:00:45,324
+足足快了三分多钟，时间缩短了将近一半。
+More than three minutes faster: nearly half the time.
+
+12
+00:00:47,021 --> 00:00:51,565
+这是2012年，研究人员找来七十二名乘客做过的真实测试。
+This was a real test, run in 2012 with 72 passengers.
+
+13
+00:00:51,795 --> 00:00:56,636
+原来登机慢，根本不是因为人多，而是把所有人都堵在了同一段过道上。
+Boarding is slow not because of crowds, but because everyone is stuck in the same stretch of aisle.

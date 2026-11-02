@@ -1,0 +1,44 @@
+1
+00:00:00,500 --> 00:00:03,780
+二十一个键，半把键盘。
+Twenty-one keys. Half a keyboard.
+
+2
+00:00:05,300 --> 00:00:08,060
+拆开，是六层。
+Take it apart: six layers.
+
+3
+00:00:08,100 --> 00:00:11,831
+每一层，都画在公开的文件里。
+Every one of them is drawn in open files.
+
+4
+00:00:14,850 --> 00:00:18,460
+一颗 RP2040 芯片，管着全部。
+One RP2040 chip runs it all.
+
+5
+00:00:18,500 --> 00:00:21,949
+二十三颗灯珠，反着贴在背面。
+Twenty-three lights, mounted upside down.
+
+6
+00:00:22,300 --> 00:00:25,066
+热插拔，不用焊接。
+Hot-swappable. No soldering.
+
+7
+00:00:25,500 --> 00:00:27,550
+装回去。
+Put it back together.
+
+8
+00:00:27,750 --> 00:00:31,010
+键距 19.05 毫米。
+19.05 millimetres apart.
+
+9
+00:00:31,050 --> 00:00:33,366
+每一个数字，都是公开的。
+Every number is public.

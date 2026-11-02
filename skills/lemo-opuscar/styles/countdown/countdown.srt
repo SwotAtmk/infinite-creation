@@ -1,0 +1,89 @@
+1
+00:00:00,400 --> 00:00:02,500
+GLS：同意移交 ALS 自动程序。
+GLS, go for ALS.
+
+2
+00:00:02,500 --> 00:00:05,260
+好口令。火箭现在靠自己了。
+Great call-out. The rocket is on its own.
+
+3
+00:00:05,260 --> 00:00:07,860
+四位勇敢的探索者，准备乘上
+Four brave explorers, ready to ride
+
+4
+00:00:07,860 --> 00:00:13,100
+NASA 发射过的最强大的火箭。
+the most powerful rocket NASA has ever launched.
+
+5
+00:00:13,400 --> 00:00:16,000
+约 10 天：绕过月球，再飞回来。
+About ten days: around the Moon, and back.
+
+6
+00:00:16,470 --> 00:00:20,000
+消声水正在喷注。
+Sound suppression water is flowing.
+
+7
+00:00:20,120 --> 00:00:22,420
+开始了。
+And here we go.
+
+8
+00:00:22,420 --> 00:00:26,460
+十、九、八、七，
+Ten, nine, eight, seven,
+
+9
+00:00:26,460 --> 00:00:29,200
+RS-25 发动机点火……
+RS-25 engines lit…
+
+10
+00:00:29,240 --> 00:00:34,100
+四、三、二、一，助推器点火。
+four, three, two, one, booster ignition.
+
+11
+00:00:34,160 --> 00:00:36,300
+升空。
+And liftoff.
+
+12
+00:00:36,360 --> 00:00:39,450
+阿尔忒弥斯二号乘组，正飞向月球。
+The crew of Artemis II, now bound for the Moon.
+
+13
+00:00:39,500 --> 00:00:42,200
+人类下一段伟大航程，就此开始。
+Humanity’s next great voyage begins.
+
+14
+00:00:42,300 --> 00:00:46,000
+下一个节点：助推器分离，T+2 分 09 秒。
+Next on the clock: booster separation, at two minutes nine.
+
+15
+00:00:46,400 --> 00:00:49,700
+滚转、俯仰正常。
+Good roll, pitch.
+
+16
+00:00:49,780 --> 00:00:53,700
+收到，滚转、俯仰。
+Roger, roll, pitch.
+
+17
+00:00:53,780 --> 00:00:56,200
+休斯敦现在接管 Integrity 号的飞行，
+Houston, now controlling the flight of Integrity
+
+18
+00:00:56,200 --> 00:00:59,500
+执行阿尔忒弥斯二号绕月任务。
+on the Artemis II mission around the Moon.

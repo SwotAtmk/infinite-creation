@@ -1,0 +1,18 @@
+{
+ "slug": "printed-long-take",
+ "num": "75",
+ "en": "Printed Long Take",
+ "cn": "印刷长镜头",
+ "category_en": "Print & Printmaking",
+ "category_cn": "印刷与版画",
+ "film": "Thirty-Three Cranes",
+ "line": "Red-crowned cranes in a Hokkaido valley, one scratchboard take, counted back from 33 to 1,927.",
+ "line_cn": "刮版画的北海道河谷一镜到底，丹顶鹤从 33 只数回到 1,927 只。",
+ "uses": [
+  "Journeys",
+  "Wildlife",
+  "Landscapes"
+ ],
+ "frame_sec": 15.4,
+ "dur": 60.0
+}

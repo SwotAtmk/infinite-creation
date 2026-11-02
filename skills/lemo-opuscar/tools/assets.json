@@ -1,0 +1,41 @@
+{
+ "repo": "lemomo-ai/lemo-opuscar",
+ "tag": "assets",
+ "packs": {
+  "voice": {
+   "file": "voice.tar",
+   "size": 353761280,
+   "sha256": "6bc6536c9bc3283150a3bfd1859a9841c39ab4ee05e3df35933d9ab38ce327af"
+  },
+  "hdri": {
+   "file": "hdri.tar",
+   "size": 12533760,
+   "sha256": "3b1c41d5ef0b26f7dbdab4fff7bab4ed9a63daa701943375821229dd73029499"
+  },
+  "instruments-freepats": {
+   "file": "instruments-freepats.tar",
+   "size": 415959040,
+   "sha256": "ae73707a7c88c8b985cedead751ff52ff8bfcaa3a48fa07ca6f45c0c6da00c83"
+  },
+  "instruments-karoryfer": {
+   "file": "instruments-karoryfer.tar",
+   "size": 77772800,
+   "sha256": "b72822ac2f6569ed33b376448784d542bf039478fbf521db0c4bdc7ee766cac4"
+  },
+  "instruments-salamander": {
+   "file": "instruments-salamander.tar",
+   "size": 229150720,
+   "sha256": "7c6a543de04daf6fdd7337ae08bf0484bec2a78b902ca80748bca927f42e189c"
+  },
+  "instruments-vcsl": {
+   "file": "instruments-vcsl.tar",
+   "size": 284682240,
+   "sha256": "3ed8f753500e629485e323fc7f883b35aca6a77a1ab04522d1d47037d503f6e1"
+  },
+  "instruments-vsco2ce": {
+   "file": "instruments-vsco2ce.tar",
+   "size": 413911040,
+   "sha256": "231297103cb4a3123707ddb7b284e5ea3aed0b8d77c0b891360b4d3efe8b586f"
+  }
+ }
+}

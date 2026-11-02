@@ -1,0 +1,2 @@
+# Maintainers only: rebuilding core/audio/instruments/index.json (sampler.build_index) uses librosa.
+librosa

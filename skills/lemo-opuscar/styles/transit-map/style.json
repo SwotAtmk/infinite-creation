@@ -1,0 +1,18 @@
+{
+ "slug": "transit-map",
+ "num": "72",
+ "en": "Transit Map",
+ "cn": "地铁线路图",
+ "category_en": "Information & Keynote",
+ "category_cn": "信息与发布",
+ "film": "6 Kilometres",
+ "line": "A printed metro map grows from one 6 km line in 1993 to 21 lines and 906 km.",
+ "line_cn": "一张纸上的线路图，从 1993 年的 6 公里长到 21 条线、906 公里。",
+ "uses": [
+  "Transport",
+  "Growth over time",
+  "Networks"
+ ],
+ "frame_sec": 36.2,
+ "dur": 47.0
+}

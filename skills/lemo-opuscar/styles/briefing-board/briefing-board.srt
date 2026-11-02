@@ -1,0 +1,44 @@
+1
+00:00:00,450 --> 00:00:03,043
+这条河宽 1,000 米。
+This river is a thousand meters wide.
+
+2
+00:00:03,080 --> 00:00:06,988
+第一反应：一路立桥墩，修座梁桥。
+First instinct: piers all the way across. A beam bridge.
+
+3
+00:00:08,300 --> 00:00:11,386
+可麻烦不在河，在船。
+But the river isn't the problem. The ship is.
+
+4
+00:00:11,420 --> 00:00:14,757
+新规矩：航道里不能有桥墩，一跨过去。
+New rule: no piers in the channel. One span.
+
+5
+00:00:15,900 --> 00:00:18,771
+梁桥：330 米，差得远。
+Beam: 330. Not close.
+
+6
+00:00:19,900 --> 00:00:22,442
+拱桥：600 米，还差。
+Arch: 600. Still short.
+
+7
+00:00:24,000 --> 00:00:27,598
+斜拉桥：1,208 米，刚好够。
+Cable-stayed: 1,208. Just enough.
+
+8
+00:00:29,875 --> 00:00:32,338
+悬索桥：2,000 米以上。
+Suspension: over 2,000.
+
+9
+00:00:32,375 --> 00:00:35,845
+河宽只是出题，船决定跨度。
+The river sets the question. The ship sets the span.

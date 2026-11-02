@@ -1,0 +1,18 @@
+{
+ "slug": "isometric-picture-book",
+ "num": "74",
+ "en": "Isometric Picture Book",
+ "cn": "等距绘本",
+ "category_en": "Information & Keynote",
+ "category_cn": "信息与发布",
+ "film": "Seventy-Two Seats",
+ "line": "Travellers board an isometric plane, and the order shows why one way is nearly twice as fast.",
+ "line_cn": "等距的登机口和机舱里，小人按顺序登机，讲清哪种叫法快将近一半。",
+ "uses": [
+  "Everyday rules",
+  "Queues",
+  "Comparisons"
+ ],
+ "frame_sec": 37.5,
+ "dur": 59.8
+}

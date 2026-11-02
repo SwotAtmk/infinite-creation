@@ -1,0 +1,138 @@
+node_modules/
+.venv/
+__pycache__/
+.DS_Store
+# 模型与大素材（运行说明里给下载地址）
+core/tts/*.onnx
+core/tts/*.bin
+core/assets/polyhaven/*.hdr
+# 渲染中间产物
+styles/*/demo/out/
+styles/*/demo/voices/*.wav
+styles/*/demo/music/*.mp3
+styles/*/demo/music/*.wav
+styles/*/demo/music/*.npy
+styles/*/demo/mix.wav
+# 成片走 GitHub Releases
+styles/*/*.mp4
+# 2026-09-26 收录已有作品后补充
+styles/*/demo/out_*/
+styles/*/demo/chk/
+styles/*/demo/node_modules
+styles/*/demo/assets/*.hdr
+styles/*/demo/tts/*.onnx
+styles/*/demo/tts/*.bin
+styles/*/demo/music.wav
+*.log
+# 喊词是输入素材（只能在 macOS 上近似重建），要提交
+!styles/game-show/demo/voices/*.wav
+# 赛事官方图，只作参考、不分发（片中标识怎么处理开源前再定）
+styles/pictogram-motion/demo/ref/
+styles/*/demo/music/src/
+
+# ---- 2026-09-26 GitHub 发布前补充 ----
+# 内部工作文件（不公开）
+/promo/
+/batch/
+/TODO.md
+/STYLES.md
+styles/*/HANDOFF.md
+# 配乐分轨、混音、拟音：build.sh 会重新生成
+styles/*/demo/**/stems*/
+styles/*/demo/**/music_stems/
+styles/*/demo/**/mix*.wav
+styles/*/demo/audio/*.wav
+core/audio/*.wav
+# 大素材走 Releases 的 assets 包，用 sh tools/fetch.sh 下载（清单见 tools/assets.json）
+core/audio/instruments/
+# Demo fonts are not in git: they are free (mostly Google Fonts, OFL); each demo's CREDITS names them
+styles/*/demo/fonts/**/*.ttf
+styles/*/demo/fonts/**/*.otf
+# 发布暂存 / Pages 构建产物
+/.release/
+/_site/
+
+# Demo folders keep code and CREDITS for agents to read; renders, media and process notes stay local
+styles/*/storyboard/
+styles/*/demo/TREATMENT.md
+styles/*/demo/**/*.wav
+styles/*/demo/**/*.mp3
+styles/*/demo/**/*.ogg
+styles/*/demo/**/*.flac
+styles/*/demo/**/*.mp4
+styles/*/demo/**/*.woff
+styles/*/demo/**/*.woff2
+styles/*/demo/**/*.gltf
+styles/*/demo/**/*.glb
+styles/*/demo/**/*.bin
+styles/*/demo/**/*.hdr
+styles/*/demo/**/*.exr
+styles/*/demo/**/*.jpg
+styles/*/demo/**/*.jpeg
+styles/*/demo/**/*.png
+styles/*/demo/**/*.webp
+styles/*/demo/**/*.svg
+# Stills: only the review frames docs point to are committed; everything else in stills/ is a debug frame.
+# Name review frames styleframe.jpg, modelsheet*.jpg, frame_*.jpg, alt_*.jpg or engine*.jpg and they are tracked with no extra line here.
+styles/*/demo/stills/*
+!styles/*/demo/stills/styleframe.jpg
+!styles/*/demo/stills/modelsheet*.jpg
+!styles/*/demo/stills/frame_*.jpg
+!styles/*/demo/stills/alt_*.jpg
+!styles/*/demo/stills/engine*.jpg
+# Illustrative plates a demo's build needs (AI-generated, credited in CREDITS) are committed, not re-fetched
+!styles/news-package/demo/assets/plates/*.jpg
+
+# 用户自己的片子（agent 输出）
+/films/
+
+
+# Production logs are internal: they stay local
+styles/*/PRODUCTION_LOG*
+styles/*/demo/PRODUCTION_LOG*
+
+# 宣传物料（发帖用海报、预告片、教程片），只留本地，不上传 GitHub
+/docs/social/
+
+
+# Source photos, imagery caches and fonts anywhere in a demo stay local (CREDITS names them; build scripts re-fetch)
+styles/*/demo/**/*.ttf
+styles/*/demo/**/*.otf
+styles/*/demo/**/*.tif
+styles/*/demo/**/*.tiff
+styles/*/demo/**/*.npz
+styles/*/demo/assets/raw/
+# Downloaded archive sources (footage, scans, PDFs) and edit caches stay local; each demo's build.sh re-fetches them from SOURCES.jsonl
+styles/*/demo/raw/
+styles/*/demo/work/
+styles/*/demo/**/*.webm
+styles/*/demo/**/*.mpeg
+styles/*/demo/**/*.ogv
+styles/*/demo/**/*.mov
+styles/*/demo/**/*.pdf
+
+# ---- Process notes and drafts stay local, anywhere in the repo ----
+**/TREATMENT.md
+**/PRODUCTION_LOG*
+**/HANDOFF*.md
+**/NOTES.md
+**/进度*.md
+**/TODO*.md
+*.bak
+*.orig
+*~
+*_old.*
+*_bak.*
+*_draft.*
+**/tmp/
+**/scratch/
+# Self-check reports the music scripts rewrite on every build
+styles/*/demo/music/check.txt
+styles/*/demo/music/check.json
+styles/*/demo/music/*report*.txt
+# Partial outputs and try-out helpers
+styles/*/demo/**/*_partial.json
+styles/*/demo/**/*_try.py
+# Superseded first-round review frames; only those a doc or CREDITS names are re-included
+styles/*/demo/stills/*_v1*
+!styles/art-deco/demo/stills/kit_v2.jpg

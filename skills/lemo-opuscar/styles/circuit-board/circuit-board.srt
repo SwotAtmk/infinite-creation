@@ -1,0 +1,54 @@
+1
+00:00:00,350 --> 00:00:05,401
+四川深山里发出来的电，仅仅七毫秒后，就到了两千公里外的江苏。
+Power made deep in the mountains of Sichuan reaches Jiangsu, 2,000 km away, in just 7 milliseconds.
+
+2
+00:00:05,530 --> 00:00:10,042
+平时我们家里用的电，电流是来回摆动着走的，叫做交流电。
+The electricity in our homes swings back and forth as it flows. It's called alternating current, AC.
+
+3
+00:00:10,170 --> 00:00:14,368
+如果直接送去太远的地方，在路上就会白白损耗掉很多。
+Sent that far as it is, a lot of it would simply be lost on the way.
+
+4
+00:00:14,500 --> 00:00:19,061
+所以，电得先进一趟换流站，变成只朝一个方向跑的直流电。
+So first it goes through a converter station and becomes direct current, DC, flowing one way only.
+
+5
+00:00:19,190 --> 00:00:23,347
+然后再顺着这根两千多公里长的电线，一路狂奔到江苏。
+Then it races along this line, more than 2,000 km long, all the way to Jiangsu.
+
+6
+00:00:23,480 --> 00:00:26,967
+全程只要七毫秒，连眨一下眼睛的时间都不到。
+The whole trip takes 7 milliseconds, less than the blink of an eye.
+
+7
+00:00:27,100 --> 00:00:34,023
+到了终点站，它会被重新变回交流电，再把电压一级一级降下来，最终送进你家墙上的插座里。
+At the end it's turned back into AC, stepped down level by level, and sent to the socket in your wall.
+
+8
+00:00:34,150 --> 00:00:42,063
+而当你插上手机充电器时，充电头里其实也藏着一个叫整流桥的小零件，正在把交流电重新变回直流电。
+Plug in your phone charger, and inside it a tiny part called a bridge rectifier turns the AC back into DC.
+
+9
+00:00:42,190 --> 00:00:48,207
+说出来你可能不信，它和换流站里那个几层楼高的大家伙，用的是同一个电路原理。
+Believe it or not, it works on the same circuit principle as the giant, storeys tall, in the converter station.
+
+10
+00:00:48,340 --> 00:00:52,872
+只不过，换流站那边的功率，是这个小充电头的整整四亿倍。
+Only the station's power is a full 400 million times that of this little charger.
+
+11
+00:00:53,000 --> 00:00:57,127
+你手机里的每一格电，都是跨越千山万水，这么跑过来的。
+Every bar of charge on your phone came this far, across mountains and rivers.

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Music4, Sparkles } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { Button, Field, Input, Textarea } from '../components/ui.jsx';
+import { Button, Checkbox, Field, Input, Textarea } from '../components/ui.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { MediaGrid, useAssets, useAutoProject, useJobs } from '../components/simpleStudio.jsx';
 import { useToast } from '../components/toast.jsx';
@@ -14,6 +14,7 @@ export default function MusicGenPage() {
   const [caption, setCaption] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [duration, setDuration] = useState('');
+  const [optimize, setOptimize] = useState(true);
   const [busy, setBusy] = useState(false);
 
   async function generate() {
@@ -27,12 +28,13 @@ export default function MusicGenPage() {
     }
     setBusy(true);
     try {
-      await api.post('/api/projects/' + projectId + '/music', {
+      const job = await api.post('/api/projects/' + projectId + '/music', {
         caption: caption.trim(),
         lyrics,
         max_duration: duration === '' ? undefined : duration,
+        optimize,
       });
-      toast.success('已提交音乐生成任务');
+      toast.success(job?.optimized ? '已按 music-caption-rewriter 优化并提交生成' : '已提交音乐生成任务');
       setCaption('');
       setLyrics('');
       setDuration('');
@@ -68,10 +70,21 @@ export default function MusicGenPage() {
         <Field label="时长（秒，可选）" className="max-w-[220px]">
           <Input type="number" min="1" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="留空自动" />
         </Field>
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <Checkbox
+              checked={optimize}
+              onChange={setOptimize}
+              disabled={busy}
+              label="AI 优化描述与歌词（music-caption-rewriter）"
+            />
+            <span className="text-[11px] leading-relaxed text-[var(--fg-4)]">
+              开启后会先调用该技能把描述改写成结构化 caption，并把歌词整理成带 [Verse]/[Chorus] 段落标签的编曲版本。
+            </span>
+          </div>
           <Button variant="primary" size="md" loading={busy} disabled={busy || !projectId} onClick={generate}>
             <Sparkles size={14} />
-            生成音乐
+            {busy ? (optimize ? 'AI 优化中…' : '提交中…') : '生成音乐'}
           </Button>
         </div>
       </section>

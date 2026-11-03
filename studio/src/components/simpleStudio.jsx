@@ -112,6 +112,10 @@ export function MediaCard({ projectId, asset, kind, activeJobId, onRetry, onChan
   const generating = status === 'generating' || status === 'running' || (status === 'pending' && !!activeJobId);
   const hasRetryInput = !!(asset.prompt || (asset.params && Object.keys(asset.params).length));
   const canRetry = !!onRetry && !generating && hasRetryInput;
+  // 背景音乐：POST /music 会把 music-caption-rewriter 的结构化结果缓存在 params.caption_rewrite。
+  const musicRewrite = asset.category === 'music' ? (asset.params && asset.params.caption_rewrite) || null : null;
+  const paramsView = { ...(asset.params || {}) };
+  delete paramsView.caption_rewrite;
 
   async function stopJob() {
     if (!activeJobId) return;
@@ -242,9 +246,21 @@ export function MediaCard({ projectId, asset, kind, activeJobId, onRetry, onChan
             <span className="text-[var(--fg-4)]">提示词</span>
             <div className="logbox mt-1 max-h-[150px]">{asset.prompt || '（无）'}</div>
           </div>
+          {musicRewrite && musicRewrite.caption && musicRewrite.caption !== asset.prompt ? (
+            <div>
+              <span className="text-[var(--fg-4)]">AI 优化后的描述（music-caption-rewriter）</span>
+              <div className="logbox mt-1 max-h-[220px]">{musicRewrite.caption}</div>
+            </div>
+          ) : null}
+          {asset.category === 'music' ? (
+            <div>
+              <span className="text-[var(--fg-4)]">歌词</span>
+              <div className="logbox mt-1 max-h-[220px]">{asset.lyrics || '（纯音乐）'}</div>
+            </div>
+          ) : null}
           <div>
             <span className="text-[var(--fg-4)]">生成参数</span>
-            <div className="logbox mt-1 max-h-[190px] text-[11px]">{JSON.stringify(asset.params || {}, null, 2)}</div>
+            <div className="logbox mt-1 max-h-[190px] text-[11px]">{JSON.stringify(paramsView, null, 2)}</div>
           </div>
           {path ? (
             <div className="text-[11px] text-[var(--fg-3)]">

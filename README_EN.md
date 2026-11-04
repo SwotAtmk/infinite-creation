@@ -32,7 +32,7 @@ Upload a novel or script and generate films of any length locally — unattended
     </td>
     <td valign="top">
       <strong>Taoxiang Youshu: an all-in-one AI application service platform</strong><br>
-      Brings together trending AI projects, a side-hustle and light-entrepreneurship community, and a business knowledge base — helping individuals pick up AI projects at low cost and find practical side businesses. <a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp">Sign up via the referral link</a> Register through the exclusive link to receive the redemption code for a [7-day SVIP membership]: TsHcxt0t
+      Brings together trending AI projects, a side-hustle and light-entrepreneurship community, and a business knowledge base — helping individuals pick up AI projects at low cost and find practical side businesses. <a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp">Sign up via the referral link</a> You can then receive a redemption code for a [7-day SVIP membership]:: TsHcxt0t
     </td>
   </tr>
 </table>

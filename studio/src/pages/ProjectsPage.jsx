@@ -138,7 +138,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
       }
       setCreateOpen(false);
       resetForm();
-      onOpen(p.id);
+      onOpen(p);
     } catch (e) {
       toast.error(e.message);
     } finally {

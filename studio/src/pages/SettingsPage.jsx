@@ -453,10 +453,20 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                   <div className="rounded-xl border border-[var(--line)] bg-white/[0.015] p-3.5">
                     <p className="m-0 text-[12px] font-medium text-[var(--fg-2)]">多用户排队调度</p>
                     <p className="mt-1 text-[11px] leading-relaxed text-[var(--fg-4)]">
-                      全局槽位 = 上面的「任务并发数量」。以下控制槽位如何在用户之间轮转分配，保存后立即生效（无需重启）。
-                      默认按在线人数动态分配，一人独占时可用满全部槽位，多人时自动收缩、批量提交不会堵死后来者。
+                      全局槽位 = 上面的「任务并发数量」。开启后按在线人数动态分配，一人独占时可用满全部槽位，多人时自动收缩、批量提交不会堵死后来者。
+                      默认关闭：按提交顺序渲染，不做用户间轮转，排队超时与生成超时都不生效（渲染再慢也会一直等，只能手动停止）。
                     </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Switch
+                      className="mt-3"
+                      checked={queue.enabled === true}
+                      onChange={(v) => setQueue({ enabled: v })}
+                      label="启用多用户排队调度"
+                      hint="多人共用同一个渲染账号时才需要打开；单人自用建议保持关闭。保存后立即生效（无需重启）。"
+                    />
+                    <fieldset
+                      disabled={queue.enabled !== true}
+                      className={'mt-3 grid min-w-0 gap-3 sm:grid-cols-2' + (queue.enabled === true ? '' : ' opacity-45')}
+                    >
                       <Field label="单用户并发上限" hint="0 = 按在线人数自动（推荐）">
                         <Input
                           type="number"
@@ -487,7 +497,10 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                           className="w-28"
                         />
                       </Field>
-                      <Field label="排队超时（分钟）" hint="等不到槽位就主动放弃">
+                      <Field
+                        label="排队超时（分钟）"
+                        hint={queue.enabled === true ? '等不到槽位就主动放弃' : '排队调度关闭时不生效，任务不会因等待超时被放弃'}
+                      >
                         <Input
                           type="number"
                           min={1}
@@ -537,7 +550,7 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                           className="w-28"
                         />
                       </Field>
-                    </div>
+                    </fieldset>
                   </div>
                 </>
               )}

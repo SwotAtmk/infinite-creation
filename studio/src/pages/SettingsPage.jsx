@@ -380,11 +380,13 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                     label="服务地址"
                     hint={
                       <span>
-                        配套ComfyUI本地一键启动整合包可从{' '}
+                        可以自行部署并ComfyUI跑通项目文件夹 /comfyui_original_workflows/NVIDIA/ 中的示例工作流，或者获取项目配套的ComfyUI工作流本地一键启动整合包可从{' '}
                         <a href="https://pan.quark.cn/s/9748d626c346?pwd=7NcR" target="_blank" rel="noreferrer" className="text-[var(--accent)] hover:underline">
                           夸克网盘https://pan.quark.cn/s/9748d626c346?pwd=7NcR
                         </a>{' '}
                         ，打开链接即可获取。
+                        <br />
+                        <span className="text-[var(--danger)]">第三方服务免责声明：ComfyUI一键整合包是请第三方大佬做的，可能会包含第三方网站涉及的一些收费相关问题，制作不易理性支持。请仔细查验以免被骗，不要相信任何加你联系方式的陌生人卖你的资料。</span>
                       </span>
                     }
                   >

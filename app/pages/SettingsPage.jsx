@@ -224,9 +224,12 @@ export default function SettingsPage({ onBack }) {
                   {(cfg.comfyui.provider || 'native') === 'native' && (
                     <>
                       <p className="muted" style={{ marginTop: 4 }}>
-                        获取一键部署配套 ComfyUI 工作流：
+                        可以获取一键部署配套 ComfyUI 工作流部署也可以自行部署ComfyUI跑通项目文件夹 /comfyui_original_workflows/NVIDIA/ 中的示例工作流：
                         <a href="https://pan.quark.cn/s/9748d626c346?pwd=7NcR" target="_blank" rel="noopener noreferrer">https://pan.quark.cn/s/9748d626c346?pwd=7NcR</a>
                         ，使用夸克网盘打开链接即可获取。
+                      </p>
+                      <p className="text-xs text-danger" style={{ marginTop: 4 }}>
+                        第三方服务免责声明：ComfyUI一键整合包是请第三方大佬做的，可能会包含第三方网站涉及的一些收费相关问题，制作不易理性支持。请仔细查验以免被骗，不要相信任何加你联系方式的陌生人卖你的资料。
                       </p>
                       <div className="row">
                         <Input size="sm" className="flex-1" value={cfg.comfyui.baseUrl} onChange={(e) => setCfg({ ...cfg, comfyui: { ...cfg.comfyui, baseUrl: e.target.value } })} />

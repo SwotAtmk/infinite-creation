@@ -37,7 +37,7 @@ Upload a novel or script and generate films of any length locally — unattended
   </tr>
 </table>
 
-This project is maintained by an individual developer; GPUs, servers and model API costs are self-funded. If you or your team find it valuable, sponsoring is the most direct way to keep it moving forward:
+If you or your team find it valuable, sponsoring is the most direct way to keep it moving forward:
 
 - Your brand / product featured at the top of this README, seen by every visitor
 - Room for a short product description plus a website / sign-up link

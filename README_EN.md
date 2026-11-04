@@ -70,6 +70,12 @@ If you or your team find it valuable, sponsoring is the most direct way to keep 
 
 > 《Mom's Time》(妈妈的时间)
 
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/c415e1bb-ce1a-46fe-b97f-00362899eed3" width="70%" controls></video>
+</div>
+
+> Created by experience officer 「闪电.」 with infinite-creation
+
 [More samples](docs/run_demo.md) · Rank Shadow ships built-in samples under `public/samples/`: click "Preview samples" in the top-right corner to play the film, inspect its materials and prompt, and try it with one click.
 
 ## What is Agent Infinite Creation

@@ -70,6 +70,12 @@
 
 > 《妈妈的时间》
 
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/c415e1bb-ce1a-46fe-b97f-00362899eed3" width="70%" controls></video>
+</div>
+
+> 由体验官「闪电.」使用 infinite-creation 项目进行创作
+
 [更多样例](docs/run_demo.md) · 「无限・秩影」内置样例位于 `public/samples/`，在页面右上角「预览样例」可直接播放成片、查看素材与提示词，并「一键试用」。
 
 ## Agent无限创作是什么

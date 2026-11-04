@@ -32,7 +32,7 @@ Upload a novel or script and generate films of any length locally — unattended
     </td>
     <td valign="top">
       <strong>Taoxiang Youshu: an all-in-one AI application service platform</strong><br>
-      Brings together trending AI projects, a side-hustle and light-entrepreneurship community, and a business knowledge base — helping individuals pick up AI projects at low cost and find practical side businesses. Website: <a href="https://www.taoxiangyoushu.com/">www.taoxiangyoushu.com</a> · <a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp">Sign up via the referral link</a>
+      Brings together trending AI projects, a side-hustle and light-entrepreneurship community, and a business knowledge base — helping individuals pick up AI projects at low cost and find practical side businesses. <a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp">Sign up via the referral link</a>
     </td>
   </tr>
 </table>

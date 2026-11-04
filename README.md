@@ -32,7 +32,7 @@
     </td>
     <td valign="top">
       <strong>淘项有术：AI 综合应用服务平台</strong><br>
-      聚合 AI 风口项目、副业轻创业社区与商业知识库等资源，帮助个人低成本上手 AI 项目、找到可落地的副业方向。<a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp">通过专属链接注册</a>
+      聚合 AI 风口项目、副业轻创业社区与商业知识库等资源，帮助个人低成本上手 AI 项目、找到可落地的副业方向。<a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp">通过专属链接注册</a> 通过专属链接注册即可领取使用【7 天SVIP 会员】兑换码：TsHcxt0t
     </td>
   </tr>
 </table>

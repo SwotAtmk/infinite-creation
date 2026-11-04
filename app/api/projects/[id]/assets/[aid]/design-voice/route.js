@@ -18,10 +18,15 @@ export async function POST(req, { params }) {
       { status: 409 },
     );
   }
-  const text = body?.text != null ? String(body.text) : '';
   const voice_description = body?.voice_description != null ? String(body.voice_description) : '';
-  // 没有朗读文案就没有音色样本：直接拒绝，避免生成器跑起来才报错（重试老数据时也可能缺 text）
-  if (!text.trim()) return NextResponse.json({ error: '缺少朗读文案 text' }, { status: 400 });
+  // 朗读文案：显式传入 > 上次生成用的文案（资产页「重新生成」不提供文案）> 声音画像 > 通用自我介绍，
+  // 与 design_voice 工具的兜底保持一致；都为空的资产才会拒绝。
+  const text =
+    (body?.text != null ? String(body.text) : '').trim() ||
+    String(a.params?.text || '').trim() ||
+    String(a.voice_desc || '').trim() ||
+    ('你好，我是' + a.name + '。很高兴认识你。').trim();
+  if (!text) return NextResponse.json({ error: '缺少朗读文案 text' }, { status: 400 });
   // 记录本次生成参数（供「重试」复用）并置为生成中
   withWriteContext('POST /api/projects/:id/assets/:aid/design-voice', () => {
     Assets.update(aid, { params: { text, voice_description }, status: 'generating' });

@@ -23,6 +23,28 @@ Upload a novel or script and generate films of any length locally — unattended
   <img src="images/banner.jpg" alt="Agent Infinite Creation" width="100%">
 </p>
 
+## Sponsors
+
+<table>
+  <tr>
+    <td width="200" align="center" valign="top">
+      <a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp"><img src="images/txlogo.png" alt="Taoxiang Youshu" width="180"></a>
+    </td>
+    <td valign="top">
+      <strong>Taoxiang Youshu: an all-in-one AI application service platform</strong><br>
+      Brings together trending AI projects, a side-hustle and light-entrepreneurship community, and a business knowledge base — helping individuals pick up AI projects at low cost and find practical side businesses. Website: <a href="https://www.taoxiangyoushu.com/">www.taoxiangyoushu.com</a> · <a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp">Sign up via the referral link</a>
+    </td>
+  </tr>
+</table>
+
+This project is maintained by an individual developer; GPUs, servers and model API costs are self-funded. If you or your team find it valuable, sponsoring is the most direct way to keep it moving forward:
+
+- Your brand / product featured at the top of this README, seen by every visitor
+- Room for a short product description plus a website / sign-up link
+- Sponsorship amount, duration and benefits are open to discussion
+
+**Contact**: [swotatmk@foxmail.com](mailto:swotatmk@foxmail.com) (please put "Sponsorship" in the subject)
+
 ## UI Overview
 
 <table>

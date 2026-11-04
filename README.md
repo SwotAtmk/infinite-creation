@@ -23,6 +23,28 @@
   <img src="images/banner.jpg" alt="Agent无限创作" width="100%">
 </p>
 
+## 赞助商
+
+<table>
+  <tr>
+    <td width="200" align="center" valign="top">
+      <a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp"><img src="images/txlogo.png" alt="淘项有术" width="180"></a>
+    </td>
+    <td valign="top">
+      <strong>淘项有术：AI 综合应用服务平台</strong><br>
+      聚合 AI 风口项目、副业轻创业社区与商业知识库等资源，帮助个人低成本上手 AI 项目、找到可落地的副业方向。官网：<a href="https://www.taoxiangyoushu.com/">www.taoxiangyoushu.com</a> · <a href="https://admins.taoxiangyoushu.com/#/register?code=FzH3DEp">通过专属链接注册</a>
+    </td>
+  </tr>
+</table>
+
+本项目由个人开发者独立维护，显卡、服务器与模型调用费用均由作者自付。如果你或你的团队认可这个项目，欢迎成为赞助商，让项目走得更远：
+
+- 品牌 / 产品展示在本 README 顶部，随仓库被所有访客看到
+- 可附一段产品介绍与官网 / 注册链接
+- 赞助金额、周期与权益均可协商
+
+**合作洽谈**：[swotatmk@foxmail.com](mailto:swotatmk@foxmail.com)（邮件标题建议注明「赞助合作」）
+
 ## 界面一览
 
 <table>

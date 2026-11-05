@@ -8,16 +8,26 @@ import {
   STYLE_CUSTOM,
   resolveStyle,
   VIDEO_RESOLUTION_CUSTOM,
-  PROJECT_TYPES,
   PROJECT_TYPE_LABEL,
 } from '../lib/shared.js';
 import { RESOLUTION_SELECT_ITEMS, RATIO_SELECT_ITEMS, MetaItem } from '../components/visuals.jsx';
 import { Badge, Button, EmptyState, Field, Input, Select, Skeleton, StatusPill, Switch, Textarea } from '../components/ui.jsx';
 import { Drawer, FormSection } from '../components/overlays.jsx';
 import ReferencePicker from '../components/ReferencePicker.jsx';
+import { MediaCard } from '../components/simpleStudio.jsx';
 import { useToast } from '../components/toast.jsx';
 
 const PAGE_SIZE = 10;
+
+// 一条素材该用哪种播放器渲染：优先看已有产物，未出片时按分类兜底。
+function workKind(a) {
+  if (a.image_path) return 'image';
+  if (a.video_path) return 'video';
+  if (a.audio_path || a.voice_ref) return 'audio';
+  if (a.category === 'video') return 'video';
+  if (a.category === 'voice' || a.category === 'music' || a.category === 'sfx') return 'audio';
+  return 'image';
+}
 const QUEUE_KIND_LABEL = {
   t2i: '资产图', i2i: '资产图', image: '资产图',
   r2v: '分镜视频', i2v: '分镜视频', video: '分镜视频',
@@ -26,8 +36,8 @@ const QUEUE_KIND_LABEL = {
 
 export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false, showCreate = true, publicMode = false, features = {} }) {
   const toast = useToast();
-  const [typeFilter, setTypeFilter] = useState('');
-  const typeParam = showTypeFilter ? typeFilter : type;
+  // 作品集不分类型：直接铺开全部作品；Agent 工作台仍按 type 过滤项目
+  const typeParam = showTypeFilter ? '' : type;
   const [projects, setProjects] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
   const [loading, setLoading] = useState(true);
@@ -39,6 +49,14 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
   const [vision, setVision] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activity, setActivity] = useState(null);
+  // 作品集（showTypeFilter）：跨项目汇总各创作类型的生成结果，而不是每个分类只显示一个项目
+  const isPortfolio = showTypeFilter;
+  const [works, setWorks] = useState([]);
+  const [worksTotal, setWorksTotal] = useState(0);
+  const [worksLoading, setWorksLoading] = useState(false);
+  // Agent 项目在作品集里仍按项目卡片展示；单独拉全量，避免被其它类型的项目挤出第一页
+  const [agentProjects, setAgentProjects] = useState([]);
+  const [agentLoading, setAgentLoading] = useState(false);
 
   const [form, setForm] = useState({ name: '', novel: '', scriptMode: 'auto', script: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true });
   const [refs, setRefs] = useState([]);
@@ -90,6 +108,58 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
     io.observe(el);
     return () => io.disconnect();
   }, [loadMore]);
+
+  const loadWorks = useCallback(() => {
+    if (!isPortfolio) {
+      setWorks([]);
+      setWorksTotal(0);
+      return Promise.resolve();
+    }
+    setWorksLoading(true);
+    return api
+      .get('/api/works?pageSize=300')
+      .then((r) => {
+        setWorks(r.items || []);
+        setWorksTotal(r.total || 0);
+      })
+      .catch((e) => toast.error(e.message))
+      .finally(() => setWorksLoading(false));
+  }, [isPortfolio]);
+
+  useEffect(() => {
+    setWorks([]);
+    setWorksTotal(0);
+    loadWorks();
+  }, [loadWorks]);
+
+  const loadAgentProjects = useCallback(() => {
+    if (!isPortfolio) return Promise.resolve();
+    setAgentLoading(true);
+    return api
+      .get('/api/projects?type=agent&pageSize=100')
+      .then((r) => setAgentProjects(r.items || []))
+      .catch((e) => toast.error(e.message))
+      .finally(() => setAgentLoading(false));
+  }, [isPortfolio]);
+
+  useEffect(() => { loadAgentProjects(); }, [loadAgentProjects]);
+
+  // 有作品在生成时定时刷新，让「生成中」自动变成成片，不必手动刷新页面
+  const worksGenerating = works.filter((w) => ['generating', 'running', 'queued'].includes(w.status)).length;
+  useEffect(() => {
+    if (!worksGenerating) return undefined;
+    const t = setInterval(loadWorks, 4000);
+    return () => clearInterval(t);
+  }, [worksGenerating, loadWorks]);
+
+  // 作品集不分类：Agent 项目与各类型作品按更新时间倒序铺成一条流
+  const feed = [
+    ...agentProjects.map((p) => ({ kind: 'project', at: p.updatedAt || 0, project: p })),
+    ...works.map((w) => ({ kind: 'work', at: w.updated_at || 0, work: w })),
+  ].sort((a, b) => b.at - a.at);
+
+  // 作品集首屏：项目 + Agent 项目 + 作品都还没回来时显示骨架；轮询刷新时不闪骨架
+  const listLoading = loading || (isPortfolio && (agentLoading || worksLoading) && !feed.length);
 
   const running = projects.filter((p) => p.status === 'running').length;
   const assets = projects.reduce((n, p) => n + (p.assetCount || 0), 0);
@@ -157,9 +227,67 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
       await api.del('/api/projects/' + p.id);
       toast.success('已删除');
       load();
+      if (isPortfolio) loadAgentProjects();
     } catch (e) {
       toast.error(e.message);
     }
+  }
+
+  // 作品集里的「重试」按所属工作台重新提交：各类型的工作台入参不同，这里按 project_type 分流
+  async function retryWork(w) {
+    const base = '/api/projects/' + w.project_id;
+    const p = w.params || {};
+    switch (w.project_type) {
+      case 'image':
+        await api.post(base + '/assets/' + w.id + '/generate', { mode: p.mode === 'i2i' ? 'i2i' : 't2i', prompt: p.prompt || w.prompt || '' });
+        break;
+      case 'video':
+        await api.post(base + '/video', {
+          asset_id: w.id,
+          mode: p.mode || 'reference',
+          prompt: p.prompt || w.prompt || '',
+          seconds: p.seconds,
+          resolution: p.resolution,
+          aspect_ratio: p.aspect_ratio,
+          references: Array.isArray(p.references) ? p.references : [],
+        });
+        break;
+      case 'music':
+        await api.post(base + '/music', { asset_id: w.id });
+        break;
+      case 'tts':
+        await api.post(base + '/assets/' + w.id + '/design-voice', { text: p.text || '', voice_description: p.voice_description || '' });
+        break;
+      case 'tts_clone':
+        await api.post(base + '/assets/' + w.id + '/clone-voice', {
+          text: p.text || '',
+          ref_audio: p.ref_audio || '',
+          ref_audio_project_id: p.ref_audio_project_id || '',
+        });
+        break;
+      case 'digital_human':
+        await api.post(base + '/digital-human', {
+          asset_id: w.id,
+          text: p.text || '',
+          prompt: p.prompt || w.prompt || '',
+          seconds: p.seconds,
+          resolution: p.resolution,
+          aspect_ratio: p.aspect_ratio,
+          avatar: p.avatar || '',
+          ref_audio: p.ref_audio || '',
+          ref_audio_project_id: p.ref_audio_project_id || '',
+        });
+        break;
+      case 'opuscar': {
+        const body = { asset_id: w.id, style_slug: p.style_slug || '', prompt: w.prompt || '', references: Array.isArray(p.references) ? p.references : [] };
+        if (p.style_slug === '__custom__') body.custom_style = p.custom_style || '';
+        await api.post(base + '/opuscar', body);
+        break;
+      }
+      default:
+        throw new Error('该类型暂不支持在作品集重试');
+    }
+    toast.success('已重新提交生成任务');
   }
 
   const canCreate = !!form.name.trim() && !!form.novel.trim() && (form.scriptMode === 'auto' || !!form.script.trim());
@@ -186,18 +314,10 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
           <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-[var(--fg-3)]">
             {type === 'agent'
               ? '一段小说交给 Agent，拆章节、建素材、写分镜、出视频。所有项目与经典界面共用同一份数据。'
-              : '按创作类型归档全部项目，点击非 Agent 项目会直接进入对应工作台。'}
+              : '图片、视频、音乐、音色、数字人与秩影的全部生成结果，按时间从新到旧铺在一起。'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {showTypeFilter ? (
-            <Select
-              className="w-40"
-              value={typeFilter}
-              onChange={setTypeFilter}
-              items={[{ value: '', label: '全部分类' }, ...PROJECT_TYPES.map((t) => ({ value: t, label: PROJECT_TYPE_LABEL[t] || t }))]}
-            />
-          ) : null}
           {showCreate && features.createProject !== false ? (
             <Button variant="primary" size="md" onClick={openCreate}>
               <Plus size={15} />
@@ -210,7 +330,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat icon={Layers} label="项目总数" value={meta.total} />
         <Stat icon={Sparkles} label="本页运行中" value={running} tone={running ? 'accent' : undefined} />
-        <Stat icon={ImageIcon} label="本页资产" value={assets} />
+        <Stat icon={ImageIcon} label={isPortfolio ? '作品总数' : '本页资产'} value={isPortfolio ? worksTotal : assets} />
         <Stat icon={Film} label="本页分镜" value={shots} />
       </section>
 
@@ -254,73 +374,52 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
 
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="m-0 text-[13px] font-semibold text-[var(--fg-2)]">最近项目</h2>
-          <span className="text-[11px] text-[var(--fg-4)]">已加载 {projects.length} / {meta.total || '—'}</span>
+          <h2 className="m-0 text-[13px] font-semibold text-[var(--fg-2)]">{isPortfolio ? '全部作品' : '最近项目'}</h2>
+          <span className="text-[11px] text-[var(--fg-4)]">
+            {isPortfolio ? '共 ' + feed.length + ' 件' : '已加载 ' + projects.length + ' / ' + (meta.total || '—')}
+          </span>
         </div>
 
-        {loading ? (
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="panel overflow-hidden">
-                <Skeleton className="aspect-video rounded-none" />
-                <div className="flex flex-col gap-2 p-3.5">
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-              </div>
-            ))}
-          </div>
+        {listLoading ? (
+          <CardSkeletons />
+        ) : isPortfolio ? (
+          feed.length ? (
+            <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
+              {feed.map((it) => (it.kind === 'project' ? (
+                <ProjectCard
+                  key={'p-' + it.project.id}
+                  project={it.project}
+                  showType
+                  onOpen={onOpen}
+                  onDelete={features.buttons?.delete !== false ? del : null}
+                />
+              ) : (
+                <MediaCard
+                  key={'w-' + it.work.id}
+                  projectId={it.work.project_id}
+                  asset={it.work}
+                  kind={workKind(it.work)}
+                  onRetry={retryWork}
+                  onChanged={loadWorks}
+                />
+              )))}
+            </div>
+          ) : (
+            <div className="panel">
+              <EmptyState
+                icon={Clapperboard}
+                title="还没有作品"
+                description="在图片 / 视频 / 音乐 / 音色等创作类型的工作台生成内容后，结果会自动汇总到这里。"
+              />
+            </div>
+          )
         ) : projects.length ? (
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
-            {projects.map((p) => (
-              <article key={p.id} className="panel panel-hover group relative overflow-hidden">
-                <button type="button" onClick={() => onOpen(p)} className="block w-full text-left">
-                  <div className="media-hover relative aspect-video overflow-hidden bg-black/40">
-                    {p.poster ? (
-                      <img src={fileUrl(p.id, p.poster)} alt={p.name} loading="lazy" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[radial-gradient(120%_120%_at_30%_0%,rgba(255,255,255,.05),transparent_60%)] text-[var(--fg-4)]">
-                        <Clapperboard size={22} />
-                        <span className="text-[10.5px]">尚无预览</span>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.25)_0%,transparent_35%,rgba(0,0,0,.55)_100%)] opacity-80" />
-                    <div className="absolute left-3 top-3">
-                      <StatusPill status={p.status}>{STATUS_TEXT[p.status] || p.status || '空闲'}</StatusPill>
-                    </div>
-                    <span className="absolute bottom-3 right-3 flex translate-y-1 items-center gap-1 rounded-lg border border-white/10 bg-black/45 px-2 py-1 text-[10.5px] text-white/85 opacity-0 backdrop-blur transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
-                      打开项目 <ArrowUpRight size={11} />
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-2 p-3.5">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-[14px] font-medium text-[var(--fg)]">{p.name}</span>
-                      {showTypeFilter ? (
-                        <Badge className="shrink-0">{PROJECT_TYPE_LABEL[p.type] || p.type || 'Agent无限创作'}</Badge>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-2.5 text-[11.5px] text-[var(--fg-3)]">
-                        <MetaItem icon={Layers}>{p.assetCount ?? 0}</MetaItem>
-                        <MetaItem icon={Clapperboard}>{p.shotCount ?? 0}</MetaItem>
-                      </span>
-                      <span className="shrink-0 text-[11px] text-[var(--fg-4)]">{fmtRelative(p.updatedAt)}</span>
-                    </div>
-                  </div>
-                </button>
-                {features.buttons?.delete !== false ? (
-                  <button
-                    type="button"
-                    aria-label={'删除项目 ' + p.name}
-                    onClick={() => del(p)}
-                    className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-black/55 text-white/70 opacity-0 backdrop-blur transition-all duration-200 hover:border-[color-mix(in_srgb,var(--danger)_45%,transparent)] hover:text-[var(--danger)] group-hover:opacity-100"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                ) : null}
-              </article>
-            ))}
-          </div>
+          <ProjectGrid
+            projects={projects}
+            showType={false}
+            onOpen={onOpen}
+            onDelete={features.buttons?.delete !== false ? del : null}
+          />
         ) : (
           <div className="panel">
             <EmptyState
@@ -338,9 +437,11 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
           </div>
         )}
 
-        <div ref={sentinelRef} className="flex items-center justify-center gap-2 py-2 text-[11px] text-[var(--fg-4)]">
-          {loadingMore ? <Skeleton className="h-3 w-24" /> : hasMore ? '向下滚动加载更多' : projects.length > 0 ? '已经到底了' : ''}
-        </div>
+        {!isPortfolio ? (
+          <div ref={sentinelRef} className="flex items-center justify-center gap-2 py-2 text-[11px] text-[var(--fg-4)]">
+            {loadingMore ? <Skeleton className="h-3 w-24" /> : hasMore ? '向下滚动加载更多' : projects.length > 0 ? '已经到底了' : ''}
+          </div>
+        ) : null}
       </section>
 
       <Drawer
@@ -511,5 +612,82 @@ function StyleChip({ active, onClick, children }) {
     >
       {children}
     </button>
+  );
+}
+
+function CardSkeletons({ count = 6 }) {
+  return (
+    <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="panel overflow-hidden">
+          <Skeleton className="aspect-video rounded-none" />
+          <div className="flex flex-col gap-2 p-3.5">
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProjectCard({ project: p, showType, onOpen, onDelete }) {
+  return (
+    <article className="panel panel-hover group relative overflow-hidden">
+      <button type="button" onClick={() => onOpen(p)} className="block w-full text-left">
+        <div className="media-hover relative aspect-video overflow-hidden bg-black/40">
+          {p.poster ? (
+            <img src={fileUrl(p.id, p.poster)} alt={p.name} loading="lazy" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[radial-gradient(120%_120%_at_30%_0%,rgba(255,255,255,.05),transparent_60%)] text-[var(--fg-4)]">
+              <Clapperboard size={22} />
+              <span className="text-[10.5px]">尚无预览</span>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.25)_0%,transparent_35%,rgba(0,0,0,.55)_100%)] opacity-80" />
+          <div className="absolute left-3 top-3">
+            <StatusPill status={p.status}>{STATUS_TEXT[p.status] || p.status || '空闲'}</StatusPill>
+          </div>
+          <span className="absolute bottom-3 right-3 flex translate-y-1 items-center gap-1 rounded-lg border border-white/10 bg-black/45 px-2 py-1 text-[10.5px] text-white/85 opacity-0 backdrop-blur transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+            打开项目 <ArrowUpRight size={11} />
+          </span>
+        </div>
+        <div className="flex flex-col gap-2 p-3.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[14px] font-medium text-[var(--fg)]">{p.name}</span>
+            {showType ? (
+              <Badge className="shrink-0">{PROJECT_TYPE_LABEL[p.type] || p.type || 'Agent无限创作'}</Badge>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex min-w-0 items-center gap-2.5 text-[11.5px] text-[var(--fg-3)]">
+              <MetaItem icon={Layers}>{p.assetCount ?? 0}</MetaItem>
+              <MetaItem icon={Clapperboard}>{p.shotCount ?? 0}</MetaItem>
+            </span>
+            <span className="shrink-0 text-[11px] text-[var(--fg-4)]">{fmtRelative(p.updatedAt)}</span>
+          </div>
+        </div>
+      </button>
+      {onDelete ? (
+        <button
+          type="button"
+          aria-label={'删除项目 ' + p.name}
+          onClick={() => onDelete(p)}
+          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-black/55 text-white/70 opacity-0 backdrop-blur transition-all duration-200 hover:border-[color-mix(in_srgb,var(--danger)_45%,transparent)] hover:text-[var(--danger)] group-hover:opacity-100"
+        >
+          <Trash2 size={13} />
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+function ProjectGrid({ projects, showType, onOpen, onDelete }) {
+  return (
+    <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
+      {projects.map((p) => (
+        <ProjectCard key={p.id} project={p} showType={showType} onOpen={onOpen} onDelete={onDelete} />
+      ))}
+    </div>
   );
 }

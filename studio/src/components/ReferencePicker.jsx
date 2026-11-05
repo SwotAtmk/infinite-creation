@@ -42,7 +42,8 @@ export default function ReferencePicker({ projectId, items = [], onChange, saved
         tooBig.push(file.name);
         continue;
       }
-      next.push({ key: nextKey(), file, mode: 'reference', category: 'other', description: '', previewUrl: URL.createObjectURL(file) });
+      // 默认导入素材库：上传的参考图直接成为项目素材；需要「参考生成新素材」时再手动切换。
+      next.push({ key: nextKey(), file, mode: 'library', category: 'other', description: '', previewUrl: URL.createObjectURL(file) });
     }
     if (badExt.length) toast.error('已跳过非支持格式：' + badExt.join('、') + '（仅支持 ' + REFERENCE_IMAGE_EXTS.map((e) => e.slice(1)).join('/') + '）');
     if (tooBig.length) toast.error('已跳过超过 10MB 的文件：' + tooBig.join('、'));
@@ -152,11 +153,12 @@ export default function ReferencePicker({ projectId, items = [], onChange, saved
             </div>
           ))}
         </div>
-      ) : (
-        <p className="m-0 text-[11.5px] leading-relaxed text-[var(--fg-3)]">
-          「参考生成新素材」会提交给视觉模型分析后据此生成新素材；「导入素材库」直接加入素材库。
-        </p>
-      )}
+      ) : null}
+
+      {/* 说明常驻：有素材后仍需要提示两种用途的区别（此前放在空态里，上传后就消失了） */}
+      <p className="m-0 text-[11.5px] leading-relaxed text-[var(--fg-3)]">
+        「参考生成新素材」会提交给视觉模型分析后据此生成新素材；「导入素材库」直接加入素材库（默认）。
+      </p>
 
       <ImageLightbox open={!!preview} onOpenChange={(o) => !o && setPreview(null)} src={preview?.url} title={preview?.title} />
     </div>

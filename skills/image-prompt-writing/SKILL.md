@@ -11,7 +11,7 @@ description: 为 Krea2 超写实文生图（t2i）与 Qwen-Image-Edit-2511 图�
 
 - **人物 character → 16:9**：角色设定图，左侧 1/3 为人物上半身脸部特写（头肩/胸部以上，突出五官/发型/神态/气质），右侧 2/3 为从头到脚的完整全身三视图（正面、侧面、背面，头顶到脚尖完整入画、不得裁切），同一人物外貌/服装/配色完全一致，简洁浅色背景，横向布局。
 - **场景 scene → 16:9**：环境氛围、空间透视、光线与风格，画面完整可作背景。
-- **道具 prop → 1:1**：纯白背景，画面只出现该道具本身，突出形状/材质/细节。
+- **道具 prop → 1:1**：纯白背景，画面只出现该道具本身，突出形状/材质/细节；道具自带的文字/标签/包装说明/品牌 logo 要保留并写清内容。
 
 ## prompt 编写规则
 
@@ -19,12 +19,13 @@ description: 为 Krea2 超写实文生图（t2i）与 Qwen-Image-Edit-2511 图�
 2. 先主体核心特征，再环境，最后细节（材质、光影、色调、镜头视角）。
 3. 明确镜头视角（特写/中景/全景、正面/侧面/背面、平视/俯视/仰视）。
 4. 风格与本项目 style.md 保持一致。
-5. **画面内不得出现任何文字、字幕、水印、logo、标语、签名**。
+5. **允许保留与主体相关的真实文字**（招牌、书名、包装标签、屏幕文案、道具品牌名/logo 等），写清文字内容与位置；不要出现与画面无关的字幕条、水印、签名或乱码。
 
 ## negative_prompt 规则
 
-通用排除：`blurry, low quality, pixelated, distorted, watermark, text, subtitles, caption, letters, words, text overlay, signature, logo, oversaturated, artificial, plastic-looking`。
+通用排除：`blurry, low quality, pixelated, distorted, watermark, oversaturated, artificial, plastic-looking`。
 人物类额外排除：`extra fingers, deformed hands, mutated hands, fused fingers, plastic skin, over-smoothed`。
+不要排除 `text, letters, words, logo, signature`——把文字写进负向提示词会让产品包装、书封、招牌上的字被擦掉。
 
 ## 输出
 

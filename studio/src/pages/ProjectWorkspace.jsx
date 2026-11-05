@@ -202,8 +202,12 @@ export default function ProjectWorkspace({ id, initialTab = 'chapters', onBack, 
   }
 
   async function stop(chapter) {
+    // 该函数既作为「停止全部」的 onClick 直接调用（此时入参是 React 事件对象），
+    // 也作为章节页的 onStop 回调传入章节名。这里只把「字符串」当作章节名，
+    // 避免把事件对象（含 DOM 节点，无法 JSON 序列化）塞进请求体。
+    const chapterName = typeof chapter === 'string' ? chapter : null;
     try {
-      await api.post('/api/projects/' + id + '/stop', chapter ? { chapter } : {});
+      await api.post('/api/projects/' + id + '/stop', chapterName ? { chapter: chapterName } : {});
       loadProject();
       refreshProgress();
     } catch (e) {

@@ -158,6 +158,7 @@ export default function ChaptersPage({ projectId, chapters, onRefresh, running, 
       await onStop(chapter);
     } catch (e) {
       toast.error(e.message);
+    } finally {
       setStopping(false);
     }
   }

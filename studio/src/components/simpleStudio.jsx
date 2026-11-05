@@ -46,7 +46,10 @@ export function useAssets(projectId, category) {
     }
     return api
       .get('/api/projects/' + projectId + '/assets?category=' + category)
-      .then((a) => setAssets(Array.isArray(a) ? a : []))
+      // 生成结果按时间倒序：最新生成的在最前面
+      .then((a) => setAssets(Array.isArray(a)
+        ? [...a].sort((x, y) => (y.created_at || 0) - (x.created_at || 0) || (y.updated_at || 0) - (x.updated_at || 0))
+        : []))
       .catch(() => setAssets([]));
   }, [projectId, category]);
 

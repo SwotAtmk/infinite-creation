@@ -24,7 +24,7 @@
       "advanced": true,
       "fps": 24,
       "keyframe_role": "first",
-      "ref_image_size": "match",
+      "ref_image_size": "original",
       "reference_mention_mode": "index",
       "prompt_optimizer_settings": false,
       "prompt_optimizer_scene_guide": "none",

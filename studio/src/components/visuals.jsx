@@ -49,7 +49,7 @@ export function RatioIcon({ ratio = '16:9', size = 16, className }) {
   );
 }
 
-const RES_LEVEL = { '360P': 1, '480P': 2, '720P': 3, '768P': 3, '1080P': 4, '2K': 4, '4K': 5, custom: 2 };
+const RES_LEVEL = { '360P': 1, '480P': 2, '540P': 2, '720P': 3, '768P': 3, '1080P': 4, '2K': 4, '4K': 5, custom: 2 };
 
 // 分辨率图标：外框内的高亮区域随档位增大，360P → 4K 有直观的「画面变大」感
 export function ResolutionIcon({ resolution = '480P', size = 16, className }) {

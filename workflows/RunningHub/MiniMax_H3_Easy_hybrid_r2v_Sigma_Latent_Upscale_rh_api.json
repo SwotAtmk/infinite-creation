@@ -1,0 +1,620 @@
+{
+  "119": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "120": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "123": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "124": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 8,
+      "denoise": 1,
+      "model": [
+        "141",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "BasicScheduler",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "125": {
+    "inputs": {
+      "noise": [
+        "129",
+        0
+      ],
+      "guider": [
+        "126",
+        0
+      ],
+      "sampler": [
+        "123",
+        0
+      ],
+      "sigmas": [
+        "208",
+        0
+      ],
+      "latent_image": [
+        "257",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "126": {
+    "inputs": {
+      "model": [
+        "141",
+        0
+      ],
+      "conditioning": [
+        "257",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "Basic Guider",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "127": {
+    "inputs": {
+      "unet_name": "minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "128": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "129": {
+    "inputs": {
+      "noise_seed": 999
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "141": {
+    "inputs": {
+      "max_resolution": 1024,
+      "jpeg_quality": 80,
+      "suppress_default_preview": true,
+      "preview_frames": [
+        "260",
+        3
+      ],
+      "preview_fps": 12,
+      "tiny_vae": "taeh3.safetensors",
+      "model": [
+        "256",
+        0
+      ]
+    },
+    "class_type": "ModelPreviewOverrideKJ",
+    "_meta": {
+      "title": "Model Preview Override KJ",
+      "cnr_id": "comfyui-kjnodes",
+      "aux_id": "kijai/ComfyUI-KJNodes",
+      "ver": "3f20054214fec9f9234fd3841ae6f1e4287948f6"
+    }
+  },
+  "142": {
+    "inputs": {
+      "model": [
+        "127",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+    "_meta": {
+      "title": "MiniMax H3 Memory Efficient Sage Attention Patch",
+      "cnr_id": "comfyui-kjnodes",
+      "aux_id": "kijai/ComfyUI-KJNodes",
+      "ver": "3f20054214fec9f9234fd3841ae6f1e4287948f6"
+    }
+  },
+  "147": {
+    "inputs": {
+      "lora_name": "minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors",
+      "strength_model": 0.75,
+      "model": [
+        "264",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Load LoRA",
+      "cnr_id": "comfy-core",
+      "ver": "0.31.0"
+    }
+  },
+  "149": {
+    "inputs": {
+      "shift_video": 12,
+      "shift_audio": 3,
+      "model": [
+        "147",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3SigmaShift",
+    "_meta": {
+      "title": "ModelSamplingMiniMaxH3",
+      "cnr_id": "comfy-core",
+      "ver": "0.31.0"
+    }
+  },
+  "178": {
+    "inputs": {
+      "attention": "comfy kitchen attention",
+      "model": [
+        "149",
+        0
+      ]
+    },
+    "class_type": "ModelAttentionBackend",
+    "_meta": {
+      "title": "ModelAttentionBackend",
+      "cnr_id": "comfy-core",
+      "ver": "0.31.0"
+    }
+  },
+  "208": {
+    "inputs": {
+      "step": 4,
+      "sigmas": [
+        "254",
+        0
+      ]
+    },
+    "class_type": "SplitSigmas",
+    "_meta": {
+      "title": "SplitSigmas",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "209": {
+    "inputs": {
+      "noise": [
+        "129",
+        0
+      ],
+      "guider": [
+        "259",
+        0
+      ],
+      "sampler": [
+        "123",
+        0
+      ],
+      "sigmas": [
+        "208",
+        1
+      ],
+      "latent_image": [
+        "212",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "210": {
+    "inputs": {
+      "model_name": "minimax_h3_latent_upscaler_3d_fp16.safetensors",
+      "mode": "scale by multiplier",
+      "mode.scale": 2,
+      "align": 32,
+      "enable_chunking": true,
+      "device": "cuda",
+      "precision": "fp16",
+      "latent": [
+        "211",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3EasyLatentUpscaler3D",
+    "_meta": {
+      "title": "MiniMax H3 Easy 3D Latent Upscale (Built-in)",
+      "cnr_id": "comfyui-minimaxh3-easy",
+      "aux_id": "nkxx188/ComfyUI-MiniMaxH3-Easy",
+      "ver": "1.0.14"
+    }
+  },
+  "211": {
+    "inputs": {
+      "av_latent": [
+        "125",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "Separate AV Latent",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "212": {
+    "inputs": {
+      "video_latent": [
+        "210",
+        0
+      ],
+      "audio_latent": [
+        "211",
+        1
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "Concat AV Latent",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "218": {
+    "inputs": {
+      "samples": [
+        "209",
+        0
+      ],
+      "vae": [
+        "257",
+        3
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE Decode Audio",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "219": {
+    "inputs": {
+      "samples": [
+        "209",
+        0
+      ],
+      "vae": [
+        "257",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "220": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "color_space": "sRGB",
+      "codec": "none",
+      "images": [
+        "219",
+        0
+      ],
+      "audio": [
+        "218",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "Create Video",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "254": {
+    "inputs": {
+      "extra_steps": 1,
+      "start_at_sigma": 0.7,
+      "end_at_sigma": 0,
+      "spacing": "cosine",
+      "sigmas": [
+        "124",
+        0
+      ]
+    },
+    "class_type": "H3SigmaRefiner",
+    "_meta": {
+      "title": "H3 Sigma Refiner",
+      "aux_id": "yichengup/ComfyUI-YCNodes-MiniMax-H3",
+      "ver": "146207295c1d2bd6b64a6552484cb6ed8be1c9ef"
+    }
+  },
+  "255": {
+    "inputs": {
+      "text_encoder": [
+        "128",
+        0
+      ],
+      "video_vae": [
+        "119",
+        0
+      ],
+      "audio_vae": [
+        "120",
+        0
+      ],
+      "fl2va_model": [
+        "178",
+        0
+      ],
+      "ref2va_model": [
+        "178",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3EasyModelAdapter",
+    "_meta": {
+      "title": "MiniMax H3 Easy 模型中转",
+      "cnr_id": "comfyui-minimaxh3-easy",
+      "ver": "404e6e8c3af4d013c275f773da09e181765cdc14"
+    }
+  },
+  "256": {
+    "inputs": {
+      "mode": "reference",
+      "prompt": "__MINIMAX_H3_REF_2__ is the character design of Gu Xinyao. __MINIMAX_H3_REF_3__ is the interior of the plain wooden carriage. __MINIMAX_H3_REF_4__ is the misty city gate environment. __MINIMAX_H3_REF_1__ is Gu Xinyao's voice timbre. Style: Chinese ancient-style 2D animation (guoman), cel-shaded with soft gradients, clean line art, cold grey-blue dawn palette, soft volumetric light and vapor.0.0-4.0s: Close-up inside the dim carriage: Gu Xinyao (__MINIMAX_H3_REF_2__) presses one hand flat over her heart, lowers her eyes and mouths a silent promise, solemn and gentle; static camera; hushed carriage interior tone with a faint horse snort outside.4.0-7.0s: Memory insert: a semi-transparent ghostly girl with exactly the same face as Gu Xinyao but hollow empty eyes, a bloodless pale complexion, loose unbound black hair and ragged grey-blue coarse clothes stands in the drifting white fog and looks back over her shoulder, then dissolves into wisps of smoke and fades out; the camera pulls back slowly; no speech, only a faint airy shimmer.7.0-11.0s: Cut back to a medium close-up of Gu Xinyao alone in the dim carriage, her eyelashes trembling once and her chest rising and falling; static camera.Dialogue and voice: Gu Xinyao's inner monologue in her own voice timbre from __MINIMAX_H3_REF_4__, low and steady, lips closed: <d>[Chinese] 你放心，你的苦，我一件件讨回，安心去吧。</d> then <d>[Chinese] 心死，就是这样了。</d>Consistency: keep Gu Xinyao's face and costume identical to __MINIMAX_H3_REF_1__, and make the ghostly girl read clearly as the same person, rendered only as translucent figure and vapor, never as any written or graphic overlay. No text, no subtitles, no watermark, no logo in frame.",
+      "resolution": "540P",
+      "aspect_ratio": "16:9",
+      "width": 960,
+      "height": 544,
+      "seconds": 11,
+      "advanced": true,
+      "fps": 24,
+      "keyframe_role": "first",
+      "ref_image_size": "original",
+      "reference_mention_mode": "index",
+      "prompt_optimizer": false,
+      "prompt_optimizer_api_format": "openai",
+      "prompt_optimizer_api_url": "",
+      "prompt_optimizer_api_key": "",
+      "prompt_optimizer_model": "",
+      "prompt_optimizer_language": "en",
+      "prompt_optimizer_scene_guide": "none",
+      "prompt_optimizer_read_media": false,
+      "prompt_optimizer_optimize_on_run": false,
+      "h3_bundle": [
+        "255",
+        0
+      ],
+      "media_1": [
+        "268",
+        0
+      ],
+      "media_type_1": "audio",
+      "media_2": [
+        "269",
+        0
+      ],
+      "media_type_2": "image",
+      "media_3": [
+        "270",
+        0
+      ],
+      "media_type_3": "image",
+      "media_4": [
+        "271",
+        0
+      ],
+      "media_type_4": "image",
+      "prompt_optimizer_resources": "[{\"type\":\"audio\",\"tag\":\"<Audio 1>\",\"name\":\"09a5ce93020ed4d9968e3d70cd5272939e16d919adf9e3c328ac45f8a2ee8e26.wav\",\"asset\":{\"filename\":\"09a5ce93020ed4d9968e3d70cd5272939e16d919adf9e3c328ac45f8a2ee8e26.wav\",\"subfolder\":\"\",\"storage\":\"input\"}},{\"type\":\"image\",\"tag\":\"<Picture 1>\",\"name\":\"1592b225f73be5c533b31e4110db2112d770a7fa731af4fc64cabae6bda3f441.png\",\"asset\":{\"filename\":\"1592b225f73be5c533b31e4110db2112d770a7fa731af4fc64cabae6bda3f441.png\",\"subfolder\":\"\",\"storage\":\"input\"}},{\"type\":\"image\",\"tag\":\"<Picture 2>\",\"name\":\"69f42a336c404e8f0f965e8218205272f844f11077306319d561a2676fc6c3e9.png\",\"asset\":{\"filename\":\"69f42a336c404e8f0f965e8218205272f844f11077306319d561a2676fc6c3e9.png\",\"subfolder\":\"\",\"storage\":\"input\"}},{\"type\":\"image\",\"tag\":\"<Picture 3>\",\"name\":\"d7cf3d9857184e6502c47541a1c04d5b7a5470958d2dacaf1d5ca4e56a1f9d54.png\",\"asset\":{\"filename\":\"d7cf3d9857184e6502c47541a1c04d5b7a5470958d2dacaf1d5ca4e56a1f9d54.png\",\"subfolder\":\"\",\"storage\":\"input\"}}]",
+      "prompt_optimizer_marker": "{}",
+      "prompt_optimizer_prompt_connected": false
+    },
+    "class_type": "MiniMaxH3Easy",
+    "_meta": {
+      "title": "MiniMax H3 Easy",
+      "cnr_id": "comfyui-minimaxh3-easy",
+      "ver": "404e6e8c3af4d013c275f773da09e181765cdc14"
+    }
+  },
+  "257": {
+    "inputs": {
+      "h3_context": [
+        "256",
+        1
+      ]
+    },
+    "class_type": "MiniMaxH3EasyOutput",
+    "_meta": {
+      "title": "MiniMax H3 Easy 输出",
+      "cnr_id": "comfyui-minimaxh3-easy",
+      "ver": "404e6e8c3af4d013c275f773da09e181765cdc14"
+    }
+  },
+  "258": {
+    "inputs": {
+      "h3_context": [
+        "256",
+        1
+      ],
+      "second_pass_video_latent": [
+        "210",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3EasySecondPassConditioning",
+    "_meta": {
+      "title": "MiniMax H3 Easy Second Pass Conditioning",
+      "cnr_id": "comfyui-minimaxh3-easy",
+      "ver": "1dc25bed8dc6553ae2add548a0a9db3f18cb1033"
+    }
+  },
+  "259": {
+    "inputs": {
+      "model": [
+        "141",
+        0
+      ],
+      "conditioning": [
+        "258",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "Basic Guider",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "260": {
+    "inputs": {
+      "latent": [
+        "257",
+        1
+      ]
+    },
+    "class_type": "GetLatentSizeAndCount",
+    "_meta": {
+      "title": "Get Latent Size & Count",
+      "cnr_id": "comfyui-kjnodes",
+      "ver": "3f20054214fec9f9234fd3841ae6f1e4287948f6"
+    }
+  },
+  "264": {
+    "inputs": {
+      "lora_name": "MysticXXX_MMH3-V4.safetensors",
+      "strength_model": 0.5,
+      "model": [
+        "142",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Load LoRA",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "268": {
+    "inputs": {
+      "audio": "09a5ce93020ed4d9968e3d70cd5272939e16d919adf9e3c328ac45f8a2ee8e26.wav"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "Load Audio"
+    }
+  },
+  "269": {
+    "inputs": {
+      "image": "1592b225f73be5c533b31e4110db2112d770a7fa731af4fc64cabae6bda3f441.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "270": {
+    "inputs": {
+      "image": "69f42a336c404e8f0f965e8218205272f844f11077306319d561a2676fc6c3e9.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "271": {
+    "inputs": {
+      "image": "d7cf3d9857184e6502c47541a1c04d5b7a5470958d2dacaf1d5ca4e56a1f9d54.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "272": {
+    "inputs": {
+      "filename_prefix": "video/MiniMaxH3_Easy",
+      "format": "auto",
+      "format.codec": "auto",
+      "codec": "auto",
+      "fw_video_preview": "",
+      "video": [
+        "220",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  }
+}

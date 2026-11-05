@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, Clapperboard, Clock, Download, Film, Hash, Package, Pencil, Play, Plus, RefreshCw, Wand2 } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronDown, Clapperboard, Clock, Download, Film, Hash, Package, Pencil, Play, Plus, Wand2, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import CostButton from '../components/CostButton.jsx';
 import { fileUrl, STATUS_TEXT, withSession } from '../lib/format.js';
@@ -37,6 +37,10 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
   const [editPrompt, setEditPrompt] = useState(null); // { shotId, value } | null
   const [editDuration, setEditDuration] = useState(null); // { shotId, value } | null
   const [savingEdit, setSavingEdit] = useState(''); // `${shotId}:prompt` / `${shotId}:duration`
+  // 手动插入自定义分镜：insertAt = 插到哪一镜之前（{ chapter, idx } | null）
+  const [insertAt, setInsertAt] = useState(null);
+  const [newShot, setNewShot] = useState({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5 });
+  const [deletingShot, setDeletingShot] = useState('');
 
   const load = useCallback(() => {
     return Promise.all([
@@ -160,7 +164,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
 
   function onRegen(shotId) {
     if ((feedback[shotId] || '').trim()) setAsk(shotId);
-    else regen(shotId, true);
+    else regen(shotId, true, true);
   }
 
   // 勾选一条候选作为「导出用」：后端会同步 shots.video_path，导出/打包无需改链路。
@@ -170,6 +174,21 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
       const videos = await api.post('/api/projects/' + projectId + '/shots/' + shotId + '/videos/' + videoId + '/select');
       const selected = videos.find((v) => v.selected) || videos[0] || null;
       setShots((list) => list.map((x) => (x.id === shotId ? { ...x, videos, video_path: selected?.video_path || x.video_path } : x)));
+    } catch (e) {
+      toast.error(e.message);
+    }
+  }
+
+  // 删除一条候选：后端会把 shots.video_path 改指向剩下的一条，删空则回到待生成。
+  async function deleteVideo(shotId, videoId) {
+    if (!(await toast.confirm('删除这条候选视频？删除后不可恢复。', { danger: true, confirmLabel: '删除' }))) return;
+    try {
+      const videos = await api.del('/api/projects/' + projectId + '/shots/' + shotId + '/videos/' + videoId);
+      const selected = videos.find((v) => v.selected) || videos[0] || null;
+      setShots((list) => list.map((x) => (x.id === shotId
+        ? { ...x, videos, video_path: selected?.video_path || '', status: videos.length ? 'done' : 'pending' }
+        : x)));
+      toast.success('已删除候选');
     } catch (e) {
       toast.error(e.message);
     }
@@ -217,6 +236,62 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
       toast.error(e.message);
     } finally {
       setSavingEdit('');
+    }
+  }
+
+  // 手动插入一条自定义分镜：插到某一镜之前（后端会把该章后面的镜号整体后移一位）。
+  function openInsert(before) {
+    setNewShot({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5 });
+    setInsertAt({ chapter: before.chapter || '', idx: before.idx });
+  }
+
+  async function createShot() {
+    if (!insertAt) return;
+    const sceneName = newShot.scene_name.trim();
+    const visual = newShot.visual.trim();
+    if (!sceneName && !visual) {
+      toast.error('请至少填写场景名或画面描述');
+      return;
+    }
+    setBusy('正在插入分镜…');
+    try {
+      await api.post('/api/projects/' + projectId + '/shots?insert_at=' + insertAt.idx, {
+        chapter: insertAt.chapter,
+        scene_name: sceneName || '自定义镜头',
+        camera: newShot.camera.trim(),
+        visual,
+        dialogue: newShot.dialogue.trim(),
+        duration: Number(newShot.duration) || 5,
+        // 新镜必须跟着项目分辨率/宽高比走：Shots.create 的默认值是 480P，
+        // 不显式给就会让这条新镜在 2K 项目里按 480P 出片
+        resolution: project?.video_resolution || '480P',
+        aspect_ratio: project?.video_aspect_ratio || '16:9',
+      });
+      setInsertAt(null);
+      toast.success('已插入分镜');
+      await loadShots();
+      onRefresh && onRefresh();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deleteShot(shot) {
+    const label = '#' + String(shot.idx).padStart(2, '0') + '（' + (shot.scene_name || '未命名镜头') + '）';
+    if (!(await toast.confirm('删除分镜 ' + label + '？该镜的候选视频记录会一起删除，且无法恢复。', { danger: true, confirmLabel: '删除' }))) return;
+    setDeletingShot(shot.id);
+    try {
+      await api.del('/api/projects/' + projectId + '/shots/' + shot.id);
+      setShots((list) => list.filter((x) => x.id !== shot.id));
+      toast.success('已删除分镜');
+      await loadShots();
+      onRefresh && onRefresh();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setDeletingShot('');
     }
   }
 
@@ -391,7 +466,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
         </div>
       ) : shown.length ? (
         <div className="flex flex-col gap-3">
-          {shown.map((s) => {
+          {shown.map((s, si) => {
             const chars = charsOf(s);
             const scenes = scenesOf(s);
             const props = propsOf(s);
@@ -407,13 +482,27 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
             const candidates = candidatesOf(s);
             const selected = selectedOf(s);
             return (
-              <article
-                key={s.id}
-                className="panel relative overflow-hidden"
-                // 参考图很多（每镜 10+ 张）时，整页一次性布局/绘制会卡；
-                // 让浏览器跳过屏幕外卡片的渲染，滚动到附近再算。
-                style={{ contentVisibility: 'auto', containIntrinsicSize: '520px' }}
-              >
+              <Fragment key={s.id}>
+                {si > 0 ? (
+                  <div className="group/ins relative flex h-6 items-center justify-center">
+                    <span className="absolute inset-x-0 top-1/2 h-px bg-[var(--line)]" aria-hidden="true" />
+                    <button
+                      type="button"
+                      disabled={running || !canEdit}
+                      title={running ? '任务运行中，暂不能插入分镜' : '在此处插入一条自定义分镜'}
+                      className="relative z-10 inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-0.5 text-[10.5px] text-[var(--fg-4)] transition-colors hover:border-[color-mix(in_srgb,var(--accent)_45%,transparent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
+                      onClick={() => openInsert(s)}
+                    >
+                      <Plus size={11} /> 在此插入分镜
+                    </button>
+                  </div>
+                ) : null}
+                <article
+                  className="panel relative overflow-hidden"
+                  // 参考图很多（每镜 10+ 张）时，整页一次性布局/绘制会卡；
+                  // 让浏览器跳过屏幕外卡片的渲染，滚动到附近再算。
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: '520px' }}
+                >
                 {submitting === s.id ? (
                   <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/45 backdrop-blur-[1px]">
                     <span className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-1.5 text-[11px] text-white/90">
@@ -486,6 +575,18 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                         {s.seed}
                       </span>
                     ) : null}
+                    {canEdit && features.buttons?.delete !== false ? (
+                      <button
+                        type="button"
+                        title={running ? '任务运行中，暂不能删除分镜' : '删除此分镜'}
+                        aria-label="删除分镜"
+                        disabled={running || deletingShot === s.id}
+                        className="ml-0.5 rounded p-1 text-[var(--fg-4)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_14%,transparent)] hover:text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => deleteShot(s)}
+                      >
+                        {deletingShot === s.id ? <Spinner size={11} /> : <X size={12} />}
+                      </button>
+                    ) : null}
                   </div>
                 </header>
 
@@ -519,7 +620,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                         </div>
                       )}
                     </div>
-                    {candidates.length > 1 ? (
+                    {candidates.length ? (
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[10.5px] text-[var(--fg-4)]">候选视频 · 勾选用于导出</span>
@@ -529,21 +630,34 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                           {candidates.map((v, i) => {
                             const active = !!v.selected || selected?.id === v.id;
                             return (
-                              <button
-                                key={v.id}
-                                type="button"
-                                disabled={v.id === '__legacy__' || shotBlocked}
-                                onClick={() => selectVideo(s.id, v.id)}
-                                className={
-                                  'flex shrink-0 flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 text-left transition-colors '
-                                  + (active
-                                    ? 'border-[color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] text-[var(--accent)]'
-                                    : 'border-[var(--line)] bg-white/[0.02] text-[var(--fg-3)] hover:border-[var(--line-strong)] hover:text-[var(--fg-2)]')
-                                }
-                              >
-                                <span className="text-[11px] font-medium">候选 {i + 1}</span>
-                                <span className="font-mono text-[9.5px] opacity-70">{v.seed ? 'seed ' + v.seed : '—'}</span>
-                              </button>
+                              <div key={v.id} className="relative shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={v.id === '__legacy__' || shotBlocked}
+                                  onClick={() => selectVideo(s.id, v.id)}
+                                  className={
+                                    'flex w-full flex-col gap-0.5 rounded-lg border py-1.5 pl-2.5 pr-6 text-left transition-colors '
+                                    + (active
+                                      ? 'border-[color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] text-[var(--accent)]'
+                                      : 'border-[var(--line)] bg-white/[0.02] text-[var(--fg-3)] hover:border-[var(--line-strong)] hover:text-[var(--fg-2)]')
+                                  }
+                                >
+                                  <span className="text-[11px] font-medium">候选 {i + 1}</span>
+                                  <span className="font-mono text-[9.5px] opacity-70">{v.seed ? 'seed ' + v.seed : '—'}</span>
+                                </button>
+                                {/* 老数据只有 shots.video_path、没有候选行（__legacy__），没有可删的记录 */}
+                                {v.id !== '__legacy__' && canEdit && !shotBlocked ? (
+                                  <button
+                                    type="button"
+                                    title="删除这条候选"
+                                    aria-label="删除这条候选"
+                                    className="absolute right-1 top-1 rounded p-0.5 text-[var(--fg-4)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_14%,transparent)] hover:text-[var(--danger)]"
+                                    onClick={() => deleteVideo(s.id, v.id)}
+                                  >
+                                    <X size={11} />
+                                  </button>
+                                ) : null}
+                              </div>
                             );
                           })}
                         </div>
@@ -711,21 +825,11 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                     >
                       <Wand2 size={12} /> 仅改写提示词
                     </CostButton>
-                    {s.video_path || candidates.length ? (
-                      <CostButton
-                        variant="secondary"
-                        size="sm"
-                        disabled={shotBlocked || submitting === s.id}
-                        title="保留已有候选，再生成一条新候选；生成后在左侧勾选导出用"
-                        onClick={() => regen(s.id, true, true)}
-                      >
-                        <Plus size={12} /> 生成候选
-                      </CostButton>
-                    ) : null}
                     <CostButton
-                      variant={s.video_path ? 'secondary' : 'primary'}
+                      variant={candidates.length ? 'secondary' : 'primary'}
                       size="sm"
                       disabled={shotBlocked || submitting === s.id}
+                      title="每次生成一条新候选并保留已有候选；可在左侧勾选导出用、或删除不满意的候选"
                       onClick={() => onRegen(s.id)}
                     >
                       {submitting === s.id ? (
@@ -738,19 +842,16 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                         )
                       ) : chapterJob ? (
                         '本章生成中…'
-                      ) : s.video_path ? (
-                        <>
-                          <RefreshCw size={12} /> 重新生成
-                        </>
                       ) : (
                         <>
-                          <Play size={12} /> 生成此镜视频
+                          <Plus size={12} /> 生成候选
                         </>
                       )}
                     </CostButton>
                   </footer>
                 )}
-              </article>
+                </article>
+              </Fragment>
             );
           })}
         </div>
@@ -799,10 +900,10 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
               onClick={() => {
                 const id = ask;
                 setAsk(null);
-                regen(id, true);
+                regen(id, true, true);
               }}
             >
-              改写后渲染视频
+              改写后生成候选
             </Button>
           </>
         }
@@ -812,7 +913,83 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
             <span className="text-[var(--fg-4)]">反馈：</span>
             {ask ? feedback[ask] || '' : ''}
           </div>
-          <p className="m-0 text-[12.5px] leading-relaxed text-[var(--fg-3)]">LLM 改写完成后，是否继续调用 ComfyUI 渲染视频？</p>
+          <p className="m-0 text-[12.5px] leading-relaxed text-[var(--fg-3)]">LLM 改写完成后，是否继续生成一条候选视频（追加，保留已有候选）？</p>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!insertAt}
+        onOpenChange={(o) => !o && setInsertAt(null)}
+        title={'在第 ' + (insertAt?.idx ?? '') + ' 镜之前插入分镜'}
+        description={insertAt ? (insertAt.chapter || '当前章节') + ' · 新镜占用该镜号，后面的镜号自动顺延一位' : ''}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" size="md" onClick={() => setInsertAt(null)}>
+              取消
+            </Button>
+            <Button variant="primary" size="md" loading={!!busy} disabled={!!busy} onClick={createShot}>
+              <Plus size={13} /> 插入分镜
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-[var(--fg-3)]">场景名</span>
+            <Input
+              value={newShot.scene_name}
+              onChange={(e) => setNewShot({ ...newShot, scene_name: e.target.value })}
+              placeholder="如：【场景02】卧室门口｜傍晚"
+              className="h-9 text-[12.5px]"
+            />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] text-[var(--fg-3)]">镜头</span>
+              <Input
+                value={newShot.camera}
+                onChange={(e) => setNewShot({ ...newShot, camera: e.target.value })}
+                placeholder="如：PUSH IN"
+                className="h-9 text-[12.5px]"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] text-[var(--fg-3)]">时长（秒，1~15）</span>
+              <Input
+                type="number"
+                min={1}
+                max={15}
+                step={0.5}
+                value={newShot.duration}
+                onChange={(e) => setNewShot({ ...newShot, duration: e.target.value })}
+                className="h-9 text-[12.5px]"
+              />
+            </label>
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-[var(--fg-3)]">画面</span>
+            <Textarea
+              rows={4}
+              value={newShot.visual}
+              onChange={(e) => setNewShot({ ...newShot, visual: e.target.value })}
+              placeholder="这一镜的画面内容、构图、光线与运镜"
+              className="text-[12px]"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-[var(--fg-3)]">台词（每行一个说话人）</span>
+            <Textarea
+              rows={2}
+              value={newShot.dialogue}
+              onChange={(e) => setNewShot({ ...newShot, dialogue: e.target.value })}
+              placeholder="角色名：台词"
+              className="text-[12px]"
+            />
+          </label>
+          <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-4)]">
+            插入后用卡片里的「素材」给它绑定参考角色/场景/音色，再点「生成候选」出片。
+          </p>
         </div>
       </Modal>
 

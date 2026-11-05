@@ -39,8 +39,21 @@ export async function POST(req, { params }) {
     if (dup) return NextResponse.json({ error: 'idx ' + patch.idx + ' 已被本章分镜占用——同一章内镜号必须唯一；省略 idx 可自动接在章内最大镜号之后' }, { status: 400 });
   }
 
+  // 「在这一镜之前插入」：insert_at 是地址参数、不是分镜内容字段，所以走 query 而不进 body 白名单。
+  // 插入会把该章 idx >= insert_at 的镜头整体后移一位（见 Shots.insertAt），避免撞号。
+  const insertAtRaw = new URL(req.url).searchParams.get('insert_at');
+  const insertAt = insertAtRaw == null || insertAtRaw === '' ? null : Math.trunc(Number(insertAtRaw));
+  if (insertAt != null) {
+    if (!Number.isFinite(insertAt) || insertAt < 1) {
+      return NextResponse.json({ error: 'insert_at 必须是不小于 1 的整数' }, { status: 400 });
+    }
+    if (patch.idx !== undefined) {
+      return NextResponse.json({ error: 'insert_at 与 idx 不能同时指定（插入位置由 insert_at 决定）' }, { status: 400 });
+    }
+  }
+
   return withWriteContext('POST /api/projects/:id/shots', async () => {
-    const s = Shots.create(id, patch);
+    const s = insertAt != null ? Shots.insertAt(id, chapter, insertAt, patch) : Shots.create(id, patch);
     return NextResponse.json(s);
   });
 }

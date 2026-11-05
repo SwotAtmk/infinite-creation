@@ -1,0 +1,563 @@
+{
+  "119": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "120": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "123": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择"
+    }
+  },
+  "124": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 8,
+      "denoise": 1,
+      "model": [
+        "141",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "基本调度器"
+    }
+  },
+  "125": {
+    "inputs": {
+      "noise": [
+        "129",
+        0
+      ],
+      "guider": [
+        "126",
+        0
+      ],
+      "sampler": [
+        "123",
+        0
+      ],
+      "sigmas": [
+        "208",
+        0
+      ],
+      "latent_image": [
+        "257",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）"
+    }
+  },
+  "126": {
+    "inputs": {
+      "model": [
+        "141",
+        0
+      ],
+      "conditioning": [
+        "257",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器"
+    }
+  },
+  "127": {
+    "inputs": {
+      "unet_name": "minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "128": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "129": {
+    "inputs": {
+      "noise_seed": 999
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波"
+    }
+  },
+  "141": {
+    "inputs": {
+      "max_resolution": 1024,
+      "jpeg_quality": 80,
+      "suppress_default_preview": true,
+      "preview_frames": [
+        "260",
+        3
+      ],
+      "preview_fps": 12,
+      "tiny_vae": "taeh3.safetensors",
+      "model": [
+        "256",
+        0
+      ]
+    },
+    "class_type": "ModelPreviewOverrideKJ",
+    "_meta": {
+      "title": "Model Preview Override"
+    }
+  },
+  "142": {
+    "inputs": {
+      "model": [
+        "127",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+    "_meta": {
+      "title": "MiniMax H3 Mem Eff Sage Attention Patch"
+    }
+  },
+  "147": {
+    "inputs": {
+      "lora_name": "minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors",
+      "strength_model": 0.75,
+      "model": [
+        "264",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "149": {
+    "inputs": {
+      "shift_video": 12,
+      "shift_audio": 3,
+      "model": [
+        "147",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3SigmaShift",
+    "_meta": {
+      "title": "MiniMax H3 Sigma Shift"
+    }
+  },
+  "178": {
+    "inputs": {
+      "attention": "comfy kitchen attention",
+      "model": [
+        "149",
+        0
+      ]
+    },
+    "class_type": "ModelAttentionBackend",
+    "_meta": {
+      "title": "模型注意力后端"
+    }
+  },
+  "208": {
+    "inputs": {
+      "step": 4,
+      "sigmas": [
+        "254",
+        0
+      ]
+    },
+    "class_type": "SplitSigmas",
+    "_meta": {
+      "title": "分离Sigma"
+    }
+  },
+  "209": {
+    "inputs": {
+      "noise": [
+        "129",
+        0
+      ],
+      "guider": [
+        "259",
+        0
+      ],
+      "sampler": [
+        "123",
+        0
+      ],
+      "sigmas": [
+        "208",
+        1
+      ],
+      "latent_image": [
+        "212",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）"
+    }
+  },
+  "210": {
+    "inputs": {
+      "model_name": "minimax_h3_latent_upscaler_3d_fp16.safetensors",
+      "mode": "scale by multiplier",
+      "mode.scale": 2,
+      "align": 32,
+      "enable_chunking": true,
+      "device": "cuda",
+      "precision": "fp16",
+      "latent": [
+        "211",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3EasyLatentUpscaler3D",
+    "_meta": {
+      "title": "MiniMax H3 Easy 3D Latent Upscale (Built-in)"
+    }
+  },
+  "211": {
+    "inputs": {
+      "av_latent": [
+        "125",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "分离 AV 潜空间"
+    }
+  },
+  "212": {
+    "inputs": {
+      "video_latent": [
+        "210",
+        0
+      ],
+      "audio_latent": [
+        "211",
+        1
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "拼接 AV 潜空间"
+    }
+  },
+  "217": {
+    "inputs": {
+      "clean_file_cache": true,
+      "clean_processes": true,
+      "clean_dlls": true,
+      "retry_times": 3,
+      "anything": [
+        "219",
+        0
+      ]
+    },
+    "class_type": "RAMCleanup",
+    "_meta": {
+      "title": "🎈RAM-Cleanup"
+    }
+  },
+  "218": {
+    "inputs": {
+      "samples": [
+        "209",
+        0
+      ],
+      "vae": [
+        "257",
+        3
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE解码（音频）"
+    }
+  },
+  "219": {
+    "inputs": {
+      "samples": [
+        "209",
+        0
+      ],
+      "vae": [
+        "257",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "220": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "color_space": "sRGB",
+      "codec": "none",
+      "images": [
+        "217",
+        0
+      ],
+      "audio": [
+        "218",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "创建视频"
+    }
+  },
+  "254": {
+    "inputs": {
+      "extra_steps": 1,
+      "start_at_sigma": 0.7,
+      "end_at_sigma": 0,
+      "spacing": "cosine",
+      "sigmas": [
+        "124",
+        0
+      ]
+    },
+    "class_type": "H3SigmaRefiner",
+    "_meta": {
+      "title": "H3 Sigma Refiner"
+    }
+  },
+  "255": {
+    "inputs": {
+      "text_encoder": [
+        "128",
+        0
+      ],
+      "video_vae": [
+        "119",
+        0
+      ],
+      "audio_vae": [
+        "120",
+        0
+      ],
+      "fl2va_model": [
+        "178",
+        0
+      ],
+      "ref2va_model": [
+        "178",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3EasyModelAdapter",
+    "_meta": {
+      "title": "MiniMax H3 Easy 模型中转"
+    }
+  },
+  "256": {
+    "inputs": {
+      "mode": "reference",
+      "prompt": "__MINIMAX_H3_REF_2__ is the character design of Gu Xinyao. __MINIMAX_H3_REF_3__ is the interior of the plain wooden carriage. __MINIMAX_H3_REF_4__ is the misty city gate environment. __MINIMAX_H3_REF_1__ is Gu Xinyao's voice timbre. Style: Chinese ancient-style 2D animation (guoman), cel-shaded with soft gradients, clean line art, cold grey-blue dawn palette, soft volumetric light and vapor.0.0-4.0s: Close-up inside the dim carriage: Gu Xinyao (__MINIMAX_H3_REF_2__) presses one hand flat over her heart, lowers her eyes and mouths a silent promise, solemn and gentle; static camera; hushed carriage interior tone with a faint horse snort outside.4.0-7.0s: Memory insert: a semi-transparent ghostly girl with exactly the same face as Gu Xinyao but hollow empty eyes, a bloodless pale complexion, loose unbound black hair and ragged grey-blue coarse clothes stands in the drifting white fog and looks back over her shoulder, then dissolves into wisps of smoke and fades out; the camera pulls back slowly; no speech, only a faint airy shimmer.7.0-11.0s: Cut back to a medium close-up of Gu Xinyao alone in the dim carriage, her eyelashes trembling once and her chest rising and falling; static camera.Dialogue and voice: Gu Xinyao's inner monologue in her own voice timbre from __MINIMAX_H3_REF_4__, low and steady, lips closed: <d>[Chinese] 你放心，你的苦，我一件件讨回，安心去吧。</d> then <d>[Chinese] 心死，就是这样了。</d>Consistency: keep Gu Xinyao's face and costume identical to __MINIMAX_H3_REF_1__, and make the ghostly girl read clearly as the same person, rendered only as translucent figure and vapor, never as any written or graphic overlay. No text, no subtitles, no watermark, no logo in frame.",
+      "resolution": "540P",
+      "aspect_ratio": "16:9",
+      "width": 960,
+      "height": 544,
+      "seconds": 11,
+      "advanced": true,
+      "fps": 24,
+      "keyframe_role": "first",
+      "ref_image_size": "original",
+      "reference_mention_mode": "index",
+      "prompt_optimizer_settings": false,
+      "prompt_optimizer_scene_guide": "none",
+      "h3_bundle": [
+        "255",
+        0
+      ],
+      "media_1": [
+        "268",
+        0
+      ],
+      "media_type_1": "audio",
+      "media_2": [
+        "269",
+        0
+      ],
+      "media_type_2": "image",
+      "media_3": [
+        "270",
+        0
+      ],
+      "media_type_3": "image",
+      "media_4": [
+        "271",
+        0
+      ],
+      "media_type_4": "image",
+      "prompt_optimizer_resources": "[{\"type\":\"audio\",\"tag\":\"<Audio 1>\",\"name\":\"角色参考音色 (1).wav\",\"asset\":{\"filename\":\"角色参考音色 (1).wav\",\"subfolder\":\"\",\"storage\":\"input\"}},{\"type\":\"image\",\"tag\":\"<Picture 1>\",\"name\":\"顾忻杳_4588778e.png\",\"asset\":{\"filename\":\"顾忻杳_4588778e.png\",\"subfolder\":\"\",\"storage\":\"input\"}},{\"type\":\"image\",\"tag\":\"<Picture 2>\",\"name\":\"马车车厢内_2b9b54ca.png\",\"asset\":{\"filename\":\"马车车厢内_2b9b54ca.png\",\"subfolder\":\"\",\"storage\":\"input\"}},{\"type\":\"image\",\"tag\":\"<Picture 3>\",\"name\":\"京城城门_薄雾清晨_7b62b42c.png\",\"asset\":{\"filename\":\"京城城门_薄雾清晨_7b62b42c.png\",\"subfolder\":\"\",\"storage\":\"input\"}}]",
+      "prompt_optimizer_marker": "{}",
+      "prompt_optimizer_prompt_connected": false
+    },
+    "class_type": "MiniMaxH3Easy",
+    "_meta": {
+      "title": "MiniMax H3 Easy"
+    }
+  },
+  "257": {
+    "inputs": {
+      "h3_context": [
+        "256",
+        1
+      ]
+    },
+    "class_type": "MiniMaxH3EasyOutput",
+    "_meta": {
+      "title": "MiniMax H3 Easy 输出"
+    }
+  },
+  "258": {
+    "inputs": {
+      "h3_context": [
+        "256",
+        1
+      ],
+      "second_pass_video_latent": [
+        "210",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3EasySecondPassConditioning",
+    "_meta": {
+      "title": "MiniMax H3 Easy Second Pass Conditioning"
+    }
+  },
+  "259": {
+    "inputs": {
+      "model": [
+        "141",
+        0
+      ],
+      "conditioning": [
+        "258",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器"
+    }
+  },
+  "260": {
+    "inputs": {
+      "latent": [
+        "257",
+        1
+      ]
+    },
+    "class_type": "GetLatentSizeAndCount",
+    "_meta": {
+      "title": "Get Latent Size & Count"
+    }
+  },
+  "264": {
+    "inputs": {
+      "lora_name": "MysticXXX_MMH3-V4.safetensors",
+      "strength_model": 0.5,
+      "model": [
+        "142",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "268": {
+    "inputs": {
+      "audio": "角色参考音色 (1).wav"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "加载音频"
+    }
+  },
+  "269": {
+    "inputs": {
+      "image": "顾忻杳_4588778e.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "270": {
+    "inputs": {
+      "image": "马车车厢内_2b9b54ca.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "271": {
+    "inputs": {
+      "image": "京城城门_薄雾清晨_7b62b42c.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "272": {
+    "inputs": {
+      "filename_prefix": "video/MiniMaxH3_Easy",
+      "format": "auto",
+      "format.codec": "auto",
+      "codec": "auto",
+      "video": [
+        "220",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "保存视频"
+    }
+  }
+}

@@ -39,7 +39,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
   const [savingEdit, setSavingEdit] = useState(''); // `${shotId}:prompt` / `${shotId}:duration`
   // 手动插入自定义分镜：insertAt = 插到哪一镜之前（{ chapter, idx } | null）
   const [insertAt, setInsertAt] = useState(null);
-  const [newShot, setNewShot] = useState({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5 });
+  const [newShot, setNewShot] = useState({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5, video_prompt: '' });
   const [deletingShot, setDeletingShot] = useState('');
 
   const load = useCallback(() => {
@@ -241,7 +241,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
 
   // 手动插入一条自定义分镜：插到某一镜之前（后端会把该章后面的镜号整体后移一位）。
   function openInsert(before) {
-    setNewShot({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5 });
+    setNewShot({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5, video_prompt: '' });
     setInsertAt({ chapter: before.chapter || '', idx: before.idx });
   }
 
@@ -249,13 +249,14 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
     if (!insertAt) return;
     const sceneName = newShot.scene_name.trim();
     const visual = newShot.visual.trim();
+    const videoPrompt = newShot.video_prompt.trim();
     if (!sceneName && !visual) {
       toast.error('请至少填写场景名或画面描述');
       return;
     }
     setBusy('正在插入分镜…');
     try {
-      await api.post('/api/projects/' + projectId + '/shots?insert_at=' + insertAt.idx, {
+      const created = await api.post('/api/projects/' + projectId + '/shots?insert_at=' + insertAt.idx, {
         chapter: insertAt.chapter,
         scene_name: sceneName || '自定义镜头',
         camera: newShot.camera.trim(),
@@ -266,9 +267,23 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
         // 不显式给就会让这条新镜在 2K 项目里按 480P 出片
         resolution: project?.video_resolution || '480P',
         aspect_ratio: project?.video_aspect_ratio || '16:9',
+        ...(videoPrompt ? { video_prompt: videoPrompt } : {}),
       });
+      // 没填视频提示词 → 交给 Agent 按 h3-prompt-writing 技能生成（不渲染，只写提示词）。
+      // 分镜已经插入成功，这一提交失败只提示、不回滚，别让用户以为插入也失败了。
+      let promptJobQueued = false;
+      if (!videoPrompt && created?.id) {
+        try {
+          const job = await api.post('/api/projects/' + projectId + '/shots/' + created.id + '/regenerate', { render: false, skill: true });
+          if (job && job.id) setLocalJobs((prev) => ({ ...prev, [created.id]: { job, at: Date.now() } }));
+          promptJobQueued = true;
+        } catch (e) {
+          toast.warn('分镜已插入，但提交 Agent 生成提示词失败：' + e.message + '（可稍后点「生成候选」，或在提示词里手写）');
+        }
+      }
       setInsertAt(null);
-      toast.success('已插入分镜');
+      if (videoPrompt) toast.success('已插入分镜');
+      else if (promptJobQueued) toast.success('已插入分镜，正在由 Agent 生成视频提示词');
       await loadShots();
       onRefresh && onRefresh();
     } catch (e) {
@@ -985,6 +1000,17 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
               onChange={(e) => setNewShot({ ...newShot, dialogue: e.target.value })}
               placeholder="角色名：台词"
               className="text-[12px]"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-[var(--fg-3)]">视频提示词（可选）</span>
+            <Textarea
+              rows={5}
+              value={newShot.video_prompt}
+              onChange={(e) => setNewShot({ ...newShot, video_prompt: e.target.value })}
+              placeholder="填写后直接用它出片；留空则由 Agent 按 h3-prompt-writing 技能自动生成（含 __MINIMAX_H3_REF_N__ 参考标签）"
+              className="font-mono text-[11.5px] leading-relaxed"
+              spellCheck={false}
             />
           </label>
           <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-4)]">

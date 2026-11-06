@@ -140,7 +140,7 @@ export function Select({ value, onChange, items, placeholder = '请选择', disa
           className={clsx(
             inputBase,
             'flex w-full items-center justify-between gap-2 text-left',
-            size === 'sm' ? 'h-9 px-3 text-[13px]' : 'h-10 px-3.5',
+            size === 'xs' ? 'h-8 px-2.5 text-[12px]' : size === 'sm' ? 'h-9 px-3 text-[13px]' : 'h-10 px-3.5',
             'data-[placeholder]:text-[var(--fg-4)]',
           )}
         >

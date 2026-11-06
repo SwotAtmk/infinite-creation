@@ -263,6 +263,18 @@
   }
 }
 
+/* —— 流水线编排：节点间连线的流动光效 —— */
+@keyframes pipeline-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+.pipeline-link {
+  stroke-dasharray: 7 7;
+  animation: pipeline-flow 1.4s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -14,6 +14,7 @@ import {
   Sparkles,
   Users,
   Wand2,
+  Workflow,
   XCircle,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
@@ -29,6 +30,7 @@ import { COMFY_PROVIDERS } from '@shared';
 import { Badge, Button, EmptyState, Field, Input, Segmented, Select, Spinner, Switch } from '../components/ui.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import SkillsPanel from '../components/SkillsPanel.jsx';
+import SkillPipelinePanel from '../components/SkillPipelinePanel.jsx';
 import { useToast } from '../components/toast.jsx';
 
 const PROVIDER_OPTIONS = COMFY_PROVIDERS.map((p) => ({ value: p.id, label: p.label }));
@@ -47,6 +49,7 @@ const CATEGORIES = [
   { id: 'agent', label: 'Agent 运行时', desc: '内置 / 外部 CLI · MCP 桥', icon: Bot },
   { id: 'hardware', label: '硬件适配', desc: '工作流 · 显存策略', icon: Cpu },
   { id: 'skills', label: '技能库', desc: '全局技能包管理', icon: Wand2 },
+  { id: 'pipeline', label: '流水线编排', desc: '技能节点 · 导入导出', icon: Workflow },
 ];
 
 export default function SettingsPage({ onBack, publicMode = false }) {
@@ -898,6 +901,12 @@ export default function SettingsPage({ onBack, publicMode = false }) {
           {active === 'skills' ? (
             <Section icon={Wand2} title="技能库" description="扩展 Agent 的剧本、分镜与提示词能力">
               <SkillsPanel />
+            </Section>
+          ) : null}
+
+          {active === 'pipeline' ? (
+            <Section icon={Workflow} title="流水线编排" description="按环节指定生成时优先加载的技能，缺失时自动匹配其它技能">
+              <SkillPipelinePanel cfg={cfg} setCfg={setCfg} setSavedCfg={setSavedCfg} />
             </Section>
           ) : null}
 

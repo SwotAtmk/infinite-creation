@@ -132,7 +132,7 @@ export default function ProjectSettingsDialog({ open, onOpenChange, project, onS
               checked={enableSub}
               onChange={setEnableSub}
               label="自动添加字幕"
-              hint="导出 / 合并成片时把分镜台词与旁白烧录进画面（不显示角色名）。"
+              hint="按「设置 → 字幕与语音识别」选择的模式烧录：语音识别（需 Python 环境）或分镜台词（不显示角色名）。"
             />
             <Switch
               checked={autoScript}

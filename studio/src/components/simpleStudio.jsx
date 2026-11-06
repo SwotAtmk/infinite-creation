@@ -2,10 +2,11 @@
 // 并轮询资产与任务，把生成结果以统一卡片展示。
 import { useCallback, useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { Download, FileAudio, RefreshCw, Square, Trash2, X } from 'lucide-react';
+import { Download, FileAudio, Maximize2, RefreshCw, Square, Trash2, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { fileUrl, STATUS_TEXT } from '../lib/format.js';
 import { Button, EmptyState, Spinner, StatusPill } from './ui.jsx';
+import { ImageLightbox } from './media.jsx';
 import { Modal } from './overlays.jsx';
 import { useToast } from './toast.jsx';
 
@@ -107,6 +108,7 @@ export function FilePill({ children, onRemove }) {
 export function MediaCard({ projectId, asset, kind, activeJobId, onRetry, onChanged }) {
   const toast = useToast();
   const [detailOpen, setDetailOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [busy, setBusy] = useState('');
 
   const path = kind === 'image' ? asset.image_path : kind === 'video' ? asset.video_path : asset.audio_path || asset.voice_ref;
@@ -170,7 +172,17 @@ export function MediaCard({ projectId, asset, kind, activeJobId, onRetry, onChan
           </div>
         ) : url ? (
           kind === 'image' ? (
-            <img src={url} alt={asset.name} loading="lazy" className="h-full w-full object-contain" />
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              aria-label={'放大查看 ' + asset.name}
+              className="group/img relative flex h-full w-full items-center justify-center"
+            >
+              <img src={url} alt={asset.name} loading="lazy" className="h-full w-full cursor-zoom-in object-contain" />
+              <span className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-md border border-white/10 bg-black/55 px-1.5 py-1 text-[10px] text-white/85 opacity-0 backdrop-blur transition-opacity group-hover/img:opacity-100">
+                <Maximize2 size={10} /> 查看大图
+              </span>
+            </button>
           ) : kind === 'video' ? (
             <video src={url} controls preload="metadata" className="h-full w-full bg-black object-contain" />
           ) : (
@@ -272,6 +284,8 @@ export function MediaCard({ projectId, asset, kind, activeJobId, onRetry, onChan
           ) : null}
         </div>
       </Modal>
+
+      <ImageLightbox open={previewOpen} onOpenChange={setPreviewOpen} src={url} title={asset.name} />
     </article>
   );
 }

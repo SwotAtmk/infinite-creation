@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { srtTime, buildSrt, pickProjectFields } from '../lib/core/index.js';
+import { srtTime, buildSrt, segmentsToSrt, pickProjectFields, resolveHardwareConfig, resolveSubtitleConfig } from '../lib/core/index.js';
 
 test('srtTime: 时间戳格式与进位', () => {
   assert.equal(srtTime(0), '00:00:00,000');
@@ -64,4 +64,39 @@ test('pickProjectFields: 接受 enable_subtitles 布尔开关', () => {
   assert.deepEqual(pickProjectFields({ enable_subtitles: false }).patch, { enable_subtitles: false });
   assert.deepEqual(pickProjectFields({ enable_subtitles: 'false' }).patch, { enable_subtitles: false });
   assert.deepEqual(pickProjectFields({ enable_subtitles: true }).patch, { enable_subtitles: true });
+});
+
+test('segmentsToSrt: whisper 分段转 SRT，过滤空文本 / 非法时间', () => {
+  const srt = segmentsToSrt([
+    { start: 0, end: 1.5, text: ' 你好 ' },
+    { start: 1.5, end: 1.5, text: '零时长' },
+    { start: 2, end: 3, text: '   ' },
+    { start: 3, end: 4.25, text: '世界' },
+  ]);
+  assert.equal(
+    srt,
+    '1\n00:00:00,000 --> 00:00:01,500\n你好\n\n'
+    + '2\n00:00:03,000 --> 00:00:04,250\n世界\n',
+  );
+  assert.equal(segmentsToSrt([]), '');
+  assert.equal(segmentsToSrt(null), '');
+});
+
+test('字幕配置：默认经典模式 + 极速版 large-v3-turbo，非法值回退默认', () => {
+  const cfg = resolveHardwareConfig({});
+  assert.equal(cfg.subtitle.mode, 'script');
+  assert.equal(cfg.subtitle.model, 'large-v3-turbo');
+  assert.equal(cfg.subtitle.language, 'auto');
+  assert.equal(cfg.subtitle.autoSetup, true);
+
+  assert.equal(resolveSubtitleConfig(cfg).model, 'large-v3-turbo');
+  assert.equal(resolveSubtitleConfig(cfg).mode, 'script');
+  const bad = resolveSubtitleConfig({ subtitle: { mode: 'xxx', model: 'yyy', language: 'klingon' } });
+  assert.equal(bad.mode, 'script');
+  assert.equal(bad.model, 'large-v3-turbo');
+  assert.equal(bad.language, 'auto');
+  // 语音识别模式 / 专业版 / 关闭自动安装要能透传
+  assert.equal(resolveSubtitleConfig({ subtitle: { mode: 'whisper' } }).mode, 'whisper');
+  assert.equal(resolveSubtitleConfig({ subtitle: { model: 'large-v3' } }).model, 'large-v3');
+  assert.equal(resolveSubtitleConfig({ subtitle: { autoSetup: false } }).autoSetup, false);
 });

@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Clapperboard, Clock, Download, Film, Hash, Package, Pencil, Play, Plus, Wand2, X } from 'lucide-react';
-import { api } from '../lib/api.js';
+import { api, uploadForm } from '../lib/api.js';
 import CostButton from '../components/CostButton.jsx';
 import { fileUrl, STATUS_TEXT, withSession } from '../lib/format.js';
-import { asArray, dialogueSpeakers, nameMatches, ASSET_CATEGORY_LABEL } from '../lib/shared.js';
+import { asArray, dialogueSpeakers, nameMatches, ASSET_CATEGORY_LABEL, VIDEO_MODE_LABELS } from '../lib/shared.js';
 import { RatioMeta, ResolutionMeta } from '../components/visuals.jsx';
 import { AssetCategoryIcon } from '../components/visuals.jsx';
 import { Badge, Button, EmptyState, Input, Select, Spinner, StatusPill, Textarea } from '../components/ui.jsx';
@@ -14,6 +14,23 @@ import { ImageLightbox } from '../components/media.jsx';
 import { useToast } from '../components/toast.jsx';
 
 const MATERIAL_FIELD = { character: 'character_ids', scene: 'scene_ids', prop: 'prop_ids', costume: 'costume_ids', age: 'age_ids', audio: 'audio_ids' };
+
+// 分镜视频类型（创建弹窗下拉）：全能参考 / 首尾帧 / 文生视频 / 图生视频
+const SHOT_MODE_OPTIONS = [
+  { value: 'reference', label: '全能参考' },
+  { value: 'first_last', label: '首尾帧' },
+  { value: 'text', label: '文生视频' },
+  { value: 'image', label: '图生视频' },
+];
+
+// 分镜类型徽章色调：首尾帧用 accent 高亮，其余各类型也分别上色，便于一眼区分
+const SHOT_MODE_TONE = {
+  reference: 'neutral',
+  first_last: 'accent',
+  image: 'info',
+  text: 'success',
+  digital_human: 'danger',
+};
 
 export default function ShotsPage({ projectId, chapters = [], cursorId, onCursorChange, running = false, jobs = [], onRefresh, readOnly = false, canEdit = true, canGenerate = true, canExport = true, features = {} }) {
   const toast = useToast();
@@ -39,8 +56,17 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
   const [savingEdit, setSavingEdit] = useState(''); // `${shotId}:prompt` / `${shotId}:duration`
   // 手动插入自定义分镜：insertAt = 插到哪一镜之前（{ chapter, idx } | null）
   const [insertAt, setInsertAt] = useState(null);
-  const [newShot, setNewShot] = useState({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5, video_prompt: '' });
+  const [newShot, setNewShot] = useState({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5, video_prompt: '', mode: 'reference', scene_ids: [] });
   const [deletingShot, setDeletingShot] = useState('');
+  // 首尾帧分镜：首帧/尾帧上传（仅 mode=first_last 时使用）
+  const [newFirstFrame, setNewFirstFrame] = useState(null); // { path, name }
+  const [newLastFrame, setNewLastFrame] = useState(null);
+  const newFirstRef = useRef(null);
+  const newLastRef = useRef(null);
+  // 图生视频分镜：上传 1 张参考图（或从素材选择场景）
+  const [newImagePath, setNewImagePath] = useState(null); // { path, name }
+  const newImageRef = useRef(null);
+  const [newScenePicker, setNewScenePicker] = useState(false);
 
   const load = useCallback(() => {
     return Promise.all([
@@ -133,6 +159,16 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
   const costumesOf = (s) => asArray(s.costume_ids).map(byId).filter(Boolean);
   const agesOf = (s) => asArray(s.age_ids).map(byId).filter(Boolean);
   const audiosOf = (s) => asArray(s.audio_ids).map(byId).filter(Boolean);
+
+  // 分镜视频类型标签：显式 mode 优先；空 mode（历史分镜）按绑定素材推断（与后端 inferVideoMode 同口径）
+  const modeLabelOf = (s) => {
+    if (s.mode && VIDEO_MODE_LABELS[s.mode]) return VIDEO_MODE_LABELS[s.mode];
+    const hasImage = charsOf(s).some((a) => a.image_path) || scenesOf(s).some((a) => a.image_path) || propsOf(s).some((a) => a.image_path);
+    const hasAudio = audiosOf(s).length > 0 || charsOf(s).some((a) => a.voice_ref);
+    if (!hasImage && !hasAudio) return '文生视频';
+    if (!hasAudio && hasImage) return '图生视频';
+    return '全能参考';
+  };
 
   async function regen(shotId, render = true, append = false) {
     if (submitting) return;
@@ -241,8 +277,57 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
 
   // 手动插入一条自定义分镜：插到某一镜之前（后端会把该章后面的镜号整体后移一位）。
   function openInsert(before) {
-    setNewShot({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5, video_prompt: '' });
+    setNewShot({ scene_name: '', camera: '', visual: '', dialogue: '', duration: 5, video_prompt: '', mode: 'reference', scene_ids: [] });
+    setNewFirstFrame(null);
+    setNewLastFrame(null);
+    setNewImagePath(null);
+    setNewScenePicker(false);
     setInsertAt({ chapter: before.chapter || '', idx: before.idx });
+  }
+
+  // 上传首帧/尾帧图到项目媒体库，返回相对路径与文件名
+  async function onNewFrame(e, which) {
+    const file = (e.target.files || [])[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!projectId) {
+      toast.error('项目初始化中，请稍候重试');
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const j = await uploadForm('/api/projects/' + projectId + '/media', fd);
+      if (which === 'first') setNewFirstFrame({ path: j.path, name: file.name });
+      else setNewLastFrame({ path: j.path, name: file.name });
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  // 上传图生视频参考图
+  async function onNewImage(e) {
+    const file = (e.target.files || [])[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!projectId) {
+      toast.error('项目初始化中，请稍候重试');
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const j = await uploadForm('/api/projects/' + projectId + '/media', fd);
+      setNewImagePath({ path: j.path, name: file.name });
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  // 图生视频：从素材库选择场景作为参考图
+  function pickNewScene(assetId) {
+    setNewShot((p) => ({ ...p, scene_ids: [assetId] }));
+    setNewScenePicker(false);
   }
 
   async function createShot() {
@@ -250,7 +335,12 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
     const sceneName = newShot.scene_name.trim();
     const visual = newShot.visual.trim();
     const videoPrompt = newShot.video_prompt.trim();
-    if (!sceneName && !visual) {
+    const mode = newShot.mode || 'reference';
+    if (mode === 'first_last') {
+      if (!newFirstFrame || !newLastFrame) { toast.error('首尾帧模式必须上传首帧和尾帧两张图片'); return; }
+    } else if (mode === 'image') {
+      if (!newImagePath && !asArray(newShot.scene_ids).length) { toast.error('图生视频必须上传 1 张图片或从素材中选择 1 张图片'); return; }
+    } else if (!sceneName && !visual) {
       toast.error('请至少填写场景名或画面描述');
       return;
     }
@@ -267,12 +357,18 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
         // 不显式给就会让这条新镜在 2K 项目里按 480P 出片
         resolution: project?.video_resolution || '480P',
         aspect_ratio: project?.video_aspect_ratio || '16:9',
+        mode,
+        ...(mode === 'first_last' ? { first_frame_path: newFirstFrame.path, last_frame_path: newLastFrame.path } : {}),
+        ...(mode === 'image' ? {
+          ...(newImagePath ? { reference_image_path: newImagePath.path } : {}),
+          scene_ids: newShot.scene_ids || [],
+        } : {}),
         ...(videoPrompt ? { video_prompt: videoPrompt } : {}),
       });
       // 没填视频提示词 → 交给 Agent 按 h3-prompt-writing 技能生成（不渲染，只写提示词）。
       // 分镜已经插入成功，这一提交失败只提示、不回滚，别让用户以为插入也失败了。
       let promptJobQueued = false;
-      if (!videoPrompt && created?.id) {
+      if (!videoPrompt && created?.id && mode !== 'first_last') {
         try {
           const job = await api.post('/api/projects/' + projectId + '/shots/' + created.id + '/regenerate', { render: false, skill: true });
           if (job && job.id) setLocalJobs((prev) => ({ ...prev, [created.id]: { job, at: Date.now() } }));
@@ -532,6 +628,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                     </span>
                     <h3 className="m-0 truncate text-[13.5px] font-medium text-[var(--fg)]">{s.scene_name || '未命名镜头'}</h3>
                     <StatusPill status={s.status}>{STATUS_TEXT[s.status] || s.status}</StatusPill>
+                    <Badge tone={SHOT_MODE_TONE[s.mode] || 'neutral'}>{modeLabelOf(s)}</Badge>
                     {s.chapter ? <Badge tone="neutral">{s.chapter}</Badge> : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--fg-4)]">
@@ -688,7 +785,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                   <div className="flex min-w-0 flex-col gap-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="section-label">参考素材</span>
-                      {!running && canEdit && features.buttons?.upload !== false ? (
+                      {!running && canEdit && features.buttons?.upload !== false && s.mode !== 'first_last' ? (
                         <div className="flex flex-wrap gap-1">
                           {[
                             ['character', '角色'],
@@ -714,7 +811,38 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                       ) : null}
                     </div>
 
-                    {chars.length || scenes.length || props.length || costumes.length || ages.length || voices.length || audios.length ? (
+                    {s.mode === 'first_last' ? (
+                      <div className="flex flex-wrap gap-2">
+                        {s.first_frame_path ? (
+                          <div className="flex w-[72px] flex-col gap-1">
+                            <div className="h-[64px] w-[64px] cursor-zoom-in overflow-hidden rounded-lg border border-[var(--line)] bg-black/30">
+                              <img src={fileUrl(projectId, s.first_frame_path)} alt="首帧" loading="lazy" className="h-full w-full object-cover" />
+                            </div>
+                            <span className="truncate text-[9.5px] leading-tight text-[var(--fg-3)]">首帧</span>
+                          </div>
+                        ) : null}
+                        {s.last_frame_path ? (
+                          <div className="flex w-[72px] flex-col gap-1">
+                            <div className="h-[64px] w-[64px] cursor-zoom-in overflow-hidden rounded-lg border border-[var(--line)] bg-black/30">
+                              <img src={fileUrl(projectId, s.last_frame_path)} alt="尾帧" loading="lazy" className="h-full w-full object-cover" />
+                            </div>
+                            <span className="truncate text-[9.5px] leading-tight text-[var(--fg-3)]">尾帧</span>
+                          </div>
+                        ) : null}
+                        {!s.first_frame_path && !s.last_frame_path ? (
+                          <span className="text-[11.5px] text-[var(--fg-4)]">（未上传首尾帧图）</span>
+                        ) : null}
+                      </div>
+                    ) : s.mode === 'image' && s.reference_image_path ? (
+                      <div className="flex flex-wrap gap-2">
+                        <div className="flex w-[72px] flex-col gap-1">
+                          <div className="h-[64px] w-[64px] cursor-zoom-in overflow-hidden rounded-lg border border-[var(--line)] bg-black/30">
+                            <img src={fileUrl(projectId, s.reference_image_path)} alt="参考图" loading="lazy" className="h-full w-full object-cover" />
+                          </div>
+                          <span className="truncate text-[9.5px] leading-tight text-[var(--fg-3)]">参考图</span>
+                        </div>
+                      </div>
+                    ) : chars.length || scenes.length || props.length || costumes.length || ages.length || voices.length || audios.length ? (
                       <div className="flex flex-wrap gap-2">
                         {chars.map((a) => (
                           <RefThumb key={a.id} projectId={projectId} a={a} onPreview={setPreview} onReplace={!running && canEdit && features.buttons?.upload !== false ? () => openMaterial(s.id, 'character', 'replace', a.id) : null} onRemove={!running && canEdit && features.buttons?.upload !== false ? () => removeMaterial(s.id, 'character', a.id) : null} />
@@ -951,6 +1079,84 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
       >
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-[var(--fg-3)]">视频类型</span>
+            <Select
+              value={newShot.mode || 'reference'}
+              onChange={(v) => setNewShot({ ...newShot, mode: v })}
+              items={SHOT_MODE_OPTIONS}
+              className="w-full"
+              size="sm"
+            />
+          </label>
+          {newShot.mode === 'first_last' ? (
+            <>
+              <p className="m-0 rounded-lg border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_6%,transparent)] px-2.5 py-1.5 text-[11px] leading-relaxed text-[var(--fg-3)]">
+                首尾帧：需上传首帧 + 尾帧两张图片（视频提示词可选）。
+              </p>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant={newFirstFrame ? 'secondary' : 'primary'} size="sm" onClick={() => newFirstRef.current && newFirstRef.current.click()}>
+                    <Plus size={12} /> {newFirstFrame ? '更换首帧图' : '上传首帧图（必填）'}
+                  </Button>
+                  <Button variant={newLastFrame ? 'secondary' : 'primary'} size="sm" onClick={() => newLastRef.current && newLastRef.current.click()}>
+                    <Plus size={12} /> {newLastFrame ? '更换尾帧图' : '上传尾帧图（必填）'}
+                  </Button>
+                </div>
+                <input ref={newFirstRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onNewFrame(e, 'first')} />
+                <input ref={newLastRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onNewFrame(e, 'last')} />
+                {(newFirstFrame || newLastFrame) ? (
+                  <div className="flex flex-wrap gap-2">
+                    {newFirstFrame ? (
+                      <div className="flex w-[96px] flex-col gap-1">
+                        <div className="h-[64px] w-full overflow-hidden rounded-lg border border-[var(--line)] bg-black/30">
+                          <img src={fileUrl(projectId, newFirstFrame.path)} alt="首帧预览" className="h-full w-full object-cover" />
+                        </div>
+                        <span className="truncate text-[9.5px] leading-tight text-[var(--fg-3)]">首帧</span>
+                      </div>
+                    ) : null}
+                    {newLastFrame ? (
+                      <div className="flex w-[96px] flex-col gap-1">
+                        <div className="h-[64px] w-full overflow-hidden rounded-lg border border-[var(--line)] bg-black/30">
+                          <img src={fileUrl(projectId, newLastFrame.path)} alt="尾帧预览" className="h-full w-full object-cover" />
+                        </div>
+                        <span className="truncate text-[9.5px] leading-tight text-[var(--fg-3)]">尾帧</span>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+          {newShot.mode === 'image' ? (
+            <>
+              <p className="m-0 rounded-lg border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_6%,transparent)] px-2.5 py-1.5 text-[11px] leading-relaxed text-[var(--fg-3)]">
+                图生视频：需上传 1 张图片，或从素材库选择 1 张图片。
+              </p>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant={newImagePath ? 'secondary' : 'primary'} size="sm" onClick={() => newImageRef.current && newImageRef.current.click()}>
+                    <Plus size={12} /> {newImagePath ? '更换图片' : '上传图片（必填，1 张）'}
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => setNewScenePicker(true)}>
+                    从素材选择
+                  </Button>
+                </div>
+                <input ref={newImageRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onNewImage} />
+                {newImagePath ? (
+                  <div className="flex w-[96px] flex-col gap-1">
+                    <div className="h-[64px] w-full overflow-hidden rounded-lg border border-[var(--line)] bg-black/30">
+                      <img src={fileUrl(projectId, newImagePath.path)} alt="参考图预览" className="h-full w-full object-cover" />
+                    </div>
+                    <span className="truncate text-[9.5px] leading-tight text-[var(--fg-3)]">参考图</span>
+                  </div>
+                ) : null}
+                {asArray(newShot.scene_ids).length ? (
+                  <Badge tone="accent">已选场景素材</Badge>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+          <label className="flex flex-col gap-1">
             <span className="text-[11px] text-[var(--fg-3)]">场景名</span>
             <Input
               value={newShot.scene_name}
@@ -960,15 +1166,17 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
             />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] text-[var(--fg-3)]">镜头</span>
-              <Input
-                value={newShot.camera}
-                onChange={(e) => setNewShot({ ...newShot, camera: e.target.value })}
-                placeholder="如：PUSH IN"
-                className="h-9 text-[12.5px]"
-              />
-            </label>
+            {newShot.mode !== 'first_last' ? (
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-[var(--fg-3)]">镜头</span>
+                <Input
+                  value={newShot.camera}
+                  onChange={(e) => setNewShot({ ...newShot, camera: e.target.value })}
+                  placeholder="如：PUSH IN"
+                  className="h-9 text-[12.5px]"
+                />
+              </label>
+            ) : null}
             <label className="flex flex-col gap-1">
               <span className="text-[11px] text-[var(--fg-3)]">时长（秒，1~15）</span>
               <Input
@@ -982,26 +1190,30 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
               />
             </label>
           </div>
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-[var(--fg-3)]">画面</span>
-            <Textarea
-              rows={4}
-              value={newShot.visual}
-              onChange={(e) => setNewShot({ ...newShot, visual: e.target.value })}
-              placeholder="这一镜的画面内容、构图、光线与运镜"
-              className="text-[12px]"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-[var(--fg-3)]">台词（每行一个说话人）</span>
-            <Textarea
-              rows={2}
-              value={newShot.dialogue}
-              onChange={(e) => setNewShot({ ...newShot, dialogue: e.target.value })}
-              placeholder="角色名：台词"
-              className="text-[12px]"
-            />
-          </label>
+          {newShot.mode !== 'first_last' ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] text-[var(--fg-3)]">画面</span>
+              <Textarea
+                rows={4}
+                value={newShot.visual}
+                onChange={(e) => setNewShot({ ...newShot, visual: e.target.value })}
+                placeholder="这一镜的画面内容、构图、光线与运镜"
+                className="text-[12px]"
+              />
+            </label>
+          ) : null}
+          {newShot.mode !== 'first_last' ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] text-[var(--fg-3)]">台词（每行一个说话人）</span>
+              <Textarea
+                rows={2}
+                value={newShot.dialogue}
+                onChange={(e) => setNewShot({ ...newShot, dialogue: e.target.value })}
+                placeholder="角色名：台词"
+                className="text-[12px]"
+              />
+            </label>
+          ) : null}
           <label className="flex flex-col gap-1">
             <span className="text-[11px] text-[var(--fg-3)]">视频提示词（可选）</span>
             <Textarea
@@ -1030,6 +1242,18 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
           charIds={asArray((shots.find((s) => s.id === materialPicker.shotId) || {}).character_ids)}
           onPick={applyMaterial}
           onCancel={() => setMaterialPicker(null)}
+        />
+      ) : null}
+
+      {newScenePicker ? (
+        <MaterialPicker
+          projectId={projectId}
+          assets={assets}
+          category="scene"
+          mode="add"
+          assignedIds={asArray(newShot.scene_ids)}
+          onPick={pickNewScene}
+          onCancel={() => setNewScenePicker(false)}
         />
       ) : null}
 

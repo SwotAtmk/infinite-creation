@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Bot,
+  Captions,
   CheckCircle2,
   Cloud,
   Cpu,
@@ -31,6 +32,7 @@ import { Badge, Button, EmptyState, Field, Input, Segmented, Select, Spinner, Sw
 import PageHeader from '../components/PageHeader.jsx';
 import SkillsPanel from '../components/SkillsPanel.jsx';
 import SkillPipelinePanel from '../components/SkillPipelinePanel.jsx';
+import SubtitlePanel from '../components/SubtitlePanel.jsx';
 import { useToast } from '../components/toast.jsx';
 
 const PROVIDER_OPTIONS = COMFY_PROVIDERS.map((p) => ({ value: p.id, label: p.label }));
@@ -46,10 +48,11 @@ const CATEGORIES = [
   { id: 'general', label: '通用配置', desc: '分镜数量 · 任务调度', icon: SlidersHorizontal },
   { id: 'comfyui', label: 'ComfyUI 服务', desc: '执行端 · 并发队列', icon: Server },
   { id: 'llm', label: 'LLM 模型', desc: 'Agent 大脑 · 提示词改写', icon: Sparkles },
+  { id: 'subtitle', label: '字幕与语音识别', desc: 'Whisper 模型 · 本地环境', icon: Captions },
   { id: 'agent', label: 'Agent 运行时', desc: '内置 / 外部 CLI · MCP 桥', icon: Bot },
   { id: 'hardware', label: '硬件适配', desc: '工作流 · 显存策略', icon: Cpu },
   { id: 'skills', label: '技能库', desc: '全局技能包管理', icon: Wand2 },
-  { id: 'pipeline', label: '流水线编排', desc: '技能节点 · 导入导出', icon: Workflow },
+  { id: 'pipeline', label: '流水线编排', desc: '技能节点 · 导入导出', icon: Workflow, beta: true },
 ];
 
 export default function SettingsPage({ onBack, publicMode = false }) {
@@ -361,7 +364,14 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                 >
                   <Icon size={15} className={on ? 'shrink-0 text-[var(--accent)]' : 'shrink-0 text-[var(--fg-3)]'} />
                   <span className="flex min-w-0 flex-col items-start gap-0.5">
-                    <span className="whitespace-nowrap">{c.label}</span>
+                    <span className="flex items-center gap-1.5 whitespace-nowrap">
+                      {c.label}
+                      {c.beta ? (
+                        <span className="shrink-0 rounded-full border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-1.5 py-px text-[8.5px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+                          beta
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="hidden text-[10.5px] leading-tight text-[var(--fg-4)] lg:block">{c.desc}</span>
                   </span>
                 </button>
@@ -703,6 +713,12 @@ export default function SettingsPage({ onBack, publicMode = false }) {
             </Section>
           ) : null}
 
+          {active === 'subtitle' ? (
+            <Section icon={Captions} title="字幕与语音识别" description="导出成片时用 whisper 按实际音轨生成字幕">
+              <SubtitlePanel cfg={cfg} setCfg={setCfg} />
+            </Section>
+          ) : null}
+
           {active === 'agent' ? (
             <Section icon={Bot} title="Agent 运行时" description="内置 openclaude，或让本机 CLI Agent 通过 MCP 工具桥接管流水线">
               <Segmented
@@ -905,7 +921,7 @@ export default function SettingsPage({ onBack, publicMode = false }) {
           ) : null}
 
           {active === 'pipeline' ? (
-            <Section icon={Workflow} title="流水线编排" description="按环节指定生成时优先加载的技能，缺失时自动匹配其它技能">
+            <Section icon={Workflow} title="流水线编排" badge="BETA" description="按环节指定生成时优先加载的技能，缺失时自动匹配其它技能">
               <SkillPipelinePanel cfg={cfg} setCfg={setCfg} setSavedCfg={setSavedCfg} />
             </Section>
           ) : null}
@@ -932,7 +948,7 @@ export default function SettingsPage({ onBack, publicMode = false }) {
   );
 }
 
-function Section({ icon: Icon, title, description, children }) {
+function Section({ icon: Icon, title, description, badge, children }) {
   return (
     <section className="panel flex flex-col gap-4 p-5">
       <div className="flex items-start gap-3">
@@ -940,7 +956,14 @@ function Section({ icon: Icon, title, description, children }) {
           <Icon size={15} />
         </span>
         <div className="min-w-0">
-          <h2 className="m-0 text-[14px] font-semibold text-[var(--fg)]">{title}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="m-0 text-[14px] font-semibold text-[var(--fg)]">{title}</h2>
+            {badge ? (
+              <span className="shrink-0 rounded-full border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+                {badge}
+              </span>
+            ) : null}
+          </div>
           {description ? <p className="m-0 mt-0.5 text-[11.5px] text-[var(--fg-3)]">{description}</p> : null}
         </div>
       </div>

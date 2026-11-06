@@ -21,6 +21,7 @@ export {
   REFERENCE_IMAGE_MAX_BYTES,
   isVariantAssetCategory,
   SHOT_STATUS,
+  VIDEO_MODE_LABELS,
   PROJECT_TYPES,
   PROJECT_TYPE_LABEL,
 } from '@shared';

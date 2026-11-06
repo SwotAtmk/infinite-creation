@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { srtTime, buildSrt, segmentsToSrt, pickProjectFields, resolveHardwareConfig, resolveSubtitleConfig } from '../lib/core/index.js';
+import { srtTime, buildSrt, segmentsToSrt, pickProjectFields, resolveHardwareConfig, resolveSubtitleConfig, runtimeAssetName, normalizeApiBase } from '../lib/core/index.js';
 
 test('srtTime: 时间戳格式与进位', () => {
   assert.equal(srtTime(0), '00:00:00,000');
@@ -95,8 +95,24 @@ test('字幕配置：默认经典模式 + 极速版 large-v3-turbo，非法值�
   assert.equal(bad.mode, 'script');
   assert.equal(bad.model, 'large-v3-turbo');
   assert.equal(bad.language, 'auto');
-  // 语音识别模式 / 专业版 / 关闭自动安装要能透传
+  // 语音识别 / 外部服务 / 专业版 / 关闭自动安装要能透传
   assert.equal(resolveSubtitleConfig({ subtitle: { mode: 'whisper' } }).mode, 'whisper');
+  assert.equal(resolveSubtitleConfig({ subtitle: { mode: 'api' } }).mode, 'api');
   assert.equal(resolveSubtitleConfig({ subtitle: { model: 'large-v3' } }).model, 'large-v3');
   assert.equal(resolveSubtitleConfig({ subtitle: { autoSetup: false } }).autoSetup, false);
+});
+
+test('外部字幕服务地址：补协议、去尾斜杠、空值走默认', () => {
+  assert.equal(normalizeApiBase('localhost:8000'), 'http://localhost:8000');
+  assert.equal(normalizeApiBase('http://127.0.0.1:8000///'), 'http://127.0.0.1:8000');
+  assert.equal(normalizeApiBase(' https://a2s.example.com '), 'https://a2s.example.com');
+  assert.equal(normalizeApiBase(''), '');
+  // 未配置时用默认本地地址
+  assert.equal(resolveSubtitleConfig({ subtitle: { mode: 'api' } }).apiBaseUrl, 'http://127.0.0.1:8000');
+});
+
+test('便携 Python：当前平台资产名符合 install_only 约定（不支持的平台返回空串）', () => {
+  const asset = runtimeAssetName();
+  if (!asset) return; // 未适配的平台：由调用方提示手动安装
+  assert.match(asset, /^cpython-3\.\d+\.\d+\+\d+-.+-install_only\.tar\.gz$/);
 });

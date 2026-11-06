@@ -12,6 +12,7 @@ import {
   Package,
   PenLine,
   Pin,
+  Plus,
   RotateCcw,
   Shirt,
   Upload,
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react';
 import { api, uploadBinary } from '../lib/api.js';
 import { SKILL_PIPELINE_NODES, defaultSkillPipeline } from '@shared';
-import { Button, Select, Spinner, Switch } from './ui.jsx';
+import { Button, SearchInput, Spinner, Switch } from './ui.jsx';
 import { useToast } from './toast.jsx';
 
 // 每个环节一个图标，让轨道上的圆节点一眼可辨。
@@ -51,6 +52,9 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
   const [hoverId, setHoverId] = useState('');
   // pinnedId：单击节点后常驻的气泡（hover 只是预览，不会抢已固定的那个）
   const [pinnedId, setPinnedId] = useState('');
+  // 技能选择框：搜索词 + 是否展开（同一时刻只可能有一个气泡，共用一份状态即可）
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [links, setLinks] = useState([]);
   const [cols, setCols] = useState(SKILL_PIPELINE_NODES.length);
   const wrapRef = useRef(null);
@@ -59,6 +63,12 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
   const fileRef = useRef(null);
 
   const openId = pinnedId || hoverId;
+
+  // 换到另一个环节时收起技能选择框，避免带着上一个节点的搜索词
+  useEffect(() => {
+    setPickerOpen(false);
+    setQuery('');
+  }, [openId]);
 
   // 点击气泡/节点以外的区域、或按 Esc 关闭常驻气泡。
   // 注意：技能下拉是 Radix 的 Portal（渲染在 body 下），不能算「外部点击」，否则一点选项就把气泡连同下拉一起卸载。
@@ -264,9 +274,17 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
       const cur = new Set(Array.isArray(nodes[id]?.skills) ? nodes[id].skills : []);
       return skills
         .filter((s) => !cur.has(s.name))
-        .map((s) => ({ value: s.name, label: s.name + (s.description ? ' · ' + String(s.description).slice(0, 26) : '') }));
+        .map((s) => ({ value: s.name, label: s.name + (s.description ? ' · ' + String(s.description).slice(0, 26) : ''), desc: s.description || '' }));
     };
   }, [skills, nodes]);
+
+  // 当前气泡里可添加的技能，按输入的名字/描述实时过滤
+  const pickerOptions = useMemo(() => {
+    const list = addOptionsFor(openId) || [];
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((o) => o.value.toLowerCase().includes(q) || String(o.desc || '').toLowerCase().includes(q));
+  }, [addOptionsFor, openId, query]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -501,13 +519,70 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
                         </div>
 
                         <div className="mt-2">
-                          <Select
-                            value=""
-                            onChange={(v) => addSkill(meta.id, v)}
-                            items={addOptionsFor(meta.id)}
-                            placeholder="添加技能…"
-                            size="xs"
-                          />
+                          {/* 可搜索的技能选择：直接输入名字过滤，点条目即添加 */}
+                          {pickerOpen ? (
+                            <div
+                              className="rounded-lg border border-[var(--line)] bg-black/25 p-1.5"
+                              onKeyDown={(e) => {
+                                if (e.key !== 'Escape') return;
+                                // 先关掉选择框，不要连带把整个气泡关掉
+                                e.stopPropagation();
+                                setPickerOpen(false);
+                                setQuery('');
+                              }}
+                            >
+                              <SearchInput value={query} onChange={setQuery} placeholder="按名字搜索技能…" className="mb-1.5" />
+                              <div className="max-h-[168px] overflow-auto">
+                                {pickerOptions.length ? (
+                                  pickerOptions.map((o) => (
+                                    <button
+                                      key={o.value}
+                                      type="button"
+                                      onClick={() => {
+                                        addSkill(meta.id, o.value);
+                                        setQuery('');
+                                      }}
+                                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.06]"
+                                    >
+                                      <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-[var(--fg-2)]">{o.value}</span>
+                                      {!query && o.desc ? (
+                                        <span className="max-w-[45%] shrink-0 truncate text-[9.5px] text-[var(--fg-4)]">{o.desc}</span>
+                                      ) : null}
+                                    </button>
+                                  ))
+                                ) : (
+                                  <p className="m-0 px-2 py-2 text-center text-[10.5px] text-[var(--fg-4)]">
+                                    {query ? '没有匹配的技能' : '技能库已全部加入'}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="mt-1 flex items-center justify-between px-1">
+                                <span className="text-[9.5px] text-[var(--fg-4)]">{pickerOptions.length} 个可选</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPickerOpen(false);
+                                    setQuery('');
+                                  }}
+                                  className="text-[10px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg)]"
+                                >
+                                  收起
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="w-full justify-start text-[12px]"
+                              onClick={() => {
+                                setQuery('');
+                                setPickerOpen(true);
+                              }}
+                            >
+                              <Plus size={12} /> 添加技能…
+                            </Button>
+                          )}
                         </div>
 
                         <div className="mt-2.5 border-t border-[var(--line)] pt-2">

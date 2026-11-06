@@ -23,15 +23,6 @@ const SHOT_MODE_OPTIONS = [
   { value: 'image', label: '图生视频' },
 ];
 
-// 分镜类型徽章色调：首尾帧用 accent 高亮，其余各类型也分别上色，便于一眼区分
-const SHOT_MODE_TONE = {
-  reference: 'neutral',
-  first_last: 'accent',
-  image: 'info',
-  text: 'success',
-  digital_human: 'danger',
-};
-
 export default function ShotsPage({ projectId, chapters = [], cursorId, onCursorChange, running = false, jobs = [], onRefresh, readOnly = false, canEdit = true, canGenerate = true, canExport = true, features = {} }) {
   const toast = useToast();
   const [shots, setShots] = useState([]);
@@ -628,7 +619,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                     </span>
                     <h3 className="m-0 truncate text-[13.5px] font-medium text-[var(--fg)]">{s.scene_name || '未命名镜头'}</h3>
                     <StatusPill status={s.status}>{STATUS_TEXT[s.status] || s.status}</StatusPill>
-                    <Badge tone={SHOT_MODE_TONE[s.mode] || 'neutral'}>{modeLabelOf(s)}</Badge>
+                    <Badge tone="accent">{modeLabelOf(s)}</Badge>
                     {s.chapter ? <Badge tone="neutral">{s.chapter}</Badge> : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--fg-4)]">

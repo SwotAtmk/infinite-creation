@@ -243,9 +243,9 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
         const speakingChars = chars.filter((c) => speakers.some((sp) => nameMatches(sp, c.name)));
         const voices = speakingChars.filter((c) => c.voice_ref).map((c) => ({ name: c.name, voice_ref: c.voice_ref }));
         const allRefs = [...chars, ...scenes, ...props, ...costumes, ...ages];
-        const resoLabel = s.resolution === 'custom' && project
+        const resoLabel = (s.resolution || project?.video_resolution) === 'custom' && project
           ? 'custom ' + (project.video_width || '?') + '×' + (project.video_height || '?')
-          : (s.resolution || '480P');
+          : (s.resolution || project?.video_resolution || '480P');
         return (
           <Card key={s.id}>
             <CardBody className="gap-2">
@@ -266,7 +266,7 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
                       style={{ width: 56, display: 'inline-block' }}
                     />
                   ) : (s.duration ?? 5)}s
-                  · 分辨率 {resoLabel} · 比例 {s.aspect_ratio || '16:9'} · seed {s.seed || '-'}
+                  · 分辨率 {resoLabel} · 比例 {s.aspect_ratio || project?.video_aspect_ratio || '16:9'} · seed {s.seed || '-'}
                 </span>
                 {!running && !editDuration && (
                   <Button size="sm" variant="light" className="h-6 min-w-0 px-1.5 text-[10px]" onPress={() => setEditDuration({ shotId: s.id, value: String(s.duration ?? 5) })}>编辑时长</Button>

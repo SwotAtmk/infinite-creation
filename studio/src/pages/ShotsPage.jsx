@@ -344,10 +344,9 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
         visual,
         dialogue: newShot.dialogue.trim(),
         duration: Number(newShot.duration) || 5,
-        // 新镜必须跟着项目分辨率/宽高比走：Shots.create 的默认值是 480P，
-        // 不显式给就会让这条新镜在 2K 项目里按 480P 出片
-        resolution: project?.video_resolution || '480P',
-        aspect_ratio: project?.video_aspect_ratio || '16:9',
+        // 新镜必须跟着项目分辨率/宽高比走：不显式给就留空（继承项目设置，生成时回退到 project）
+        resolution: project?.video_resolution || '',
+        aspect_ratio: project?.video_aspect_ratio || '',
         mode,
         ...(mode === 'first_last' ? { first_frame_path: newFirstFrame.path, last_frame_path: newLastFrame.path } : {}),
         ...(mode === 'image' ? {
@@ -670,8 +669,8 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                         ) : null}
                       </span>
                     )}
-                    <ResolutionMeta resolution={s.resolution} width={project?.video_width} height={project?.video_height} />
-                    <RatioMeta ratio={s.aspect_ratio || '16:9'} />
+                    <ResolutionMeta resolution={s.resolution || project?.video_resolution || '480P'} width={project?.video_width} height={project?.video_height} />
+                    <RatioMeta ratio={s.aspect_ratio || project?.video_aspect_ratio || '16:9'} />
                     {s.seed ? (
                       <span className="inline-flex items-center gap-1">
                         <Hash size={11} className="opacity-70" />

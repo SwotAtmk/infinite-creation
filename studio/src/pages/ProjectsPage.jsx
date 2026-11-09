@@ -47,6 +47,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
   const sentinelRef = useRef(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [vision, setVision] = useState(false);
+  const [defaults, setDefaults] = useState(null);
   const [busy, setBusy] = useState(false);
   const [activity, setActivity] = useState(null);
   // 作品集（showTypeFilter）：跨项目汇总各创作类型的生成结果，而不是每个分类只显示一个项目
@@ -58,7 +59,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
   const [agentProjects, setAgentProjects] = useState([]);
   const [agentLoading, setAgentLoading] = useState(false);
 
-  const [form, setForm] = useState({ name: '', novel: '', scriptMode: 'auto', script: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true });
+  const [form, setForm] = useState({ name: '', novel: '', scriptMode: 'auto', script: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true, enableSubtitles: true });
   const [refs, setRefs] = useState([]);
 
   const query = (page) =>
@@ -98,8 +99,32 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
   }, [load]);
 
   useEffect(() => {
-    api.get('/api/config').then((c) => setVision(!!c?.llm?.vision)).catch(() => {});
+    api
+      .get('/api/config')
+      .then((c) => {
+        setVision(!!c?.llm?.vision);
+        setDefaults(c?.projectDefaults || null);
+      })
+      .catch(() => {});
   }, []);
+
+  // 配置里的「新建项目默认配置」加载后，应用到尚未开始填写的创建表单初值。
+  useEffect(() => {
+    if (!defaults) return;
+    setForm((f) => {
+      if (f.name || f.novel) return f;
+      return {
+        ...f,
+        scriptMode: defaults.autoScript === false ? 'own' : f.scriptMode,
+        res: defaults.resolution || f.res,
+        ratio: defaults.aspectRatio || f.ratio,
+        cw: defaults.width ? String(defaults.width) : f.cw,
+        ch: defaults.height ? String(defaults.height) : f.ch,
+        enableBgm: defaults.enableBgm !== false,
+        enableSubtitles: defaults.enableSubtitles !== false,
+      };
+    });
+  }, [defaults]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -186,6 +211,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
         video_width: Number(form.cw) || 0,
         video_height: Number(form.ch) || 0,
         enable_bgm: form.enableBgm,
+        enable_subtitles: form.enableSubtitles,
       });
       load();
       // 项目已落库：参考图上传失败不能让用户以为创建失败，先提示再照样进入项目
@@ -217,7 +243,20 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
   }
 
   function resetForm() {
-    setForm({ name: '', novel: '', scriptMode: 'auto', script: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true });
+    setForm({
+      name: '',
+      novel: '',
+      scriptMode: defaults?.autoScript === false ? 'own' : 'auto',
+      script: '',
+      style: '',
+      customStyle: '',
+      res: defaults?.resolution || '480P',
+      ratio: defaults?.aspectRatio || '16:9',
+      cw: defaults?.width ? String(defaults.width) : '',
+      ch: defaults?.height ? String(defaults.height) : '',
+      enableBgm: defaults?.enableBgm !== false,
+      enableSubtitles: defaults?.enableSubtitles !== false,
+    });
     setRefs([]);
   }
 
@@ -565,6 +604,12 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
               onChange={(v) => setForm({ ...form, enableBgm: v })}
               label="自动生成背景音乐"
               hint="视频阶段生成纯音乐并合成到成片；也可以之后在「背景音乐」页手动处理。"
+            />
+            <Switch
+              checked={form.enableSubtitles}
+              onChange={(v) => setForm({ ...form, enableSubtitles: v })}
+              label="自动添加字幕"
+              hint="按「设置 → 字幕与语音识别」选择的模式烧录到成片。"
             />
           </FormSection>
 

@@ -26,9 +26,11 @@ import {
   comfyBaseUrl,
   hardwareMode,
   isPresetWorkflows,
+  VIDEO_RESOLUTION_CUSTOM,
 } from '../lib/shared.js';
 import { COMFY_PROVIDERS } from '@shared';
 import { Badge, Button, EmptyState, Field, Input, Segmented, Select, Spinner, Switch } from '../components/ui.jsx';
+import { RESOLUTION_SELECT_ITEMS, RATIO_SELECT_ITEMS } from '../components/visuals.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import SkillsPanel from '../components/SkillsPanel.jsx';
 import SkillPipelinePanel from '../components/SkillPipelinePanel.jsx';
@@ -128,6 +130,11 @@ export default function SettingsPage({ onBack, publicMode = false }) {
     if (!Number.isFinite(n)) return fallback;
     return Math.max(min, Math.min(max, n));
   };
+
+  // —— 新建项目默认配置（创建项目表单的初值）——
+  const defaults = cfg?.projectDefaults || {};
+  const setDefaults = (patch) =>
+    setCfg((c) => ({ ...c, projectDefaults: { ...(c.projectDefaults || {}), ...patch } }));
 
   async function save() {
     setSaving(true);
@@ -442,6 +449,69 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                 <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-4)]">
                   超出的章节会显示「等待 Agent 槽位」，不会占用模型请求，也不会触发模型停滞看门狗。渲染仍由云端渲染队列按并发数控制。
                 </p>
+              </Section>
+
+              <Section icon={SlidersHorizontal} title="新建项目默认配置" description="创建新项目时表单的默认值；保存后对新创建的项目生效，不影响已有项目。">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="默认分辨率">
+                    <Select
+                      value={defaults.resolution || '480P'}
+                      onChange={(v) => setDefaults({ resolution: v })}
+                      items={RESOLUTION_SELECT_ITEMS}
+                    />
+                  </Field>
+                  <Field label="默认宽高比">
+                    <Select
+                      value={defaults.aspectRatio || '16:9'}
+                      onChange={(v) => setDefaults({ aspectRatio: v })}
+                      items={RATIO_SELECT_ITEMS}
+                    />
+                  </Field>
+                </div>
+                {(defaults.resolution || '480P') === VIDEO_RESOLUTION_CUSTOM ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="默认宽度（px）">
+                      <Input
+                        type="number"
+                        min={64}
+                        step={32}
+                        value={defaults.width ? String(defaults.width) : ''}
+                        onChange={(e) => setDefaults({ width: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                        placeholder="1024"
+                      />
+                    </Field>
+                    <Field label="默认高度（px）">
+                      <Input
+                        type="number"
+                        min={64}
+                        step={32}
+                        value={defaults.height ? String(defaults.height) : ''}
+                        onChange={(e) => setDefaults({ height: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                        placeholder="576"
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+                <div className="flex flex-col gap-3 pt-1">
+                  <Switch
+                    checked={defaults.enableBgm !== false}
+                    onChange={(v) => setDefaults({ enableBgm: v })}
+                    label="自动生成背景音乐"
+                    hint="视频阶段生成纯音乐并合成到成片。"
+                  />
+                  <Switch
+                    checked={defaults.enableSubtitles !== false}
+                    onChange={(v) => setDefaults({ enableSubtitles: v })}
+                    label="自动添加字幕"
+                    hint="按「字幕与语音识别」选择的模式烧录到成片。"
+                  />
+                  <Switch
+                    checked={defaults.autoScript !== false}
+                    onChange={(v) => setDefaults({ autoScript: v })}
+                    label="自动生成剧本"
+                    hint="剧本为空时先由 Agent 写剧本再拆分镜；关闭后需先提供剧本。"
+                  />
+                </div>
               </Section>
             </>
           ) : null}

@@ -4,7 +4,7 @@ This guide explains how rewrite outputs are organized and written in full-refere
 
 Write all six rewrite sections in English. Preserve the original language only for dialogue and lyrics inside `<d>` and for text visibly present in the scene.
 
-**Description detail:** Make `detailed_description` as detailed and explicit as possible. For each shot, clearly establish the current composition, subject appearance and position, environment and lighting, actions and state changes, camera movement, current sound, and the points where referenced content actually appears or takes effect. Avoid reducing the description to a plot summary or a list of reference relationships.
+**Description detail:** Make `detailed_description` as detailed and explicit as possible. For each shot, clearly establish the current composition, subject position (the look itself comes from the reference image — do not restate appearance or clothing), environment and lighting, actions and state changes, camera movement, current sound, and the points where referenced content actually appears or takes effect. Avoid reducing the description to a plot summary or a list of reference relationships.
 
 > The basic formats for shots, camera movement, speakers, dialogue, and ordinary sound are shared with the Video Prompt Writing Guide (T2VA / I2VA / FL2VA / L2VA). This guide focuses on the reference labels, analysis sections, and format differences specific to full-reference mode.
 
@@ -48,8 +48,10 @@ Full-reference rewrites use four types of labels to identify the source and role
 It represents a content unit that will actually be used in the target video, rather than the source file itself. One subject may be defined by multiple reference assets, and one reference asset may provide multiple subjects.
 
 ```text
-<Subject 1> is the young woman in <Picture 1>, with long dark hair, a blue cardigan, and a thin silver necklace.
+<Subject 1> is the young woman in <Picture 1>.
 ```
+
+**Define people by name and role only (hard rule).** The reference image already carries the face, hair, skin tone, build, costume, shoes, accessories, fabric and colour palette, so a `<Subject N>` definition must not spell them out. Write `<Subject N> is <name/role>` (optionally `, the <role> who <what they do here>`). Do not add age, facial features, face shape, hairstyle or hair colour, skin, build, clothing, shoes, trims, materials or colours — not even when the upstream material (asset description, character bible, continuity notes, `角色一致性`) hands you such a description; convert it into `stay faithful to <Picture 1>` instead. Scenes and props are not covered by this rule — describe their layout, materials and lighting normally.
 
 When the same subject comes from multiple assets, combine the sources and state what each asset provides:
 
@@ -243,7 +245,7 @@ For generation tasks, `detailed_description` is normally 350-500 English words. 
 
 ### 5.3 Using Reference Labels in Shots
 
-At the first clear appearance of an important `<Subject N>`, describe its referenced characteristics, position in the frame, and current action within what is actually visible in the shot. Continue using the same label in later shots without redefining what the label represents.
+At the first clear appearance of an important `<Subject N>` in a shot, write its label, its position in the frame, and its current action. Do not re-state its appearance, clothing, hairstyle, skin tone, build or colours — those are carried by the reference asset; if consistency needs to be asserted, write `keeps the look of <Picture N>`. Continue using the same label in later shots without redefining what the label represents.
 
 Use natural phrasing for concrete frame anchors:
 
@@ -310,9 +312,9 @@ Write complete dialogue and lyrics only inside `<d>` in `detailed_description`; 
 ```text
 subject_definitions:
 <Subject 1> is the coffee-shop environment in <Picture 1>, featuring an exposed brick wall, an orange tufted sofa with patterned pillows, a neon sign, and a wooden coffee table.
-<Subject 2> is the fluffy white Samoyed in <Picture 2>, <Picture 3>, and <Picture 4>, with thick white fur, pointed ears, a dark nose, and a curved tail.
-<Subject 3> is the young blonde woman in <Video 1>, with long blonde hair and a light-pink button-down shirt with rolled-up sleeves.
-<Subject 4> is the young man in <Video 2>, with short wavy brown hair and a dark-grey hoodie with drawstrings.
+<Subject 2> is the Samoyed dog in <Picture 2>, <Picture 3>, and <Picture 4>.
+<Subject 3> is the young woman in <Video 1>.
+<Subject 4> is the young man in <Video 2>.
 <Audio 1> is the voice-timbre reference for <Subject 3> (S1), containing a spoken English vocal layer.
 
 summary:
@@ -320,16 +322,16 @@ summary:
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1], [Shot 2], [Shot 3]): fully_preserved - the exposed brick wall, orange tufted sofa, patterned pillows, neon sign, and wooden coffee table are retained.
-<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - the Samoyed's thick white fur, pointed ears, dark nose, and curved tail are retained.
-<Subject 3> (appears in [Shot 1], [Shot 2], [Shot 3]): fully_preserved - the blonde woman's identity, long hair, and light-pink shirt are retained.
-<Subject 4> (appears in [Shot 1], [Shot 2]): fully_preserved - the young man's short wavy brown hair and dark-grey hoodie are retained.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - retained exactly as defined by <Picture 2>, <Picture 3>, and <Picture 4>.
+<Subject 3> (appears in [Shot 1], [Shot 2], [Shot 3]): fully_preserved - retained exactly as defined by <Video 1>; her look is not re-described in the prompt.
+<Subject 4> (appears in [Shot 1], [Shot 2]): fully_preserved - retained exactly as defined by <Video 2>; his look is not re-described in the prompt.
 <Audio 1>: reference - its vocal timbre guides the dialogue delivery of <Subject 3> without copying the original signal.
 
 detailed_description:
 The target video uses a realistic multi-camera sitcom style with warm indoor lighting.
-[Shot 1] A medium shot establishes <Subject 1>, the coffee shop with its exposed brick wall, orange tufted sofa, patterned pillows, neon sign, and wooden coffee table. <Subject 3> (S1), the young woman with long blonde hair and a light-pink button-down shirt with rolled-up sleeves, sits on the sofa holding a chocolate-chip cookie. From the left, <Subject 4>, the young man with short wavy brown hair and a dark-grey hoodie with drawstrings, enters holding the leash of <Subject 2>, the thick-furred white Samoyed with pointed ears, a dark nose, and a curved tail. The dog lunges toward the cookie and pulls the leash taut. <Subject 3> (S1) jerks her hand back and, using the clear youthful voice timbre referenced from <Audio 1>, exclaims with light annoyance, <d>[English] Hey! Watch your dog!</d> She closes her lips and guards the cookie while <Subject 4> pulls the dog back.
-[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), the young man in the dark-grey hoodie from Shot 1, sitting beside <Subject 3> on the sofa and holding <Subject 2> securely in his arms. <Subject 4> (S2) says in a casual young male voice with a playful tone and an easy conversational pace, <d>[English] He just likes cookies more than me.</d> He closes his mouth into an apologetic smile and strokes the dog's thick white fur.
-[Shot 3] At 00:05.000, the shot cuts to a close-up of <Subject 3> (S1), the blonde woman in the light-pink shirt from Shot 1. Her annoyance softens as she looks toward the Samoyed. <Subject 3> (S1) replies in the same clear youthful voice referenced from <Audio 1> with an amused cadence, <d>[English] Well, he has good taste at least.</d> She smiles and raises the cookie in a small toast-like gesture. A classic canned audience laugh begins immediately after the line and continues through the final frame.
+[Shot 1] A medium shot establishes <Subject 1>, the coffee shop with its exposed brick wall, orange tufted sofa, patterned pillows, neon sign, and wooden coffee table. <Subject 3> (S1) sits on the sofa holding a chocolate-chip cookie. From the left, <Subject 4> enters holding the leash of <Subject 2>. The dog lunges toward the cookie and pulls the leash taut. <Subject 3> (S1) jerks her hand back and, using the clear youthful voice timbre referenced from <Audio 1>, exclaims with light annoyance, <d>[English] Hey! Watch your dog!</d> She closes her lips and guards the cookie while <Subject 4> pulls the dog back.
+[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), sitting beside <Subject 3> on the sofa and holding <Subject 2> securely in his arms. <Subject 4> (S2) says in a casual young male voice with a playful tone and an easy conversational pace, <d>[English] He just likes cookies more than me.</d> He closes his mouth into an apologetic smile and strokes the dog's back.
+[Shot 3] At 00:05.000, the shot cuts to a close-up of <Subject 3> (S1). Her annoyance softens as she looks toward <Subject 2>. <Subject 3> (S1) replies in the same clear youthful voice referenced from <Audio 1> with an amused cadence, <d>[English] Well, he has good taste at least.</d> She smiles and raises the cookie in a small toast-like gesture. A classic canned audience laugh begins immediately after the line and continues through the final frame.
 
 overall_soundscape:
 Soft indoor coffee-shop room tone continues throughout the scene.

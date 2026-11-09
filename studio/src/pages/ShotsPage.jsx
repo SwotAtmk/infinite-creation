@@ -694,9 +694,14 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
 
                 <div className="grid gap-4 p-4 lg:grid-cols-[340px_minmax(0,1fr)]">
                   <div className="flex flex-col gap-2">
-                    <div className="media-frame aspect-video">
+                    {/* 播放器画幅跟随该镜头的实际比例（9:16 / 16:9 / 1:1 等）：
+                        固定成 aspect-video + object-cover 会把竖屏视频上下裁掉。 */}
+                    <div
+                      className="media-frame flex items-center justify-center"
+                      style={{ aspectRatio: String(s.aspect_ratio || project?.video_aspect_ratio || '16:9').replace(':', ' / '), maxHeight: '72vh' }}
+                    >
                       {selected?.video_path || s.video_path ? (
-                        <video className="h-full w-full object-cover" src={fileUrl(projectId, selected?.video_path || s.video_path)} controls preload="metadata" />
+                        <video className="h-full w-full object-contain" src={fileUrl(projectId, selected?.video_path || s.video_path)} controls preload="metadata" />
                       ) : (
                         <div className="flex h-full w-full flex-col items-center justify-center gap-2.5 text-[var(--fg-4)]">
                           <Film size={22} />

@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen, ChevronLeft, ChevronRight, Download, Feather, FileText, FolderOpen, GripVertical, Layers, PenLine,
-  Plus, RefreshCw, Save, Search, Sparkles, Square, Trash2, Users, WandSparkles, Workflow, X,
+  Plus, RefreshCw, Save, Search, Sparkles, Square, Trash2, Users, WandSparkles, X,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { Badge, Button, EmptyState, Field, Input, Spinner, StatusPill, Textarea } from '../components/ui.jsx';
 import { Modal } from '../components/overlays.jsx';
-import SkillPipelinePanel from '../components/SkillPipelinePanel.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { useJobs } from '../components/simpleStudio.jsx';
 import { useToast } from '../components/toast.jsx';
@@ -138,11 +137,6 @@ export default function NovelPage({ onOpenAgentProject }) {
   const [editingInfo, setEditingInfo] = useState(false);
   const [infoName, setInfoName] = useState('');
   const [infoIdea, setInfoIdea] = useState('');
-  // 小说技能配置（流水线编排 → 生成小说 环节）
-  const [skillOpen, setSkillOpen] = useState(false);
-  const [cfg, setCfg] = useState(null);
-  const [savedCfg, setSavedCfg] = useState(null);
-  const [savingCfg, setSavingCfg] = useState(false);
 
   // jobs 轮询（useJobs 内部已带 4s 轮询）
   const { jobs: projectJobs, reloadJobs } = useJobs(selected?.id);
@@ -274,40 +268,6 @@ export default function NovelPage({ onOpenAgentProject }) {
       reloadJobs();
     } catch (e) {
       toast.error('停止失败：' + (e?.message || String(e)));
-    }
-  }
-
-  // —— 小说技能配置（流水线编排 → 生成小说 环节）——
-  async function openSkillCfg() {
-    setSkillOpen(true);
-    if (cfg) return;
-    try {
-      const c = await api.get('/api/config');
-      setCfg(c);
-      setSavedCfg(c);
-    } catch (e) {
-      toast.error('读取配置失败：' + (e?.message || String(e)));
-    }
-  }
-
-  function closeSkillCfg() {
-    setSkillOpen(false);
-    if (savedCfg) setCfg(savedCfg); // 未保存的改动回滚
-  }
-
-  async function saveSkillCfg() {
-    if (!cfg) return;
-    setSavingCfg(true);
-    try {
-      const s = await api.put('/api/config', cfg);
-      setCfg(s);
-      setSavedCfg(s);
-      toast.success('小说技能配置已保存');
-      setSkillOpen(false);
-    } catch (e) {
-      toast.error('保存失败：' + (e?.message || String(e)));
-    } finally {
-      setSavingCfg(false);
     }
   }
 
@@ -465,7 +425,6 @@ export default function NovelPage({ onOpenAgentProject }) {
           onRestart={() => startStep('restart')}
           onStop={stopJob}
           onWriteOne={(title) => startStep('write', title)}
-          onOpenSkillCfg={openSkillCfg}
         />
       ) : null}
 
@@ -491,34 +450,12 @@ export default function NovelPage({ onOpenAgentProject }) {
       ) : null}
 
       <NewNovelModal open={showNew} onClose={() => setShowNew(false)} onCreate={(p) => loadSelected(p.id)} />
-
-      <Modal
-        open={skillOpen}
-        onOpenChange={(o) => !o && closeSkillCfg()}
-        title="小说技能配置"
-        description="无限·卷轴生成时优先加载「生成小说」环节的技能：第一个为主技能，其余为备用；开启自动匹配后还可从技能目录挑选其它合适技能。"
-        size="2xl"
-        footer={
-          <>
-            <Button variant="ghost" size="md" onClick={closeSkillCfg}>取消</Button>
-            <Button variant="primary" size="md" loading={savingCfg} disabled={!cfg} onClick={saveSkillCfg}>保存配置</Button>
-          </>
-        }
-      >
-        {cfg ? (
-          <SkillPipelinePanel cfg={cfg} setCfg={setCfg} setSavedCfg={setSavedCfg} onlyNode="novel" />
-        ) : (
-          <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-[var(--fg-3)]">
-            <Spinner size={15} /> 加载配置…
-          </div>
-        )}
-      </Modal>
     </>
   );
 }
 
 // —— 章节板块（按卷分组，每卷显示本卷卷纲）——
-function ChaptersPanel({ projectId, projectName, projectIdea, chapters, volumes, running, onRefresh, onSaveVolumes, onStart, onRestart, onStop, onWriteOne, onOpenSkillCfg }) {
+function ChaptersPanel({ projectId, projectName, projectIdea, chapters, volumes, running, onRefresh, onSaveVolumes, onStart, onRestart, onStop, onWriteOne }) {
   const toast = useToast();
   const [showPreview, setShowPreview] = useState(false);
   const [editing, setEditing] = useState(null); // { id?, title, novel, volume, outline }
@@ -631,9 +568,6 @@ function ChaptersPanel({ projectId, projectName, projectIdea, chapters, volumes,
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" onClick={onOpenSkillCfg} title="配置无限·卷轴生成小说时使用的写作 Skill">
-          <Workflow size={14} />小说技能配置
-        </Button>
         <Button variant="primary" onClick={onStart} disabled={running}>
           <Sparkles size={14} />{running ? '生成中…' : '开始生成 / 继续'}
         </Button>

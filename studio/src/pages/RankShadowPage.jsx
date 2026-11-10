@@ -602,7 +602,6 @@ export default function RankShadowPage() {
       <PageHeader
         eyebrow="Infinite·Rank Shadow"
         title="无限・秩影"
-        badge="beta"
         description="支持创作宣导片、热门音乐 MV、知识讲解类视频等多种内容。上传参考素材并配置提示词后，由 Agent 自动完成素材剪辑与渲染，直接输出对应风格成片。"
         actions={
           <>

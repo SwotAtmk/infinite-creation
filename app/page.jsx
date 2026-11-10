@@ -14,11 +14,13 @@ import MusicGenPage from './pages/MusicGenPage';
 import VoiceDesignPage from './pages/VoiceDesignPage';
 import DigitalHumanPage from './pages/DigitalHumanPage';
 import RankShadowPage from './pages/RankShadowPage';
+import NovelPage from './pages/NovelPage';
 import { ToastProvider } from './toast';
 
 // 首页左侧菜单：不同类型对应不同工作台页面。
 const MENU = [
   { id: 'projects', label: '作品集' },
+  { id: 'novel', label: '无限・卷轴' },
   { id: 'agent', label: 'Agent无限创作' },
   { id: 'opuscar', label: '无限・秩影' },
   { id: 'digital_human', label: '数字人' },
@@ -111,6 +113,7 @@ export default function App() {
             {mode === 'music' && <MusicGenPage />}
             {mode === 'tts' && <VoiceDesignPage />}
             {mode === 'opuscar' && <RankShadowPage />}
+            {mode === 'novel' && <NovelPage onOpenAgentProject={(id) => go({ mode: 'agent', view: { type: 'project', id, tab: 'chapters' } })} />}
             {settingsOpen && <SettingsPage onBack={() => setSettingsOpen(false)} />}
             <BackToTop />
           </main>

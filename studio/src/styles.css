@@ -275,6 +275,18 @@
   animation: pipeline-flow 1.4s linear infinite;
 }
 
+/* —— 小说预览：翻书动效 —— */
+@keyframes novel-flip-next {
+  from { opacity: 0; transform: perspective(1800px) rotateY(-26deg) translateX(26px) scale(.985); }
+  to   { opacity: 1; transform: perspective(1800px) rotateY(0deg) translateX(0) scale(1); }
+}
+@keyframes novel-flip-prev {
+  from { opacity: 0; transform: perspective(1800px) rotateY(26deg) translateX(-26px) scale(.985); }
+  to   { opacity: 1; transform: perspective(1800px) rotateY(0deg) translateX(0) scale(1); }
+}
+.novel-flip-next { transform-origin: left center; animation: novel-flip-next .38s cubic-bezier(.2,.8,.2,1) both; }
+.novel-flip-prev { transform-origin: right center; animation: novel-flip-prev .38s cubic-bezier(.2,.8,.2,1) both; }
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

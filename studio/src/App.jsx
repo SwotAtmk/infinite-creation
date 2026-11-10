@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Clapperboard, Github, Image as ImageIcon, LayoutGrid, Mic2, Music4, Repeat2, Sparkles, UserRound, Video } from 'lucide-react';
+import { Clapperboard, Feather, Github, Image as ImageIcon, LayoutGrid, Mic2, Music4, Repeat2, Sparkles, UserRound, Video } from 'lucide-react';
 import { ToastProvider } from './components/toast.jsx';
 import BackToTop from './components/BackToTop.jsx';
 import TopBar from './components/TopBar.jsx';
@@ -13,13 +13,15 @@ import MusicGenPage from './pages/MusicGenPage.jsx';
 import VoiceDesignPage from './pages/VoiceDesignPage.jsx';
 import VoiceClonePage from './pages/VoiceClonePage.jsx';
 import RankShadowPage from './pages/RankShadowPage.jsx';
+import NovelPage from './pages/NovelPage.jsx';
 import { useServerInfo } from './lib/hooks.js';
 
 // 左侧菜单：与经典界面保持一致，每种创作类型对应一个独立工作台。
 const MENU = [
   { id: 'projects', label: '作品集', icon: LayoutGrid },
+  { id: 'novel', label: '无限・卷轴', icon: Feather, beta: true },
   { id: 'agent', label: 'Agent无限创作', icon: Sparkles },
-  { id: 'opuscar', label: '无限・秩影', icon: Clapperboard, beta: true },
+  { id: 'opuscar', label: '无限・秩影', icon: Clapperboard },
   { id: 'digital_human', label: '数字人', icon: UserRound },
   { id: 'image', label: '图片生成', icon: ImageIcon },
   { id: 'video', label: '视频生成', icon: Video },
@@ -206,6 +208,9 @@ export default function App() {
               {state.view.type !== 'settings' && state.mode === 'tts' ? <VoiceDesignPage /> : null}
               {state.view.type !== 'settings' && state.mode === 'tts_clone' ? <VoiceClonePage /> : null}
               {state.view.type !== 'settings' && state.mode === 'opuscar' ? <RankShadowPage /> : null}
+              {state.view.type !== 'settings' && state.mode === 'novel' ? (
+                <NovelPage onOpenAgentProject={(id) => openProject(id)} />
+              ) : null}
             </div>
           </div>
         </main>

@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import {
   ArrowDown,
   ArrowUp,
+  BookOpen,
   Download,
   Hourglass,
   Image as ImageIcon,
@@ -28,6 +29,7 @@ import { useToast } from './toast.jsx';
 
 // 每个环节一个图标，让轨道上的圆节点一眼可辨。
 const NODE_ICON = {
+  novel: BookOpen,
   script: PenLine,
   character: UserRound,
   prop: Package,
@@ -43,8 +45,13 @@ const NODE_ICON = {
 
 // 流水线技能编排：一条虚线轨道串起各环节的圆形节点（超宽自动折行，行间折返连线）；
 // 节点上显示名称与技能小图标，悬浮/点击节点在上方弹出卡片编辑技能。
-export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
+export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg, onlyNode }) {
   const toast = useToast();
+  // onlyNode：只渲染指定环节（用于无限·卷轴的「小说技能配置」弹窗），空则渲染完整流水线
+  const metas = useMemo(
+    () => (onlyNode ? SKILL_PIPELINE_NODES.filter((n) => n.id === onlyNode) : SKILL_PIPELINE_NODES),
+    [onlyNode],
+  );
   const [skills, setSkills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -56,7 +63,7 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [links, setLinks] = useState([]);
-  const [cols, setCols] = useState(SKILL_PIPELINE_NODES.length);
+  const [cols, setCols] = useState(metas.length);
   const wrapRef = useRef(null);
   const circleRefs = useRef([]);
   const colRefs = useRef([]);
@@ -111,7 +118,7 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
   }, [loadSkills]);
 
   const nodes = cfg?.skillPipeline?.nodes || {};
-  const totalSkills = SKILL_PIPELINE_NODES.reduce(
+  const totalSkills = metas.reduce(
     (n, meta) => n + (Array.isArray(nodes[meta.id]?.skills) ? nodes[meta.id].skills.length : 0),
     0,
   );
@@ -121,7 +128,7 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const base = wrap.getBoundingClientRect();
-    const rects = SKILL_PIPELINE_NODES.map((_, i) => {
+    const rects = metas.map((_, i) => {
       const el = circleRefs.current[i];
       if (!el) return null;
       const r = el.getBoundingClientRect();
@@ -165,7 +172,7 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
       }
     }
     setLinks(out);
-  }, []);
+  }, [metas]);
 
   useLayoutEffect(() => {
     measure();
@@ -220,6 +227,16 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
     setHoverId('');
     setPinnedId('');
     toast.success('已恢复系统默认预设，保存后生效');
+  }
+
+  // 恢复本环节的默认技能（onlyNode 模式下使用，不动其它环节）
+  function resetThisNode() {
+    const meta = metas[0];
+    if (!meta) return;
+    setNode(meta.id, { skills: [...meta.defaultSkills], fallback: true });
+    setHoverId('');
+    setPinnedId('');
+    toast.success('已恢复「' + meta.label + '」默认技能，保存后生效');
   }
 
   async function handleExport() {
@@ -291,31 +308,39 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
       <div className="toolbar">
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--accent)_28%,transparent)] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] px-2.5 text-[11px] font-medium text-[var(--accent)]">
-            <Workflow size={11} /> {SKILL_PIPELINE_NODES.length} 个环节
+            <Workflow size={11} /> {onlyNode && metas[0] ? metas[0].label + ' · 小说技能' : metas.length + ' 个环节'}
           </span>
           <span className="text-[11.5px] text-[var(--fg-3)]">已编排技能 {totalSkills} 个 · 悬浮节点可编辑</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={resetDefaults}>
-            <RotateCcw size={13} /> 恢复默认
-          </Button>
-          <Button variant="secondary" size="sm" loading={exporting} onClick={handleExport}>
-            <Download size={13} /> 导出配置
-          </Button>
-          <Button variant="secondary" size="sm" loading={importing} onClick={() => fileRef.current?.click()}>
-            <Upload size={13} /> {importing ? '导入中…' : '导入配置'}
-          </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".zip,application/zip,application/x-zip-compressed"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files && e.target.files[0];
-              e.target.value = '';
-              if (f) handleImport(f);
-            }}
-          />
+          {onlyNode ? (
+            <Button variant="ghost" size="sm" onClick={resetThisNode}>
+              <RotateCcw size={13} /> 恢复默认技能
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" onClick={resetDefaults}>
+                <RotateCcw size={13} /> 恢复默认
+              </Button>
+              <Button variant="secondary" size="sm" loading={exporting} onClick={handleExport}>
+                <Download size={13} /> 导出配置
+              </Button>
+              <Button variant="secondary" size="sm" loading={importing} onClick={() => fileRef.current?.click()}>
+                <Upload size={13} /> {importing ? '导入中…' : '导入配置'}
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".zip,application/zip,application/x-zip-compressed"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files && e.target.files[0];
+                  e.target.value = '';
+                  if (f) handleImport(f);
+                }}
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -366,14 +391,14 @@ export default function SkillPipelinePanel({ cfg, setCfg, setSavedCfg }) {
             className={'relative grid gap-x-2 gap-y-20 ' + (openId ? 'z-[130]' : 'z-10')}
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))' }}
           >
-            {SKILL_PIPELINE_NODES.map((meta, i) => {
+            {metas.map((meta, i) => {
               const node = nodes[meta.id] || {};
               const list = Array.isArray(node.skills) ? node.skills : [];
               const fallback = node.fallback !== false;
               const Icon = NODE_ICON[meta.id] || Workflow;
               const open = openId === meta.id;
               const col = i % Math.max(1, cols);
-              const edge = col === 0 ? 'left' : col === cols - 1 || i === SKILL_PIPELINE_NODES.length - 1 ? 'right' : 'center';
+              const edge = col === 0 ? 'left' : col === cols - 1 || i === metas.length - 1 ? 'right' : 'center';
 
               return (
                 <Fragment key={meta.id}>

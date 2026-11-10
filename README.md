@@ -43,7 +43,7 @@
 - 可附一段产品介绍与官网 / 注册链接
 - 赞助金额、周期与权益均可协商
 
-**合作洽谈**：[swotatmk@foxmail.com](mailto:swotatmk@foxmail.com)（邮件标题建议注明「赞助合作」）
+**合作洽谈**：[swotatmk@foxmail.com](mailto:swotatmk@foxmail.com)（邮件标题建议注明来意）
 
 ## 界面一览
 

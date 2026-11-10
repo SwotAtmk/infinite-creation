@@ -43,7 +43,7 @@ If you or your team find it valuable, sponsoring is the most direct way to keep 
 - Room for a short product description plus a website / sign-up link
 - Sponsorship amount, duration and benefits are open to discussion
 
-**Contact**: [swotatmk@foxmail.com](mailto:swotatmk@foxmail.com) (please put "Sponsorship" in the subject)
+**Contact**: [swotatmk@foxmail.com](mailto:swotatmk@foxmail.com) (Suggested to include the purpose in email subject lines)
 
 ## UI Overview
 

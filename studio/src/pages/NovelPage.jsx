@@ -75,7 +75,7 @@ function NewNovelModal({ open, onClose, onCreate }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="新建小说">
+    <Modal open={open} onOpenChange={(o) => !o && onClose()} title="新建小说">
       <div className="flex flex-col gap-3">
         <Field label="小说标题" required>
           <Input autoFocus placeholder="比如：凡人修仙传" value={name} onChange={(e) => setName(e.target.value)} />

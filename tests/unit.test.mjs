@@ -1728,6 +1728,44 @@ test('splitNovelIntoChapters：字数兜底按段落（换行符）切分，不�
   }
   const totalParas = out.reduce((s, c) => s + c.novel.split('\n').length, 0);
   assert.equal(totalParas, lines.length, '拆分后段落总数不能丢失');
+  // PHP 的累计策略：累计到阈值才落章，允许单章略超阈值
+  for (const c of out.slice(0, -1)) assert.ok(c.novel.length >= 30, '非末章应累计到阈值再落章');
+});
+
+test('splitNovelIntoChapters：移除 txt 自带的目录区块（标题+页码分行）', () => {
+  const novel = '目录\n第一章 起\n1\n第二章 承\n2\n第一章 起\n正文A\n第二章 承\n正文B';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].title, '第一章');
+  assert.equal(out[0].novel, '正文A');
+  assert.equal(out[1].title, '第二章');
+  assert.equal(out[1].novel, '正文B');
+});
+
+test('splitNovelIntoChapters：移除目录区块（无页码，正文重复首个标题即目录结束）', () => {
+  const novel = '目录\n第一章 起\n第二章 承\n第一章 起\n正文A\n第二章 承\n正文B';
+  const out = splitNovelIntoChapters(novel);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].novel, '正文A');
+  assert.equal(out[1].novel, '正文B');
+});
+
+test('splitNovelIntoChapters：单段本身超阈值时按字符切块（没有换行可切）', () => {
+  const out = splitNovelIntoChapters('字'.repeat(300), { fallbackChars: 100 });
+  assert.equal(out.length, 3);
+  assert.deepEqual(out.map((c) => c.novel.length), [100, 100, 100]);
+});
+
+test('splitNovelIntoChapters：去除零宽等不可见字符', () => {
+  const out = splitNovelIntoChapters('第1章\u200B 开始\n正文\u200B内容');
+  assert.equal(out.length, 1);
+  assert.ok(!out[0].novel.includes('\u200B'), '不可见字符必须清掉');
+});
+
+test('splitNovelIntoChapters：只认一级章节标题（一、等论文式序号不拆章）', () => {
+  const out = splitNovelIntoChapters('一、开场\n第1章\n正文');
+  assert.equal(out.length, 1);
+  assert.ok(out[0].novel.includes('一、开场'), '一级序号不应被当作章节边界');
 });
 
 // —— 创建项目时导入现成剧本 ——

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { ArrowUpRight, Clapperboard, Film, Image as ImageIcon, Layers, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Clapperboard, Film, Image as ImageIcon, Layers, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import { api, uploadForm } from '../lib/api.js';
 import { fileUrl, fmtRelative, STATUS_TEXT } from '../lib/format.js';
 import {
@@ -61,6 +61,10 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
 
   const [form, setForm] = useState({ name: '', novel: '', scriptMode: 'auto', script: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true, enableSubtitles: true });
   const [refs, setRefs] = useState([]);
+  // 上传 txt 的解析结果（不在输入框预览全文，创建时优先使用它）
+  const novelFileRef = useRef(null);
+  const [uploadedNovel, setUploadedNovel] = useState(null);
+  const [novelBusy, setNovelBusy] = useState(false);
 
   const query = (page) =>
     '/api/projects?page=' + page + '&pageSize=' + PAGE_SIZE + (typeParam ? '&type=' + encodeURIComponent(typeParam) : '');
@@ -195,14 +199,34 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
     setCreateOpen(true);
   }
 
+  // 上传 txt：交给后端解析（不在 textarea 里预览全文），只保留统计与正文用于创建
+  async function pickNovelFile(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // 允许重复选择同名文件
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    setNovelBusy(true);
+    try {
+      const r = await uploadForm('/api/novel/parse', fd);
+      setUploadedNovel({ name: file.name, novel: r.novel || '', chars: r.chars || 0, chapterCount: r.chapterCount || 0 });
+      // 项目名还空着时，用文件名兜底，省一步输入
+      setForm((f) => (f.name.trim() ? f : { ...f, name: f.name || file.name.replace(/\.txt$/i, '') }));
+    } catch (err) {
+      toast.error('上传小说失败：' + err.message);
+    } finally {
+      setNovelBusy(false);
+    }
+  }
+
   async function create() {
-    if (!form.name.trim() || !form.novel.trim()) return;
+    if (!form.name.trim() || !(uploadedNovel?.novel || form.novel.trim())) return;
     if (form.scriptMode === 'own' && !form.script.trim()) return;
     setBusy(true);
     try {
       const p = await api.post('/api/projects', {
         name: form.name.trim(),
-        novel: form.novel,
+        novel: uploadedNovel ? uploadedNovel.novel : form.novel,
         auto_script: form.scriptMode === 'auto',
         script: form.scriptMode === 'own' ? form.script : '',
         style: resolveStyle(form.style, form.customStyle),
@@ -219,6 +243,8 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
         if (refs.length) {
           const chapters = await api.get('/api/projects/' + p.id + '/chapters');
           const chapterId = (chapters[0] && chapters[0].id) || '';
+          // 拆成多章时参考图标记为共享：所有章节的生成都能用到（单章场景保持原行为）
+          const shared = chapters.length > 1;
           for (const it of refs) {
             const fd = new FormData();
             fd.append('file', it.file);
@@ -226,6 +252,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
             fd.append('category', it.category || 'other');
             fd.append('chapter_id', chapterId);
             fd.append('description', it.description || '');
+            if (shared) fd.append('shared', '1');
             await uploadForm('/api/projects/' + p.id + '/references', fd);
           }
         }
@@ -258,6 +285,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
       enableSubtitles: defaults?.enableSubtitles !== false,
     });
     setRefs([]);
+    setUploadedNovel(null);
   }
 
   async function del(p) {
@@ -329,7 +357,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
     toast.success('已重新提交生成任务');
   }
 
-  const canCreate = !!form.name.trim() && !!form.novel.trim() && (form.scriptMode === 'auto' || !!form.script.trim());
+  const canCreate = !!form.name.trim() && !!(uploadedNovel?.novel || form.novel.trim()) && (form.scriptMode === 'auto' || !!form.script.trim());
 
   useEffect(() => {
     let alive = true;
@@ -485,14 +513,18 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
 
       <Drawer
         open={createOpen}
-        onOpenChange={(o) => !busy && setCreateOpen(o)}
+        onOpenChange={(o) => {
+          if (busy) return;
+          if (!o) setUploadedNovel(null);
+          setCreateOpen(o);
+        }}
         title="新建项目"
         description="故事原文决定后续所有章节与分镜，尽量粘贴完整、连贯的文本。"
         width={640}
         scrollHint="下面还有参数"
         footer={
           <>
-            <span className="mr-auto text-[11px] text-[var(--fg-4)]">{form.novel.length.toLocaleString()} 字</span>
+            <span className="mr-auto text-[11px] text-[var(--fg-4)]">{(uploadedNovel?.chars || form.novel.length).toLocaleString()} 字</span>
             <Button variant="ghost" size="md" disabled={busy} onClick={() => setCreateOpen(false)}>
               取消
             </Button>
@@ -513,14 +545,52 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
                 placeholder="例如：长夜将尽"
               />
             </Field>
-            <Field label="小说原文 / 故事描述" required hint="支持整本小说或一段梗概；后续可在章节管理里按章编辑。">
-              <Textarea
-                rows={10}
-                value={form.novel}
-                onChange={(e) => setForm({ ...form, novel: e.target.value })}
-                placeholder="粘贴小说原文，或写一句话描述你想拍的故事…"
-                className="min-h-[190px]"
-              />
+            <Field
+              label="小说原文 / 故事描述"
+              required
+              hint="支持粘贴整本小说或一句话描述；上传 txt 会按「第X章」一级标题拆章，无标题时按约 6000 字按段落累计拆章。"
+              action={
+                <>
+                  <Button size="xs" variant="ghost" loading={novelBusy} onClick={() => novelFileRef.current?.click()}>
+                    <Upload size={12} />
+                    上传 txt
+                  </Button>
+                  <input
+                    ref={novelFileRef}
+                    type="file"
+                    accept=".txt,text/plain"
+                    className="hidden"
+                    onChange={pickNovelFile}
+                  />
+                </>
+              }
+            >
+              {uploadedNovel ? (
+                // 上传成功后不再显示输入框：只展示文件信息与「更换 / 取消」，取消即回到手动粘贴
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line)] bg-white/[0.03] px-3.5 py-3">
+                  <Upload size={14} className="shrink-0 text-[var(--accent)]" />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 truncate text-[13px] text-[var(--fg)]">{uploadedNovel.name}</p>
+                    <p className="m-0 mt-0.5 text-[11.5px] text-[var(--fg-3)]">
+                      {uploadedNovel.chars.toLocaleString()} 字 · 将拆分为 {uploadedNovel.chapterCount} 章 · 取消后可手动粘贴
+                    </p>
+                  </div>
+                  <Button size="xs" variant="ghost" onClick={() => novelFileRef.current?.click()} disabled={novelBusy}>
+                    更换
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => setUploadedNovel(null)} disabled={novelBusy}>
+                    取消
+                  </Button>
+                </div>
+              ) : (
+                <Textarea
+                  rows={10}
+                  value={form.novel}
+                  onChange={(e) => setForm({ ...form, novel: e.target.value })}
+                  placeholder="粘贴小说原文，或写一句话描述你想拍的故事…"
+                  className="min-h-[190px]"
+                />
+              )}
             </Field>
             <Field
               label="剧本"

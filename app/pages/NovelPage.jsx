@@ -6,7 +6,7 @@ import { api } from '../api-client.js';
 import { useToast } from '../toast';
 import { useJobs } from './simpleStudio';
 
-const STEP_LABEL = { outline: '总纲', volumes: '分卷', chapters: '章纲', write: '正文', start: '整本生成', restart: '全部重新生成', all: '全部大纲' };
+const STEP_LABEL = { outline: '总纲', volumes: '分卷', chapters: '章纲', write: '正文', start: '整本生成', extend: '扩写', restart: '全部重新生成', all: '全部大纲' };
 
 function safeFileName(s) {
   return String(s || '未命名小说').replace(/[\\/:*?"<>|\r\n]/g, '_').trim().slice(0, 80) || '未命名小说';
@@ -50,6 +50,10 @@ export default function NovelPage({ onOpenAgentProject }) {
   const [editingInfo, setEditingInfo] = useState(false);
   const [infoName, setInfoName] = useState('');
   const [infoIdea, setInfoIdea] = useState('');
+  // 扩写弹窗
+  const [extendOpen, setExtendOpen] = useState(false);
+  const [extendCount, setExtendCount] = useState('');
+  const [extendDirection, setExtendDirection] = useState('');
 
   const { jobs: projectJobs, reloadJobs } = useJobs(selected?.id);
   const novelJobs = useMemo(() => (projectJobs || []).filter((j) => j.type === 'novel'), [projectJobs]);
@@ -99,16 +103,28 @@ export default function NovelPage({ onOpenAgentProject }) {
     return () => clearInterval(t);
   }, [selected?.id, runningJobId, loadSelected]);
 
-  async function startStep(step, chapter) {
+  async function startStep(step, chapter, message = '') {
     if (!selected) return;
     if (running) { toast.error('该小说正在生成中，请等它结束'); return; }
     try {
-      await api.post('/api/projects/' + selected.id + '/novel', { step, chapter: chapter || '' });
+      await api.post('/api/projects/' + selected.id + '/novel', { step, chapter: chapter || '', message });
       toast.success('开始' + (STEP_LABEL[step] || step) + (chapter ? '「' + chapter + '」' : '') + '...');
       reloadJobs();
     } catch (e) {
       toast.error('启动失败：' + (e?.message || String(e)));
     }
+  }
+
+  function openExtend() { setExtendOpen(true); setExtendCount(''); setExtendDirection(''); }
+  function submitExtend() {
+    const n = parseInt(extendCount, 10);
+    const count = Number.isFinite(n) && n >= 1 ? n : '';
+    const parts = [];
+    if (count) parts.push('续写 ' + count + ' 章');
+    if (extendDirection.trim()) parts.push('剧情方向：' + extendDirection.trim());
+    const message = parts.join('；');
+    setExtendOpen(false);
+    startStep('extend', '', message);
   }
 
   async function saveStructure(k, v) {
@@ -291,6 +307,7 @@ export default function NovelPage({ onOpenAgentProject }) {
           onSaveVolumes={saveVolumes}
           onStart={() => startStep('start')}
           onRestart={() => startStep('restart')}
+          onExtend={openExtend}
           onStop={stopJob}
           onWriteOne={(title) => startStep('write', title)}
         />
@@ -304,12 +321,28 @@ export default function NovelPage({ onOpenAgentProject }) {
       {panel === 'memory' ? <MemoryCard memory={memory} onChange={saveMemory} /> : null}
 
       <NewNovelModal open={showNew} onClose={() => setShowNew(false)} onCreate={(p) => loadSelected(p.id)} />
+
+      <Modal isOpen={extendOpen} onClose={() => setExtendOpen(false)}>
+        <ModalContent>
+          <ModalHeader>扩写小说</ModalHeader>
+          <ModalBody>
+            <div className="flex flex-col gap-3">
+              <Input label="续写章数（可空）" type="number" min={1} value={extendCount} onChange={(e) => setExtendCount(e.target.value)} placeholder="留空则自动判断" />
+              <Textarea label="剧情方向（可空）" rows={4} value={extendDirection} onChange={(e) => setExtendDirection(e.target.value)} placeholder="例如：主角飞升后进入新世界、遇到更强敌人……" />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setExtendOpen(false)}>取消</Button>
+            <Button color="primary" onPress={submitExtend}>开始扩写</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }
 
 // —— 章节板块（按卷分组，每卷显示本卷卷纲）——
-function ChaptersPanel({ projectId, projectName, projectIdea, chapters, volumes, running, onRefresh, onSaveVolumes, onStart, onRestart, onStop, onWriteOne }) {
+function ChaptersPanel({ projectId, projectName, projectIdea, chapters, volumes, running, onRefresh, onSaveVolumes, onStart, onRestart, onExtend, onStop, onWriteOne }) {
   const toast = useToast();
   const [showPreview, setShowPreview] = useState(false);
   const [editing, setEditing] = useState(null); // { id?, title, novel, volume, outline }
@@ -393,6 +426,9 @@ function ChaptersPanel({ projectId, projectName, projectIdea, chapters, volumes,
           }}
         >
           全部重新生成
+        </Button>
+        <Button size="sm" variant="flat" isDisabled={running} onPress={onExtend} title="沿现有剧情继续延伸后面的剧情">
+          扩写
         </Button>
         <Button
           size="sm"

@@ -15,7 +15,7 @@ import {
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
   runRenderSlot, renderConcurrencyLimit, buildChapterScriptMessages,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, attachScriptsToChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
+import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip, collectSkillReferences } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
@@ -1766,32 +1766,6 @@ test('splitNovelIntoChapters：只认一级章节标题（一、等论文式序�
   const out = splitNovelIntoChapters('一、开场\n第1章\n正文');
   assert.equal(out.length, 1);
   assert.ok(out[0].novel.includes('一、开场'), '一级序号不应被当作章节边界');
-});
-
-// —— 创建项目时导入现成剧本 ——
-
-test('attachScriptsToChapters：空剧本原样返回，单章整段写入', () => {
-  const chapters = [{ title: '第1章', novel: '正文' }];
-  assert.deepEqual(attachScriptsToChapters(chapters, ''), chapters);
-  const out = attachScriptsToChapters(chapters, '剧本全文');
-  assert.equal(out.length, 1);
-  assert.equal(out[0].script, '剧本全文');
-  assert.equal(out[0].novel, '正文');
-});
-
-test('attachScriptsToChapters：多章按「第N章」标题对齐', () => {
-  const chapters = [{ title: '第1章', novel: 'A' }, { title: '第2章', novel: 'B' }];
-  const out = attachScriptsToChapters(chapters, '第1章\n剧本A\n第2章\n剧本B');
-  assert.equal(out[0].script, '剧本A');
-  assert.equal(out[1].script, '剧本B');
-});
-
-test('attachScriptsToChapters：多章但剧本段数不一致时报错', () => {
-  const chapters = [{ title: '第1章', novel: 'A' }, { title: '第2章', novel: 'B' }];
-  assert.throws(
-    () => attachScriptsToChapters(chapters, '第1章\n只有一段剧本'),
-    (e) => e.code === 'BAD_SCRIPT_SPLIT' && /剧本未按章拆分/.test(e.message),
-  );
 });
 
 // —— 剧本生成 / 改写提示词 ——

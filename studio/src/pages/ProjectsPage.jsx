@@ -59,7 +59,8 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
   const [agentProjects, setAgentProjects] = useState([]);
   const [agentLoading, setAgentLoading] = useState(false);
 
-  const [form, setForm] = useState({ name: '', novel: '', scriptMode: 'auto', script: '', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true, enableSubtitles: true });
+  // 一个内容框：自动模式当小说原文，剧本模式当剧本内容
+  const [form, setForm] = useState({ name: '', novel: '', scriptMode: 'auto', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true, enableSubtitles: true });
   const [refs, setRefs] = useState([]);
   // 上传 txt 的解析结果（不在输入框预览全文，创建时优先使用它）
   const novelFileRef = useRef(null);
@@ -221,14 +222,16 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
 
   async function create() {
     if (!form.name.trim() || !(uploadedNovel?.novel || form.novel.trim())) return;
-    if (form.scriptMode === 'own' && !form.script.trim()) return;
     setBusy(true);
     try {
+      const content = uploadedNovel ? uploadedNovel.novel : form.novel;
+      const ownScript = form.scriptMode === 'own';
       const p = await api.post('/api/projects', {
         name: form.name.trim(),
-        novel: uploadedNovel ? uploadedNovel.novel : form.novel,
-        auto_script: form.scriptMode === 'auto',
-        script: form.scriptMode === 'own' ? form.script : '',
+        // 剧本模式：内容即剧本（只建 1 章）；否则内容即小说原文（按章节标题拆章）
+        novel: ownScript ? '' : content,
+        script: ownScript ? content : '',
+        auto_script: !ownScript,
         style: resolveStyle(form.style, form.customStyle),
         video_resolution: form.res,
         video_aspect_ratio: form.ratio,
@@ -274,7 +277,6 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
       name: '',
       novel: '',
       scriptMode: defaults?.autoScript === false ? 'own' : 'auto',
-      script: '',
       style: '',
       customStyle: '',
       res: defaults?.resolution || '480P',
@@ -357,7 +359,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
     toast.success('已重新提交生成任务');
   }
 
-  const canCreate = !!form.name.trim() && !!(uploadedNovel?.novel || form.novel.trim()) && (form.scriptMode === 'auto' || !!form.script.trim());
+  const canCreate = !!form.name.trim() && !!(uploadedNovel?.novel || form.novel.trim());
 
   useEffect(() => {
     let alive = true;
@@ -546,9 +548,26 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
               />
             </Field>
             <Field
-              label="小说原文 / 故事描述"
+              label="剧本"
+              hint={form.scriptMode === 'auto'
+                ? 'Agent 会先从小说写剧本，再按剧本拆分镜；创建后也可在章节「剧本」里修改。'
+                : '剧本模式只创建 1 个章节：整段剧本就是该章内容，不再按小说拆章。'}
+            >
+              <div className="flex flex-wrap gap-1.5">
+                <StyleChip active={form.scriptMode === 'auto'} onClick={() => setForm({ ...form, scriptMode: 'auto' })}>
+                  自动生成剧本
+                </StyleChip>
+                <StyleChip active={form.scriptMode === 'own'} onClick={() => setForm({ ...form, scriptMode: 'own' })}>
+                  我已有剧本
+                </StyleChip>
+              </div>
+            </Field>
+            <Field
+              label={form.scriptMode === 'own' ? '剧本内容' : '小说原文 / 故事描述'}
               required
-              hint="支持粘贴整本小说或一句话描述；上传 txt 会按「第X章」一级标题拆章，无标题时按约 6000 字按段落累计拆章。"
+              hint={form.scriptMode === 'own'
+                ? '整段剧本就是一个章节；可直接粘贴，或上传 txt 剧本文件。'
+                : '支持粘贴整本小说或一句话描述；上传 txt 会按「第X章」一级标题拆章，无标题时按约 6000 字按段落累计拆章。'}
               action={
                 <>
                   <Button size="xs" variant="ghost" loading={novelBusy} onClick={() => novelFileRef.current?.click()}>
@@ -572,7 +591,9 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
                   <div className="min-w-0 flex-1">
                     <p className="m-0 truncate text-[13px] text-[var(--fg)]">{uploadedNovel.name}</p>
                     <p className="m-0 mt-0.5 text-[11.5px] text-[var(--fg-3)]">
-                      {uploadedNovel.chars.toLocaleString()} 字 · 将拆分为 {uploadedNovel.chapterCount} 章 · 取消后可手动粘贴
+                      {uploadedNovel.chars.toLocaleString()} 字
+                      {form.scriptMode === 'own' ? '' : ' · 将拆分为 ' + uploadedNovel.chapterCount + ' 章'}
+                      {' · 取消后可手动粘贴'}
                     </p>
                   </div>
                   <Button size="xs" variant="ghost" onClick={() => novelFileRef.current?.click()} disabled={novelBusy}>
@@ -587,37 +608,11 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
                   rows={10}
                   value={form.novel}
                   onChange={(e) => setForm({ ...form, novel: e.target.value })}
-                  placeholder="粘贴小说原文，或写一句话描述你想拍的故事…"
+                  placeholder={form.scriptMode === 'own' ? '粘贴现成剧本…' : '粘贴小说原文，或写一句话描述你想拍的故事…'}
                   className="min-h-[190px]"
                 />
               )}
             </Field>
-            <Field
-              label="剧本"
-              hint={form.scriptMode === 'auto'
-                ? 'Agent 会先从小说写剧本，再按剧本拆分镜；创建后也可在章节「剧本」里修改。'
-                : '多章请用「第N章」标题分隔，并与小说章节一一对应；单章可直接粘贴整段剧本。'}
-            >
-              <div className="flex flex-wrap gap-1.5">
-                <StyleChip active={form.scriptMode === 'auto'} onClick={() => setForm({ ...form, scriptMode: 'auto' })}>
-                  自动生成剧本
-                </StyleChip>
-                <StyleChip active={form.scriptMode === 'own'} onClick={() => setForm({ ...form, scriptMode: 'own' })}>
-                  我已有剧本
-                </StyleChip>
-              </div>
-            </Field>
-            {form.scriptMode === 'own' ? (
-              <Field label="剧本内容" required hint={form.script ? form.script.length.toLocaleString() + ' 字' : undefined}>
-                <Textarea
-                  rows={8}
-                  value={form.script}
-                  onChange={(e) => setForm({ ...form, script: e.target.value })}
-                  placeholder="粘贴现成剧本…"
-                  className="min-h-[150px]"
-                />
-              </Field>
-            ) : null}
             <p className="m-0 text-[10.5px] leading-relaxed text-[var(--fg-4)]">
             </p>
           </FormSection>

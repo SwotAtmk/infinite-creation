@@ -305,7 +305,7 @@ test('getSpecForKind: 可按 hardware.mode 选规格（amd → GGUF）', () => {
   assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 't2i').id, 'qwen_image_2_1_t2i_gguf');
   assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'i2i').id, 'qwen_image_2_1_i2i_gguf');
   assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'r2v').id, 'minimax_h3_r2v_gguf');
-  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'tts').id, 'qwen3_tts_voice_design_gguf');
+  assert.equal(getSpecForKind({ hardware: { mode: 'amd' } }, 'tts').id, 'qwen3_tts_voice_design');
   assert.equal(getSpecForKind({ hardware: { mode: 'nvidia' } }, 't2i').id, 'krea2_hyperreal_t2i');
 });
 
@@ -395,9 +395,14 @@ test('工作流规格自检: roles/outputs 指向的节点必须在 sourceFile �
 test('presetModeOf/isPresetWorkflows: 缺后加的 music 键的老配置仍算预设（AMD 不会被误判成 NVIDIA）', () => {
   // 实测踩坑：music 键加入预设后，老配置（只有 t2i/i2i/r2v/tts）被判为「自定义映射」，
   // 模式推断退化成 nvidia → AMD 专属保护（preflight 的 CK 缺陷与显存余量）静默失效。
-  const legacyAmd = { t2i: 'qwen_image_2_1_t2i_gguf', i2i: 'qwen_image_2_1_i2i_gguf', r2v: 'minimax_h3_r2v_gguf', tts: 'qwen3_tts_voice_design_gguf' };
+  const legacyAmd = { t2i: 'qwen_image_2_1_t2i_gguf', i2i: 'qwen_image_2_1_i2i_gguf', r2v: 'minimax_h3_r2v_gguf', tts: 'qwen3_tts_voice_design' };
   assert.equal(isPresetWorkflows(legacyAmd), true, '缺 music 键仍应认成 AMD 预设');
   assert.equal(presetModeOf(legacyAmd), 'amd');
+  // 换过 id 的键（如老配置的 tts 指向 gguf 版）：模式推断仍要认成 AMD，
+  // 但不算「纯预设」，免得用户显式选的工作流被预设改回去
+  const legacyIds = { ...legacyAmd, tts: 'qwen3_tts_voice_design_gguf' };
+  assert.equal(presetModeOf(legacyIds), 'amd');
+  assert.equal(isPresetWorkflows(legacyIds), false);
   const resolved = resolveHardwareConfig({ workflows: legacyAmd });
   assert.equal(resolved.hardware.mode, 'amd');
   assert.equal(resolved.workflows.music, HW_PRESETS.amd.music, '缺的 music 由预设补齐');

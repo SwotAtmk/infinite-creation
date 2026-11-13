@@ -30,6 +30,14 @@ export default function MaterialPicker({ projectId, assets, category, mode, repl
     return true;
   });
   const disabledIds = (assignedIds || []).filter((id) => id !== replaceAssetId);
+  // 同一角色在一个分镜里只允许绑一件服装/年龄变体：该角色已有变体在本镜时，同角色的其它
+  // 变体必须禁选——否则界面上同一个角色会出现两张图，写库时多余的那件也会被丢掉。
+  const usedVariantParents = new Set(
+    (assets || [])
+      .filter((a) => isVariant && a.category === category && a.id !== replaceAssetId && (assignedIds || []).includes(a.id))
+      .map((a) => a.parent_id)
+      .filter(Boolean),
+  );
 
   async function upload(file) {
     const name = await toast.prompt('新素材名称', {
@@ -105,7 +113,7 @@ export default function MaterialPicker({ projectId, assets, category, mode, repl
         {list.length ? (
           <div className="grid max-h-[380px] grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-3 overflow-y-auto pr-1">
             {list.map((a) => {
-              const disabled = disabledIds.includes(a.id);
+              const disabled = disabledIds.includes(a.id) || (isVariant && usedVariantParents.has(a.parent_id));
               const pick = () => !disabled && !busy && onPick(a.id);
               return (
                 <button
@@ -113,7 +121,7 @@ export default function MaterialPicker({ projectId, assets, category, mode, repl
                   type="button"
                   disabled={disabled || busy}
                   onClick={pick}
-                  title={disabled ? '已在该分镜中使用' : '点击选择'}
+                  title={disabled ? (isVariant && usedVariantParents.has(a.parent_id) ? '该角色在本镜已有一件服装/年龄变体' : '已在该分镜中使用') : '点击选择'}
                   className={clsx(
                     'group flex flex-col gap-1.5 rounded-xl border p-1.5 text-left transition-all duration-150',
                     disabled

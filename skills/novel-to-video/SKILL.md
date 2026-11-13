@@ -21,13 +21,13 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 
 ### 1. 只处理目标章节（targetChapter）
 - 本次生成目标由 seed 里的 targetChapter 指定：若为具体章节，**只处理这一章**，其它章节一律不要碰（不要规划/改写/删除其分镜）；若为空则为「全部章节」。
-- 用 get_project / list_chapters 读取章节与全局资产；只对目标章读 novel → 产出该章大纲 JSON：title、logline、characters[{name,appearance,voice,outfits:[{name,description}]}]、scenes[{name,description}]、props[{name,description}]、storyboard[]。其中每个角色的 outfits 是该角色的「衣橱」——根据剧情为该角色设计的**多套服装**（每套短名 name + 外观描述 description，如「进城旧衣」「沐浴后家居服」「金缕阁新衣」），而非一套。
+- 用 get_project / list_chapters 读取章节与全局资产；只对目标章读 novel → 产出该章大纲 JSON：title、logline、characters[{name,appearance,voice,outfits:[{name,description}]}]、scenes[{name,description}]、props[{name,description}]、storyboard[]。outfits 只在该角色「确有换装事件」时才填（沐浴/更衣/换上新衣、时间跳跃后换装），且只填剧情真正需要的那套（短名 name + 外观描述 description）；没有换装事件的角色 outfits 留空——不同场景/不同镜头/不同机位都不算换装，不要按场景给同一角色配多套服装（避免素材冗余）。
 - characters/scenes/props 若全局资产库已存在同名资产（get_project.assets 有该 name 且 image_path 存在）→ 直接复用；只新建本章新增/换装/新场景/新道具。
-- **换装走服装资产（铁律）**：同一角色在任一「换装事件」后都要换服装——包括不同章节/场景需要不同服装，以及同一场景内沐浴/洗澡/更衣/换衣/换装/换上(新)衣（洗澡后理应换干净衣服）。用 change_outfit(character_id=角色资产id, outfit=服装描述) 生成服装资产（category=costume，parent_id 指向角色），并在「换装事件之后」的镜头用 set_storyboard 的 costumes 字段引用；换装事件之前的镜头继续用角色原图或旧服装，不引用则该镜不受影响。系统会在 set_storyboard 时自动识别换装事件兜底，但你应主动生成并引用。
+- **换装走服装资产（铁律）**：仅当剧情出现真实换装事件（沐浴/洗澡/更衣/换衣/换装/换上(新)衣，洗澡后理应换干净衣服）时，才用 change_outfit(character_id=角色资产id, outfit=服装描述) 生成服装资产（category=costume，parent_id 指向角色），并在「换装事件之后」的镜头用 set_storyboard 的 costumes 字段引用；换装事件之前的镜头继续用角色原图或旧服装，不引用则该镜不受影响。**不同场景/章节/机位不算换装，不要因此生成服装**；同一个角色在一个分镜里只引用一件服装。系统会在 set_storyboard 时自动识别换装事件兜底，但你应主动生成并引用。
 - 把大纲写入项目 context（bible.md / style.md 骨架）。
 
 ### 2. 一致性锚点
-- bible.md：每个角色唯一外貌/配色/声音特征（一句话可复用描述）；并写出该角色的「衣橱」——多套服装清单（每套短名 + 外观描述），不要写死为唯一一套；这些服装后续都会生成服装资产供分镜引用。另为每个场景建立「场景站位表」（空间锚点 + 各角色默认方位 + 道具锚点 + 180度轴线与允许机位），随 bible 一并写出，作为跨镜站位一致性的锚点。
+- bible.md：每个角色唯一外貌/配色/声音特征（一句话可复用描述）；默认只写该角色的一套日常着装，只有剧情出现换装事件时，才补记新一套（短名 + 外观描述）并生成对应服装资产——没有换装事件就不要列多套服装。另为每个场景建立「场景站位表」（空间锚点 + 各角色默认方位 + 道具锚点 + 180度轴线与允许机位），随 bible 一并写出，作为跨镜站位一致性的锚点。
 - style.md：统一画风/光线/色调/镜头语言，后续所有生图与视频提示词强制引用。
 
 ### 3. 资产生成（技能驱动：先加载技能写参数，再统一提交）
@@ -39,7 +39,8 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 - **导入素材绑定分镜**：若首条消息附带了「导入素材库」的图（带 asset_id），先分析每张图适合出现在哪个分镜（人物→characters、场景→scenes、道具→props），再在 set_storyboard 里按名字绑定到对应分镜，禁止忽略或为同一主体重复生成同义资产。
 - **音色参数**：对每个角色，按 tts-voice-design 写出 text（**20~30 字左右的简短自我介绍，约 5 秒，禁止长篇大论**）与 voice_description（**音色描述，不限制字数，可详细写**），连续调用 design_voice(asset_id, text, voice_description) 生成音色样本（落盘 voice_ref）。
 - **再统一提交图片**：generate_assets_batch 会用已写入的 prompt 连续文生图全部图片资产（人物 16:9 三视图、场景 16:9 环境图、道具 1:1 白底图），已生成成功的自动跳过（幂等），失败的标记并继续。
-- **生成衣橱（多套服装）**：人物 canonical 图生成完成后，对每个角色调用 design_outfits(character_id, outfits) 一次性生成该角色衣橱里的全部服装资产（图生图，保持脸/发型/画风一致）；每套服装成为 category=costume、parent_id 指向该角色的资产，素材库会按角色展示这些服装。
+- **生成换装服装（仅确有换装事件时）**：人物 canonical 图生成完成后，只对大纲里确实发生换装事件的角色调用 design_outfits(character_id, outfits) 生成对应那一套（图生图，保持脸/发型/画风一致）；每套服装成为 category=costume、parent_id 指向该角色的资产。没有换装事件的角色跳过（直接用 canonical 图，避免素材冗余）。
+- **年龄变体（仅时间跳跃时）**：只有剧情明确出现回忆/闪回、多年前、多年后等时间跳跃时，才用 change_age 生成对应时期；「年轻/少年」这类普通外貌描写不算。同一角色同一时期只需要一个变体，每个分镜最多引用一个。
 - 批量后若仍有失败，针对性重试；音色设计失败可跳过（视频仍可无配音生成），但应优先尝试设计而非直接放弃。
 
 ### 4. 分镜脚本（完整覆盖 · 长镜头聚合，不拆碎）—— 先加载 story-pipeline-cn 再拆分
@@ -55,7 +56,7 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
   5. **多人对话拆镜**：**同一分镜最多 2 个说话人**；一场戏若必须有 ≥3 人轮流开口对话，拆成多个分镜，使每个分镜 ≤2 个说话人（参考音频只随说话人走，避免单分镜参考音频超限）。
 - Prompt 七段式：画风 + 场景 + 主体 + 动作/状态 + 镜头语言 + 光线/氛围 + 质量；video_prompt 只写「镜头运动 + 角色动作」（不重复外貌），image_prompt 静态。中文场景头，**image/video prompt 用英文**，且**画面中不得出现任何文字/字幕/水印/logo**。**角色动作要「情绪驱动 + 肢体细节 + 有力度变化」**：禁止只写 stands/sits/walks 这类被动静止动词，要写动作的力度、速度、身体语言（握拳 / 拍桌 / 来回踱步 / 猛地倾身 / 一把夺过 / 踉跄后退…），且动作要与该句对白情绪一致——动作是情绪的外化，不是走位。
 - **台词情绪/语速只进 video_prompt，不进 dialogue**：中文台词（dialogue）本身保持口语化、干净，**不写进括号式的情绪/语速标注**（以免污染字幕、干扰说话人解析），只用标点（叹号 / 问号 / 省略号 / 短句停顿）体现节奏与情绪；到步骤 5 写英文 video_prompt 时，再为每句对白补齐「说话状态（情绪 + 语速 + 语气）」。
-- **映射到 set_storyboard（我们系统镜头）**：每个主镜头 = 一条 set_storyboard（chapter=该章 title）——idx=章节内镜头序号；scene_name=场景头；character_ids=该镜角色（角色名→资产id）；scene_ids=该镜场景资产；costumes=该镜各角色此刻所穿的服装（服装短名→服装资产id，从该角色衣橱里按剧情选对应那套）；camera=运镜；dialogue=该镜全部对白（多句合并）；duration=按内容节奏 2–15s（短台词给 2–4s，禁止为凑时长拖长）；sub_shots=上述子分镜时间轴（首尾相接）。**video_prompt 不在这一步写**，留到步骤 5 加载 h3-prompt-writing 后逐镜写入。
+- **映射到 set_storyboard（我们系统镜头）**：每个主镜头 = 一条 set_storyboard（chapter=该章 title）——idx=章节内镜头序号；scene_name=场景头；character_ids=该镜角色（角色名→资产id）；scene_ids=该镜场景资产；costumes=该镜各角色此刻所穿的服装（仅当该角色处于换装事件之后时填一件服装短名→服装资产id；没有换装就不填，同一角色最多一件）；camera=运镜；dialogue=该镜全部对白（多句合并）；duration=按内容节奏 2–15s（短台词给 2–4s，禁止为凑时长拖长）；sub_shots=上述子分镜时间轴（首尾相接）。**video_prompt 不在这一步写**，留到步骤 5 加载 h3-prompt-writing 后逐镜写入。
 - **写入前自检覆盖度**：用 get_project 看本章已有镜头，确认每个【场景】、每段连续对白/关键节拍都被某个主镜头覆盖；漏则补。**不得因「够了/时间久」删减剧情，也不得拆碎成一句一镜。**
 - 用 set_storyboard 一次性写入本章全部镜头；续章用更高 idx + chapter 追加，绝不覆写旧章已 done 镜头。
 
@@ -81,7 +82,7 @@ description: 把小说或故事全自动改编为带语音的短视频/漫剧成
 2. **append 分镜**：set_storyboard 按 idx upsert（非破坏，已生成镜头保留 video/status）。新章节镜头用更高 idx 并带 chapter（如 "第2章"）归类，不要动旧章节镜头。
 3. **按章刷新素材**（灵活编排）：
    - 新场景：为本章新建 scene 资产（create_asset + generate_asset_image），只在本章分镜引用。
-   - 人物换装/变体：用 change_outfit(character_id, outfit) 生成服装资产（如「小明-冬装」「小明-沐浴后干净衣裳」），本章分镜用 costumes 字段引用该服装资产；旧章节/旧镜头不引用则不变。同一场景内沐浴/更衣后换装同理，换装事件之后的镜头引用新服装资产。
+   - 人物换装/变体：仅当本章确有换装事件时，才用 change_outfit(character_id, outfit) 生成服装资产（如「小明-沐浴后干净衣裳」），本章分镜用 costumes 字段引用该服装资产（同一角色每镜最多一件）；旧章节/旧镜头不引用则不变。不同场景不算换装，不要为此生成服装。
    - 新道具：为本章新建 prop 资产并生成白底道具图。
    - 新建资产前先查是否已存在（幂等），避免重复。
 4. **语音**：仅有真实本地音色文件才登记 voice_ref；新章节如需不同音色（如新增角色声音），另建 voice 资产或换音色文件。

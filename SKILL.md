@@ -78,8 +78,8 @@ curl http://127.0.0.1:4610/api/health # 期望 {"ok":true}
 分步约定（与 `skills/novel-to-video/SKILL.md` 一致）：
 
 1. **剧本/大纲**：输入小说或想法 → 产出 title/logline/characters/scenes/props/storyboard 大纲 JSON。
-2. **一致性锚点**：`bible.md`（每个角色唯一外貌/配色/声音 + 衣橱）+ `style.md`（统一画风/光线/色调/镜头语言）。
-3. **资产生成**：先加载 `image-prompt-writing` 写图片提示词、`tts-voice-design` 写音色参数，再统一批量提交（文生图人物/场景/道具，图生图换装/年龄变体，TTS 音色）。
+2. **一致性锚点**：`bible.md`（每个角色唯一外貌/配色/声音；默认一套着装，仅换装事件后补记新一套）+ `style.md`（统一画风/光线/色调/镜头语言）。
+3. **资产生成**：先加载 `image-prompt-writing` 写图片提示词、`tts-voice-design` 写音色参数，再统一批量提交（文生图人物/场景/道具；仅确有换装事件/时间跳跃时才生成服装/年龄变体，避免冗余素材；TTS 音色）。
 4. **分镜脚本**：加载 `story-pipeline-cn` 按「长镜头聚合」拆分（同一场景连续动作+多句对白合并，禁止一句一镜），字段含景别/运镜/光线/画面/对白/sub_shots 时间轴。
 5. **视频提示词**：加载 `h3-prompt-writing`，逐镜写 `__MINIMAX_H3_REF_N__` 参考标签 + 英文平铺提示词，再整章批量生成。
 6. **自审重试**：逐镜自审、失败重试。

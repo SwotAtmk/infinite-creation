@@ -7,23 +7,7 @@
     },
     "class_type": "ResolutionSelector",
     "_meta": {
-      "title": "分辨率选择器"
-    }
-  },
-  "461": {
-    "inputs": {
-      "filename_prefix": "Qwen_image_2.1",
-      "format": "png",
-      "format.bit_depth": "8-bit",
-      "format.input_color_space": "sRGB",
-      "images": [
-        "459:457",
-        0
-      ]
-    },
-    "class_type": "SaveImageAdvanced",
-    "_meta": {
-      "title": "保存图像（高级）"
+      "title": "Resolution Selector"
     }
   },
   "459:451": {
@@ -32,7 +16,7 @@
     },
     "class_type": "UnetLoaderGGUF",
     "_meta": {
-      "title": "UNET Loader (GGUF) ⚡"
+      "title": "UnetLoaderGGUF"
     }
   },
   "459:452": {
@@ -61,7 +45,7 @@
     },
     "class_type": "CLIPLoader",
     "_meta": {
-      "title": "加载CLIP"
+      "title": "CLIPLoader"
     }
   },
   "459:454": {
@@ -70,7 +54,7 @@
     },
     "class_type": "VAELoader",
     "_meta": {
-      "title": "加载VAE"
+      "title": "VAELoader"
     }
   },
   "459:456": {
@@ -87,7 +71,7 @@
     },
     "class_type": "EmptyLatentImage",
     "_meta": {
-      "title": "空Latent图像"
+      "title": "EmptyLatentImage"
     }
   },
   "459:457": {
@@ -103,7 +87,7 @@
     },
     "class_type": "VAEDecode",
     "_meta": {
-      "title": "VAE解码"
+      "title": "VAEDecode"
     }
   },
   "459:458": {
@@ -133,7 +117,7 @@
     },
     "class_type": "KSampler",
     "_meta": {
-      "title": "K采样器"
+      "title": "KSampler"
     }
   },
   "459:471": {
@@ -162,7 +146,7 @@
     },
     "class_type": "TextGenerate",
     "_meta": {
-      "title": "TextGenerate"
+      "title": "Generate Text (DEPRECATED)"
     }
   },
   "459:472": {
@@ -174,7 +158,7 @@
     },
     "class_type": "PreviewAny",
     "_meta": {
-      "title": "预览任意"
+      "title": "PreviewAny"
     }
   },
   "459:473": {
@@ -185,7 +169,7 @@
     },
     "class_type": "CLIPLoader",
     "_meta": {
-      "title": "加载CLIP"
+      "title": "CLIPLoader"
     }
   },
   "459:474": {
@@ -199,7 +183,7 @@
     },
     "class_type": "ComfySwitchNode",
     "_meta": {
-      "title": "切换"
+      "title": "If/Else Switch"
     }
   },
   "459:475": {
@@ -236,7 +220,23 @@
     },
     "class_type": "ModelSamplingAuraFlow",
     "_meta": {
-      "title": "采样算法（AuraFlow）"
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "461": {
+    "inputs": {
+      "filename_prefix": "Qwen_image_2.1",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "459:457",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
     }
   }
 }

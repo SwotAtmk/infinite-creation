@@ -1,67 +1,11 @@
 {
-  "461": {
-    "inputs": {
-      "filename_prefix": "Qwen_image_2.1",
-      "format": "png",
-      "format.bit_depth": "8-bit",
-      "format.input_color_space": "sRGB",
-      "images": [
-        "459:457",
-        0
-      ]
-    },
-    "class_type": "SaveImageAdvanced",
-    "_meta": {
-      "title": "保存图像（高级）"
-    }
-  },
-  "470": {
-    "inputs": {
-      "image": "portrait_model_denim.png"
-    },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "加载图像"
-    }
-  },
-  "472": {
-    "inputs": {
-      "compare_view": {
-        "__value__": [
-          "",
-          ""
-        ]
-      },
-      "image_a": [
-        "470",
-        0
-      ],
-      "image_b": [
-        "461",
-        0
-      ]
-    },
-    "class_type": "ImageCompare",
-    "_meta": {
-      "title": "图像对比"
-    }
-  },
-  "475": {
-    "inputs": {
-      "image": "clothing_light_blue_denim_shirt.png"
-    },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "加载图像"
-    }
-  },
   "459:451": {
     "inputs": {
-      "unet_name": "qwen-image-2.1-UC-Q8_0.gguf"
+      "unet_name": "qwen-image-2.1-UC-Q4_K_M.gguf"
     },
     "class_type": "UnetLoaderGGUF",
     "_meta": {
-      "title": "UNET Loader (GGUF) ⚡"
+      "title": "UnetLoaderGGUF"
     }
   },
   "459:453": {
@@ -72,7 +16,7 @@
     },
     "class_type": "CLIPLoader",
     "_meta": {
-      "title": "加载CLIP"
+      "title": "CLIPLoader"
     }
   },
   "459:454": {
@@ -81,7 +25,7 @@
     },
     "class_type": "VAELoader",
     "_meta": {
-      "title": "加载VAE"
+      "title": "VAELoader"
     }
   },
   "459:456": {
@@ -92,7 +36,7 @@
     },
     "class_type": "EmptyLatentImage",
     "_meta": {
-      "title": "空Latent图像"
+      "title": "EmptyLatentImage"
     }
   },
   "459:457": {
@@ -108,7 +52,7 @@
     },
     "class_type": "VAEDecode",
     "_meta": {
-      "title": "VAE解码"
+      "title": "VAEDecode"
     }
   },
   "459:458": {
@@ -138,7 +82,7 @@
     },
     "class_type": "KSampler",
     "_meta": {
-      "title": "K采样器"
+      "title": "KSampler"
     }
   },
   "459:468": {
@@ -155,7 +99,7 @@
     },
     "class_type": "ComfySwitchNode",
     "_meta": {
-      "title": "切换"
+      "title": "If/Else Switch"
     }
   },
   "459:469": {
@@ -210,7 +154,7 @@
     },
     "class_type": "CLIPLoader",
     "_meta": {
-      "title": "加载CLIP"
+      "title": "CLIPLoader"
     }
   },
   "459:479": {
@@ -231,7 +175,7 @@
     },
     "class_type": "PreviewAny",
     "_meta": {
-      "title": "预览任意"
+      "title": "PreviewAny"
     }
   },
   "459:484": {
@@ -245,7 +189,7 @@
     },
     "class_type": "ComfySwitchNode",
     "_meta": {
-      "title": "切换"
+      "title": "If/Else Switch"
     }
   },
   "459:485": {
@@ -261,7 +205,7 @@
     },
     "class_type": "BatchImagesNode",
     "_meta": {
-      "title": "批量图像"
+      "title": "Batch Images"
     }
   },
   "459:495": {
@@ -301,7 +245,7 @@
     },
     "class_type": "TextGenerate",
     "_meta": {
-      "title": "TextGenerate"
+      "title": "Generate Text (DEPRECATED)"
     }
   },
   "459:501": {
@@ -315,7 +259,58 @@
     },
     "class_type": "ModelSamplingAuraFlow",
     "_meta": {
-      "title": "采样算法（AuraFlow）"
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "461": {
+    "inputs": {
+      "filename_prefix": "Qwen_image_2.1",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "459:457",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  },
+  "470": {
+    "inputs": {
+      "image": "portrait_model_denim.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "LoadImage"
+    }
+  },
+  "472": {
+    "inputs": {
+      "compare_view": "auto",
+      "image_a": [
+        "470",
+        0
+      ],
+      "image_b": [
+        "461",
+        0
+      ]
+    },
+    "class_type": "ImageCompare",
+    "_meta": {
+      "title": "Compare Images"
+    }
+  },
+  "475": {
+    "inputs": {
+      "image": "clothing_light_blue_denim_shirt.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "LoadImage"
     }
   }
 }

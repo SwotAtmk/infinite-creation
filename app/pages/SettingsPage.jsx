@@ -275,36 +275,26 @@ export default function SettingsPage({ onBack }) {
                       </RadioGroup>
                       <p className="muted" style={{ marginTop: 4 }}>只影响各阶段实际提交给 ComfyUI 的工作流；默认英伟达原版。AMD 模式下额外启用显存释放与分阶段运行的显存/CK 拦截。</p>
 
-                      {hwMode === 'nvidia' && (
-                        <div className="muted" style={{ margin: '8px 0 0' }}>
-                          <div className="row" style={{ gap: 8, alignItems: 'center', margin: '4px 0' }}>
-                            <span style={{ flex: 'none' }}>文生图</span>
-                            <Select size="sm" className="flex-1 min-w-0" aria-label="文生图工作流" selectedKeys={selectKeys(cfg.workflows.t2i)} onSelectionChange={(k) => setCfg({ ...cfg, workflows: { ...cfg.workflows, t2i: pickKey(k) } })}>
-                              {workflows.filter((w) => w.kind === 't2i' && w.spec?.hw === 'nvidia').map((w) => (
-                                <SelectItem key={w.spec.id}>{w.name}</SelectItem>
-                              ))}
-                            </Select>
-                          </div>
-                          <div className="row" style={{ gap: 8, alignItems: 'center', margin: '4px 0' }}>
-                            <span style={{ flex: 'none' }}>图生图</span>
-                            <Select size="sm" className="flex-1 min-w-0" aria-label="图生图工作流" selectedKeys={selectKeys(cfg.workflows.i2i)} onSelectionChange={(k) => setCfg({ ...cfg, workflows: { ...cfg.workflows, i2i: pickKey(k) } })}>
-                              {workflows.filter((w) => w.kind === 'i2i' && w.spec?.hw === 'nvidia').map((w) => (
-                                <SelectItem key={w.spec.id}>{w.name}</SelectItem>
-                              ))}
-                            </Select>
-                          </div>
-                          <div style={{ margin: '4px 0' }}>分镜视频：{cfg.workflows.r2v}</div>
-                          <div style={{ margin: '4px 0' }}>音色设计：{cfg.workflows.tts}</div>
+                      <div className="muted" style={{ margin: '8px 0 0' }}>
+                        <div className="row" style={{ gap: 8, alignItems: 'center', margin: '4px 0' }}>
+                          <span style={{ flex: 'none' }}>文生图</span>
+                          <Select size="sm" className="flex-1 min-w-0" aria-label="文生图工作流" selectedKeys={selectKeys(cfg.workflows.t2i)} onSelectionChange={(k) => setCfg({ ...cfg, workflows: { ...cfg.workflows, t2i: pickKey(k) } })}>
+                            {workflows.filter((w) => w.kind === 't2i' && w.spec?.hw === hwMode).map((w) => (
+                              <SelectItem key={w.spec.id}>{w.name}</SelectItem>
+                            ))}
+                          </Select>
                         </div>
-                      )}
-                      {hwMode === 'amd' && (
-                        <ul className="muted" style={{ margin: '4px 0 0', paddingLeft: 20 }}>
-                          <li>文生图：{cfg.workflows.t2i}</li>
-                          <li>图生图：{cfg.workflows.i2i}</li>
-                          <li>分镜视频：{cfg.workflows.r2v}</li>
-                          <li>音色设计：{cfg.workflows.tts}</li>
-                        </ul>
-                      )}
+                        <div className="row" style={{ gap: 8, alignItems: 'center', margin: '4px 0' }}>
+                          <span style={{ flex: 'none' }}>图生图</span>
+                          <Select size="sm" className="flex-1 min-w-0" aria-label="图生图工作流" selectedKeys={selectKeys(cfg.workflows.i2i)} onSelectionChange={(k) => setCfg({ ...cfg, workflows: { ...cfg.workflows, i2i: pickKey(k) } })}>
+                            {workflows.filter((w) => w.kind === 'i2i' && w.spec?.hw === hwMode).map((w) => (
+                              <SelectItem key={w.spec.id}>{w.name}</SelectItem>
+                            ))}
+                          </Select>
+                        </div>
+                        <div style={{ margin: '4px 0' }}>分镜视频：{cfg.workflows.r2v}{hwMode === 'amd' ? '（文生/图生/首尾帧/全能参考按模式自动选用）' : ''}</div>
+                        <div style={{ margin: '4px 0' }}>音色设计：{cfg.workflows.tts}</div>
+                      </div>
 
                       {hwMode === 'amd' && (
                         <>

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import AdmZip from 'adm-zip';
 import {
-  analyzeWorkflow, buildWorkflow, getDefaultSpecById, getSpecForKind,
+  analyzeWorkflow, buildWorkflow, getDefaultSpecById, getSpecForKind, getR2vSpecForResolution,
   fallbackVideoPrompt, validateSubShots,
   dialogueSpeakerNames, MAX_SPEAKERS_PER_SHOT, MAX_AUDIO_REFS,
   extractJson, slugify, imageToDataUrl, buildVisionUserMessage, imageUrlParts, buildVisionContentBlocks, llmEndpoint, openaiCompatBaseUrl,
@@ -15,7 +15,7 @@ import {
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
   runRenderSlot, renderConcurrencyLimit, buildChapterScriptMessages,
 } from '../lib/core/index.js';
-import { ratioToSize, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
+import { ratioToSize, videoSizeFor, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip, collectSkillReferences } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
@@ -35,8 +35,12 @@ function load(name) { return JSON.parse(fs.readFileSync(path.join(WF, name), 'ut
 // 已经写得很详细时是负面的：改写器会重写并损失细节。四个规格默认全部关闭，上游模板更新后靠这条守住。
 test('Qwen-Image 2.1 工作流默认关闭提示词改写三开关', () => {
   const files = [
-    'qwen_image_2_1_t2i-Q8_0_gguf.json',
-    'qwen_image_2_1_image_edit-Q8_0_gguf.json',
+    'qwen_image_2_1_t2i-Q8_0_gguf_api.json',
+    'qwen_image_2_1_image_edit-Q8_0_gguf_api.json',
+    'qwen_image_2_1_t2i_gguf_api.json',
+    'qwen_image_2_1_image_edit_gguf_api.json',
+    'qwen_image_2_1_background_removal_gguf_api.json',
+    'qwen_image_2_1_background_removal-Q8_0_gguf_api.json',
     'image_qwen_image_2_1_t2i_api.json',
     'image_qwen_image_2_1_image_edit_api.json',
   ];
@@ -159,17 +163,21 @@ test('GGUF r2v: Autogrow 媒体槽按类型各自从 0 编号，标签值翻译�
       { type: 'image', filename: 'c.png' },
     ],
   });
-  const inputs = wf['145'].inputs;
-  assert.equal(wf['145'].inputs.prompt, 'P');
-  assert.equal(wf['135'].inputs.value, 6, '时长注入 PrimitiveFloat，保留 17k+5 帧对齐表达式');
+  const inputs = wf['5'].inputs;
+  assert.equal(inputs.prompt, 'P');
+  // 6s × 24 fps = 144 帧 → 对齐到 17n+5 的 158 帧（旧工作流 134 的表达式同值）
+  assert.equal(inputs.length, 158, '时长按 24 fps / 17n+5 换成帧数');
   assert.equal(wf['115'].inputs.aspect_ratio, '16:9 (Widescreen)');
   assert.equal(wf['115'].inputs.megapixels, 0.5);
-  assert.deepEqual(inputs['ref_images.ref_image_0'], ['149', 0]);
-  assert.deepEqual(inputs['ref_images.ref_image_1'], ['1002', 0]);
-  assert.deepEqual(inputs['ref_audios.ref_audio_0'], ['153', 0]);
-  assert.equal(wf['149'].inputs.image, 'a.png');
-  assert.equal(wf['153'].inputs.audio, 'b.flac');
-  assert.equal(wf['131'].inputs.noise_seed, 1);
+  assert.deepEqual(inputs.width, ['115', 0], '宽高由 ResolutionSelector 喂');
+  assert.deepEqual(inputs.height, ['115', 1]);
+  assert.deepEqual(inputs['ref_images.ref_image_0'], ['20', 0]);
+  assert.deepEqual(inputs['ref_images.ref_image_1'], ['21', 0]);
+  assert.deepEqual(inputs['ref_audios.ref_audio_0'], ['1001', 0]);
+  assert.equal(wf['20'].inputs.image, 'a.png');
+  assert.equal(wf['21'].inputs.image, 'c.png');
+  assert.equal(wf['1001'].inputs.audio, 'b.flac');
+  assert.equal(wf['8'].inputs.noise_seed, 1);
   const g = graphIssues(wf, ['SaveVideo']);
   assert.deepEqual(g.dangling, []);
   assert.ok(!g.orphans.length, '未用的视频占位节点应被剪掉');
@@ -178,10 +186,76 @@ test('GGUF r2v: Autogrow 媒体槽按类型各自从 0 编号，标签值翻译�
 test('GGUF r2v: 未绑定音频时不留悬空的音频槽', () => {
   const spec = getDefaultSpecById('minimax_h3_r2v_gguf');
   const wf = buildWorkflow(spec, { positive_prompt: 'P', references: [{ type: 'image', filename: 'a.png' }] });
-  const inputs = wf['145'].inputs;
+  const inputs = wf['5'].inputs;
   assert.ok(!Object.keys(inputs).some((k) => k.startsWith('ref_audios.')), '音频槽应被清空');
-  assert.ok(!wf['153'], '未使用的 LoadAudio 占位应被删');
+  assert.ok(!wf['21'], '未使用的第二张占位参考图应被删');
   assert.deepEqual(graphIssues(wf, ['SaveVideo']).dangling, []);
+});
+
+test('GGUF r2v: 视频参考经 GetVideoComponents 拆成帧与音轨（ref_videos 要 IMAGE）', () => {
+  const spec = getDefaultSpecById('minimax_h3_r2v_gguf');
+  const wf = buildWorkflow(spec, { positive_prompt: 'P', references: [{ type: 'video', filename: 'v.mp4' }] });
+  const inputs = wf['5'].inputs;
+  const video = Object.entries(wf).find(([, n]) => n.class_type === 'LoadVideo');
+  const bridge = Object.entries(wf).find(([, n]) => n.class_type === 'GetVideoComponents');
+  assert.equal(video[1].inputs.file, 'v.mp4');
+  assert.deepEqual(bridge[1].inputs.video, [video[0], 0]);
+  assert.deepEqual(inputs['ref_videos.ref_video_0'], [bridge[0], 0], '帧序列接 images 输出');
+  assert.deepEqual(inputs['ref_video_audios.ref_video_audio_0'], [bridge[0], 1], '音轨接同一节点的 audio 输出');
+  assert.deepEqual(graphIssues(wf, ['SaveVideo']).dangling, []);
+});
+
+test('GGUF 视频: 按模式与图片数选规格（文生/图生/首尾帧/参考）', () => {
+  const amd = { hardware: { mode: 'amd' }, workflows: { ...SHARED_HW_PRESETS.amd } };
+  const idOf = (mode, images) => getR2vSpecForResolution(amd, '480P', mode, images).spec.id;
+  assert.equal(idOf('text', 0), 'minimax_h3_t2v_gguf');
+  assert.equal(idOf('image', 0), 'minimax_h3_t2v_gguf', '无媒体被推断成 image，实际应走文生');
+  assert.equal(idOf('image', 1), 'minimax_h3_i2v_gguf');
+  assert.equal(idOf('image', 2), 'minimax_h3_flf2v_gguf');
+  assert.equal(idOf('first_last', 2), 'minimax_h3_flf2v_gguf');
+  assert.equal(idOf('reference', 3), 'minimax_h3_r2v_gguf');
+  assert.equal(idOf('digital_human', 1), 'minimax_h3_r2v_gguf', '数字人要图 + 音频，仍走参考版');
+  // 非 AMD 不受影响：显式选的 r2v 就是最终结果
+  const nv = { hardware: { mode: 'nvidia' }, workflows: { ...SHARED_HW_PRESETS.nvidia } };
+  assert.equal(getR2vSpecForResolution(nv, '480P', 'text', 0).spec.id, SHARED_HW_PRESETS.nvidia.r2v);
+});
+
+test('GGUF i2v/flf2v: 图片按序写入固定槽，缺图删槽、多余图丢弃', () => {
+  const i2v = buildWorkflow(getDefaultSpecById('minimax_h3_i2v_gguf'), {
+    positive_prompt: 'P', seconds: 5, resolution: '480P', aspect_ratio: '16:9',
+    references: [{ type: 'image', filename: 'a.png' }, { type: 'image', filename: 'b.png' }],
+  });
+  assert.equal(i2v['20'].inputs.image, 'a.png');
+  assert.deepEqual(i2v['5'].inputs.first_frame, ['20', 0]);
+  assert.deepEqual(graphIssues(i2v, ['SaveVideo']).dangling, []);
+
+  const flf = buildWorkflow(getDefaultSpecById('minimax_h3_flf2v_gguf'), {
+    positive_prompt: 'P', references: [{ type: 'image', filename: 'a.png' }, { type: 'image', filename: 'b.png' }],
+  });
+  assert.equal(flf['20'].inputs.image, 'a.png');
+  assert.equal(flf['21'].inputs.image, 'b.png');
+
+  // 只给一张图：尾帧槽整个删掉，不能留下指向不存在文件的 LoadImage
+  const one = buildWorkflow(getDefaultSpecById('minimax_h3_flf2v_gguf'), {
+    positive_prompt: 'P', references: [{ type: 'image', filename: 'a.png' }],
+  });
+  assert.ok(!one['21'], '缺尾帧时 21 号 LoadImage 应被删除');
+  assert.deepEqual(graphIssues(one, ['SaveVideo']).dangling, []);
+});
+
+test('GGUF t2v/i2v/flf2v: 没有 ResolutionSelector，宽高由分辨率 + 宽高比折算注入', () => {
+  const [w, h] = videoSizeFor('480P', '9:16');
+  const wf = buildWorkflow(getDefaultSpecById('minimax_h3_t2v_gguf'), { positive_prompt: 'P', resolution: '480P', aspect_ratio: '9:16' });
+  assert.equal(wf['5'].inputs.width, w);
+  assert.equal(wf['5'].inputs.height, h);
+  assert.equal(w % 32, 0);
+  assert.equal(h % 32, 0);
+  // custom 分辨率不折算：宽高由调用方按项目配置写入，这里不写就用模板值
+  const custom = buildWorkflow(getDefaultSpecById('minimax_h3_t2v_gguf'), { positive_prompt: 'P', resolution: 'custom', aspect_ratio: '16:9' });
+  assert.notEqual(custom['5'].inputs.width, w);
+  // 有 ResolutionSelector 的参考版不受影响（宽高仍是 115 号节点的连线）
+  const r2v = buildWorkflow(getDefaultSpecById('minimax_h3_r2v_gguf'), { positive_prompt: 'P', resolution: '480P', aspect_ratio: '16:9' });
+  assert.deepEqual(r2v['5'].inputs.width, ['115', 0]);
 });
 
 test('GGUF tts: 台词/音色描述直写 PrimitiveStringMultiline 并留住模型加载器', () => {

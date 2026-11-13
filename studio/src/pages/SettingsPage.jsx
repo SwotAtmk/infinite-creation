@@ -926,35 +926,25 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                 默认英伟达原版；AMD 模式额外启用显存释放与分阶段运行的显存 / CK 拦截。
               </p>
 
-              {hwMode === 'nvidia' ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="文生图工作流">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/* 通用规格（没标 hw）两种模式都能选：老工作流不藏起来，切不切由用户决定 */}
+                {[
+                  ['文生图工作流', 't2i'],
+                  ['图生图工作流', 'i2i'],
+                  ['音色设计工作流', 'tts'],
+                  ['音色克隆工作流', 'tts_clone'],
+                  ['背景音乐工作流', 'music'],
+                ].map(([label, kind]) => (
+                  <Field key={kind} label={label}>
                     <Select
-                      value={cfg.workflows.t2i}
-                      onChange={(v) => setCfg({ ...cfg, workflows: { ...cfg.workflows, t2i: v } })}
-                      items={workflows.filter((w) => w.kind === 't2i' && w.spec?.hw === 'nvidia').map((w) => ({ value: w.spec.id, label: w.name }))}
+                      value={cfg.workflows[kind]}
+                      onChange={(v) => setCfg({ ...cfg, workflows: { ...cfg.workflows, [kind]: v } })}
+                      items={workflows.filter((w) => w.kind === kind && (!w.spec?.hw || w.spec.hw === hwMode)).map((w) => ({ value: w.spec.id, label: w.name }))}
                     />
                   </Field>
-                  <Field label="图生图工作流">
-                    <Select
-                      value={cfg.workflows.i2i}
-                      onChange={(v) => setCfg({ ...cfg, workflows: { ...cfg.workflows, i2i: v } })}
-                      items={workflows.filter((w) => w.kind === 'i2i' && w.spec?.hw === 'nvidia').map((w) => ({ value: w.spec.id, label: w.name }))}
-                    />
-                  </Field>
-                  <ReadonlyRow label="分镜视频" value={cfg.workflows.r2v} />
-                  <ReadonlyRow label="音色设计" value={cfg.workflows.tts} />
-                  <ReadonlyRow label="背景音乐" value={cfg.workflows.music} />
-                </div>
-              ) : (
-                <div className="grid gap-2 rounded-xl border border-[var(--line)] bg-white/[0.015] p-3 text-[11.5px] sm:grid-cols-2">
-                  <ReadonlyRow label="文生图" value={cfg.workflows.t2i} />
-                  <ReadonlyRow label="图生图" value={cfg.workflows.i2i} />
-                  <ReadonlyRow label="分镜视频" value={cfg.workflows.r2v} />
-                  <ReadonlyRow label="音色设计" value={cfg.workflows.tts} />
-                  <ReadonlyRow label="背景音乐" value={cfg.workflows.music} />
-                </div>
-              )}
+                ))}
+                <ReadonlyRow label="分镜视频" value={hwMode === 'amd' ? cfg.workflows.r2v + '（文生/图生/首尾帧/全能参考 按模式自动选用）' : cfg.workflows.r2v} />
+              </div>
 
               {hwMode === 'amd' ? (
                 <div className="flex flex-col gap-2 rounded-xl border border-[color-mix(in_srgb,var(--danger)_25%,transparent)] bg-[color-mix(in_srgb,var(--danger)_5%,transparent)] p-3.5">

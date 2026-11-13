@@ -202,6 +202,8 @@ node scripts/db-migrate.mjs --from sqlite --to postgres --replace
 
 ComfyUI 本体安装、所需工作流与模型、以及 RunningHub 云端算力接入，已移至 README 的 [ComfyUI 配置](../README.md#comfyui-配置) 一节。
 
+**AMD 显卡强烈建议使用 plan3 环境**（<https://github.com/happymy/MinimaxH3-7900xtx/tree/master/plan3>）：这是针对 7900 XTX 等 RDNA3 最新的优化方案，速度与显存占用都明显优于旧的 Easy 方案。按该仓库说明搭好自定义节点、模型与启动参数并跑通 `plan3/` 下的工作流后，在设置页把硬件模式选 **AMD**，下拉里带 `plan3 ·` 前缀的 11 条规格即为对应工作流（文生图/图生图/背景移除各含 Q8_0 与 Q4_K_M，视频按文生/图生/首尾帧/全能参考自动分流，音色设计一条）。两套环境的模型与节点不通用，不要混跑；老规格仍保留下拉中可切回。
+
 ## 使用流程
 
 1. 新建项目 → 粘贴小说原文（或一句话想法）+ 风格。

@@ -1,0 +1,198 @@
+{
+  "459:451": {
+    "inputs": {
+      "unet_name": "qwen-image-2.1-UC-Q4_K_M.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "UnetLoaderGGUF"
+    }
+  },
+  "459:453": {
+    "inputs": {
+      "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIPLoader"
+    }
+  },
+  "459:454": {
+    "inputs": {
+      "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "459:456": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "EmptyLatentImage"
+    }
+  },
+  "459:457": {
+    "inputs": {
+      "samples": [
+        "459:458",
+        0
+      ],
+      "vae": [
+        "459:454",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEDecode"
+    }
+  },
+  "459:458": {
+    "inputs": {
+      "seed": 733114857276099,
+      "steps": 25,
+      "cfg": 2,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "459:477",
+        0
+      ],
+      "positive": [
+        "459:474",
+        0
+      ],
+      "negative": [
+        "459:474",
+        1
+      ],
+      "latent_image": [
+        "459:468",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "459:468": {
+    "inputs": {
+      "switch": false,
+      "on_false": [
+        "459:474",
+        2
+      ],
+      "on_true": [
+        "459:456",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch"
+    }
+  },
+  "459:469": {
+    "inputs": {
+      "device": "auto",
+      "dtype": "default",
+      "model": [
+        "459:451",
+        0
+      ]
+    },
+    "class_type": "QwenImage21Cache",
+    "_meta": {
+      "title": "Qwen Image 2.1 Cache"
+    }
+  },
+  "459:474": {
+    "inputs": {
+      "prompt": "Remove the background, and output a PNG image",
+      "negative_prompt": "",
+      "resolution": 0,
+      "clip": [
+        "459:453",
+        0
+      ],
+      "images.image_1": [
+        "470",
+        0
+      ],
+      "vae": [
+        "459:454",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImage21",
+    "_meta": {
+      "title": "Text Encode Qwen Image 2.1"
+    }
+  },
+  "459:477": {
+    "inputs": {
+      "shift": 3.1000000000000005,
+      "sampling": "flow",
+      "model": [
+        "459:469",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "461": {
+    "inputs": {
+      "filename_prefix": "Qwen_image_2.1",
+      "format": "png",
+      "format.bit_depth": "8-bit",
+      "format.input_color_space": "sRGB",
+      "images": [
+        "459:457",
+        0
+      ]
+    },
+    "class_type": "SaveImageAdvanced",
+    "_meta": {
+      "title": "Save Image (Advanced)"
+    }
+  },
+  "470": {
+    "inputs": {
+      "image": "angry_broccoli.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "LoadImage"
+    }
+  },
+  "472": {
+    "inputs": {
+      "compare_view": "auto",
+      "image_a": [
+        "470",
+        0
+      ],
+      "image_b": [
+        "461",
+        0
+      ]
+    },
+    "class_type": "ImageCompare",
+    "_meta": {
+      "title": "Compare Images"
+    }
+  }
+}

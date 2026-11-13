@@ -202,6 +202,8 @@ Migration upserts by primary key and copies projects / assets / shots / jobs / q
 
 Installing ComfyUI, the required workflows and models, and RunningHub cloud compute access have moved to the [ComfyUI Setup](../README_EN.md#comfyui-setup) section of the README.
 
+**On AMD GPUs, use the plan3 environment** (<https://github.com/happymy/MinimaxH3-7900xtx/tree/master/plan3>): it is the latest optimisation for 7900 XTX / RDNA3, with clearly better speed and VRAM usage than the old Easy setup. Build the custom nodes, models and launch flags as that repository describes, get the workflows under `plan3/` running, then pick **AMD** as the hardware mode in settings — the 11 specs prefixed `plan3 ·` map to them (text-to-image / image-to-image / background removal with Q8_0 and Q4_K_M, video routed by text / image / first-last-frame / omni-reference, one voice-design spec). Models and nodes of the two sets are not interchangeable, so do not mix them; the old specs stay in the dropdowns for switching back.
+
 ## Usage Flow
 
 1. New project → paste the novel text (or a one-line idea) + style.

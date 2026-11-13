@@ -21,3 +21,6 @@ __pycache__/
 .venv/
 # 测试素材（本地使用，不入库）
 docs/test/
+
+# 构建时重定向 HOME 用的临时目录（start-studio-prod.bat 创建）
+.build-home/

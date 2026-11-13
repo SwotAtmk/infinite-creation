@@ -197,6 +197,29 @@ CPU：不挑处理器
 
 在使用此Agent项目工具之前，建议你先使用ComfyUI手动跑一遍所有工作流（即：跑通comfyui_original_workflows/目录下的所有工作流）之后使用Agent项目工具就能进行全自动生成。
 
+#### AMD 显卡：强烈建议使用 plan3 环境
+
+**AMD 平台请优先使用 plan3** —— 这是目前针对 7900 XTX 等 RDNA3 显卡最新的优化方案（GGUF 量化 + HyperFlow 视频 + 显存/注意力调优），出图出片速度和显存占用都明显优于旧的 Easy 方案，**属于高价值配置，不要再用老工作流凑合**。
+
+环境与工作流来源：<https://github.com/happymy/MinimaxH3-7900xtx/tree/master/plan3>
+
+按该仓库的说明搭好 ComfyUI 环境（自定义节点 + 模型 + 启动参数），再把 `plan3/` 下的工作流跑通，即可直接用于本项目：
+
+```bash
+git clone https://github.com/happymy/MinimaxH3-7900xtx.git
+# 按仓库 README 安装依赖与模型，跑通 plan3/ 下的示例工作流
+```
+
+本项目已内置这套工作流对应的 11 条规格，在设置页「硬件模式」选 **AMD** 后，下拉里带 **`plan3 ·`** 前缀的就是它们：
+
+| 功能 | 规格 |
+|---|---|
+| 文生图 / 图生图 / 背景移除 | `plan3 · Qwen-Image 2.1 …`（各带 GGUF Q8_0 / Q4_K_M 两档） |
+| 分镜视频（文生 / 图生 / 首尾帧 / 全能参考） | `plan3 · MiniMax H3 …`，按镜头素材自动分流 |
+| 音色设计 | `plan3 · Qwen3 TTS 音色设计` |
+
+> 换环境前注意：plan3 的模型与节点和旧的 Easy / int8 方案**不通用**，两套工作流不要混着跑；老规格仍保留在设置页下拉里，需要时可以切回。
+
 > 语音：MiniMax H3 依据「参考音色样本（flac 等，放 assets/voice/）+ 提示词对白」自行合成台词，无需单独 TTS。
 
 ### 接入云端算力 - 接入RunningHub原生ComfyUI接口
@@ -291,7 +314,7 @@ CPU：不挑处理器
 ## 致谢
 
 - 感谢开发者[taoxiangyoushu](https://github.com/taoxiangyoushu)为此项目做出的贡献，接入了图生视频+首尾帧的工作流模式并修复了部分bug
-- 感谢开发者 [happymy](https://github.com/happymy) 为此项目提供了AMD+GGUF适配的解决方案以及解决项目中存在的部分bug
+- 感谢开发者 [happymy](https://github.com/happymy) 为此项目提供了AMD+GGUF适配的解决方案以及解决项目中存在的部分bug；AMD 平台推荐的 [plan3 环境](https://github.com/happymy/MinimaxH3-7900xtx/tree/master/plan3)（GGUF + HyperFlow，7900 XTX 最新优化）同样出自其手，项目内置的 11 条 `plan3 ·` 规格即改编自该仓库
 - 感谢以下开发者为项目做出的贡献：[thrasher824](https://github.com/thrasher824)、[remiliakui](https://github.com/remiliakui)、[ghshhf](https://github.com/ghshhf)、[binonxia](https://github.com/binonxia)、[anupamme](https://github.com/anupamme)
 
 ## Star 历史

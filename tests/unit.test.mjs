@@ -294,6 +294,25 @@ test('presetModeOf 认得老 tts_clone 值，isPresetWorkflows 不认（免得�
   assert.equal(isPresetWorkflows({ ...SHARED_HW_PRESETS.amd }), true);
 });
 
+test('plan3 图片工作流: 思考模式与提示词改写都关着（改写链被剪掉，prompt 直送编码器）', () => {
+  const cases = [
+    ['qwen_image_2_1_t2i_gguf', { positive_prompt: 'P', width: 1024, height: 1024, seed: 1, filename_prefix: 'v/a' }, '459:452'],
+    ['qwen_image_2_1_i2i_gguf', { positive_prompt: 'P', image: 'a.png', seed: 1, filename_prefix: 'v/a' }, '459:474'],
+    ['qwen_image_2_1_bgremove_gguf', { positive_prompt: 'P', image: 'a.png', seed: 1, filename_prefix: 'v/a' }, '459:474'],
+  ];
+  for (const [id, params, encoder] of cases) {
+    const wf = buildWorkflow(getDefaultSpecById(id), params);
+    assert.ok(!Object.values(wf).some((n) => n.class_type === 'TextGenerate'), id + ' 不该留下 TextGenerate（思考/改写链）');
+    assert.ok(!Object.values(wf).some((n) => n.inputs?.thinking === true), id + ' 思考模式必须关闭');
+    assert.equal(wf[encoder].inputs.prompt, 'P', id + ' 提示词必须直送编码器，不经改写');
+    for (const n of Object.values(wf)) {
+      if (n.class_type !== 'ComfySwitchNode' || !n.inputs?.on_true) continue;
+      const src = wf[n.inputs.on_true[0]];
+      assert.notEqual(src?.class_type, 'TextGenerate', id + ' 开关不能还把改写结果接回提示词');
+    }
+  }
+});
+
 test('getSpecForKind: config 覆盖规格 id，缺失时抛错', () => {
   assert.equal(getSpecForKind({ workflows: { t2i: 'qwen_image_2_1_t2i_gguf' } }, 't2i').id, 'qwen_image_2_1_t2i_gguf');
   assert.equal(getSpecForKind({}, 'i2i').id, 'qwen_image_edit_2511_i2i');

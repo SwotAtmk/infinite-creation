@@ -199,6 +199,29 @@ It is recommended that those who have ComfyUI related technology can install and
 
 Before using this Agent project tool, it's recommended to manually run all workflows in ComfyUI first (i.e., run through every workflow in the `comfyui_original_workflows/` directory), after which the Agent project tool can perform fully automated generation.
 
+#### AMD GPUs: use the plan3 environment
+
+**On AMD, use plan3 first** — it is the latest optimisation for 7900 XTX / RDNA3 cards (GGUF quantisation + HyperFlow video + VRAM and attention tuning). Both speed and VRAM usage are clearly better than the old Easy setup, so treat it as the recommended configuration rather than falling back to the old workflows.
+
+Environment and workflows: <https://github.com/happymy/MinimaxH3-7900xtx/tree/master/plan3>
+
+Build the ComfyUI environment as that repository describes (custom nodes + models + launch flags) and get the workflows under `plan3/` running, then use them directly with this project:
+
+```bash
+git clone https://github.com/happymy/MinimaxH3-7900xtx.git
+# install dependencies and models per that repo's README, then run the samples in plan3/
+```
+
+This project already ships 11 specs for that set. Pick **AMD** as the hardware mode in settings; the entries with a **`plan3 ·`** prefix are them:
+
+| Feature | Spec |
+|---|---|
+| Text-to-image / image-to-image / background removal | `plan3 · Qwen-Image 2.1 …` (GGUF Q8_0 and Q4_K_M) |
+| Shot video (text / image / first-last frame / omni-reference) | `plan3 · MiniMax H3 …`, routed automatically per shot |
+| Voice design | `plan3 · Qwen3 TTS 音色设计` |
+
+> Note: plan3 models and nodes are **not** interchangeable with the old Easy / int8 setup — do not mix the two sets. The old specs stay in the settings dropdowns in case you need to switch back.
+
 > Voice: MiniMax H3 synthesizes dialogue itself based on "reference voice samples (flac, etc., placed in assets/voice/) + prompt dialogue"; no separate TTS needed.
 
 ### Cloud Compute - RunningHub Native ComfyUI API
@@ -296,7 +319,7 @@ My Bilibili：[https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0](ht
 ## Acknowledgements
 
 - Thank you to the developer [taoxiangyoushu](https://github.com/taoxiangyoushu) for their contribution to this project. They have integrated the workflow mode of Tusense video + first and last frames and fixed some bugs
-- Thanks to developer [happymy](https://github.com/happymy) for providing the AMD + GGUF adaptation solution and fixing some bugs in the project.
+- Thanks to developer [happymy](https://github.com/happymy) for providing the AMD + GGUF adaptation solution and fixing some bugs in the project. The recommended [plan3 environment](https://github.com/happymy/MinimaxH3-7900xtx/tree/master/plan3) for AMD (GGUF + HyperFlow, the latest optimisation for 7900 XTX) is also theirs; the 11 `plan3 ·` specs bundled here are adapted from that repository.
 - We would like to express our gratitude to the following developers for their contributions to the project: [thrasher824](https://github.com/thrasher824)、[remiliakui](https://github.com/remiliakui)、[ghshhf](https://github.com/ghshhf), [binonxia](https://github.com/binonxia), [anupamme](https://github.com/anupamme)
 
 ## Star History

@@ -927,23 +927,23 @@ export default function SettingsPage({ onBack, publicMode = false }) {
               </p>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="文生图工作流">
-                  <Select
-                    value={cfg.workflows.t2i}
-                    onChange={(v) => setCfg({ ...cfg, workflows: { ...cfg.workflows, t2i: v } })}
-                    items={workflows.filter((w) => w.kind === 't2i' && w.spec?.hw === hwMode).map((w) => ({ value: w.spec.id, label: w.name }))}
-                  />
-                </Field>
-                <Field label="图生图工作流">
-                  <Select
-                    value={cfg.workflows.i2i}
-                    onChange={(v) => setCfg({ ...cfg, workflows: { ...cfg.workflows, i2i: v } })}
-                    items={workflows.filter((w) => w.kind === 'i2i' && w.spec?.hw === hwMode).map((w) => ({ value: w.spec.id, label: w.name }))}
-                  />
-                </Field>
+                {/* 通用规格（没标 hw）两种模式都能选：老工作流不藏起来，切不切由用户决定 */}
+                {[
+                  ['文生图工作流', 't2i'],
+                  ['图生图工作流', 'i2i'],
+                  ['音色设计工作流', 'tts'],
+                  ['音色克隆工作流', 'tts_clone'],
+                  ['背景音乐工作流', 'music'],
+                ].map(([label, kind]) => (
+                  <Field key={kind} label={label}>
+                    <Select
+                      value={cfg.workflows[kind]}
+                      onChange={(v) => setCfg({ ...cfg, workflows: { ...cfg.workflows, [kind]: v } })}
+                      items={workflows.filter((w) => w.kind === kind && (!w.spec?.hw || w.spec.hw === hwMode)).map((w) => ({ value: w.spec.id, label: w.name }))}
+                    />
+                  </Field>
+                ))}
                 <ReadonlyRow label="分镜视频" value={hwMode === 'amd' ? cfg.workflows.r2v + '（文生/图生/首尾帧/全能参考 按模式自动选用）' : cfg.workflows.r2v} />
-                <ReadonlyRow label="音色设计" value={cfg.workflows.tts} />
-                <ReadonlyRow label="背景音乐" value={cfg.workflows.music} />
               </div>
 
               {hwMode === 'amd' ? (

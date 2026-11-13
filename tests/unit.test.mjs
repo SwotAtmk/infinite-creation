@@ -272,6 +272,28 @@ test('GGUF tts: 台词/音色描述直写 PrimitiveStringMultiline 并留住模�
   assert.deepEqual(graphIssues(wf, ['SaveAudio']).dangling, []);
 });
 
+test('本地免转录克隆: 剪掉 SenseVoice 参考音频转录，改 x_vector_only 只学音色', () => {
+  const spec = getDefaultSpecById('qwen3_tts_voice_clone_noasr');
+  const wf = buildWorkflow(spec, { text: '台词内容', ref_audio: 'ref.wav', seed: 7, filename_prefix: 'voice/c1' });
+  assert.ok(!wf['40'], 'ASR 节点应被剪掉');
+  assert.equal(wf['42'].inputs.ref_text, '', 'ref_text 是必填项，x_vector_only 下给空串（不能留指向已删节点的连线）');
+  assert.equal(wf['42'].inputs.x_vector_only, true, '规格自带固定值：只学音色，不需要转录文本');
+  assert.equal(wf['6'].inputs.audio, 'ref.wav');
+  assert.equal(wf['42'].inputs.text, '台词内容');
+  assert.deepEqual(graphIssues(wf, ['SaveAudio']).dangling, []);
+  // AMD 预设必须指向这条能跑的克隆规格；老规格仍留着，用户想选还能选
+  assert.equal(SHARED_HW_PRESETS.amd.tts_clone, 'qwen3_tts_voice_clone_noasr');
+  assert.ok(getDefaultSpecById('qwen3_tts_voice_clone'), '老克隆规格不删除');
+});
+
+test('presetModeOf 认得老 tts_clone 值，isPresetWorkflows 不认（免得覆盖用户手选）', () => {
+  const legacy = { ...SHARED_HW_PRESETS.amd, tts_clone: 'qwen3_tts_voice_clone' };
+  assert.equal(presetModeOf(legacy), 'amd', '老配置仍是整套 AMD 预设，模式推断不能退化成 nvidia');
+  assert.equal(isPresetWorkflows(legacy), false, '用户显式选过老工作流，不该被预设改回去');
+  assert.equal(presetModeOf({ ...SHARED_HW_PRESETS.amd }), 'amd');
+  assert.equal(isPresetWorkflows({ ...SHARED_HW_PRESETS.amd }), true);
+});
+
 test('getSpecForKind: config 覆盖规格 id，缺失时抛错', () => {
   assert.equal(getSpecForKind({ workflows: { t2i: 'qwen_image_2_1_t2i_gguf' } }, 't2i').id, 'qwen_image_2_1_t2i_gguf');
   assert.equal(getSpecForKind({}, 'i2i').id, 'qwen_image_edit_2511_i2i');

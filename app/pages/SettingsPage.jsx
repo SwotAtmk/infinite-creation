@@ -276,24 +276,19 @@ export default function SettingsPage({ onBack }) {
                       <p className="muted" style={{ marginTop: 4 }}>只影响各阶段实际提交给 ComfyUI 的工作流；默认英伟达原版。AMD 模式下额外启用显存释放与分阶段运行的显存/CK 拦截。</p>
 
                       <div className="muted" style={{ margin: '8px 0 0' }}>
-                        <div className="row" style={{ gap: 8, alignItems: 'center', margin: '4px 0' }}>
-                          <span style={{ flex: 'none' }}>文生图</span>
-                          <Select size="sm" className="flex-1 min-w-0" aria-label="文生图工作流" selectedKeys={selectKeys(cfg.workflows.t2i)} onSelectionChange={(k) => setCfg({ ...cfg, workflows: { ...cfg.workflows, t2i: pickKey(k) } })}>
-                            {workflows.filter((w) => w.kind === 't2i' && w.spec?.hw === hwMode).map((w) => (
-                              <SelectItem key={w.spec.id}>{w.name}</SelectItem>
-                            ))}
-                          </Select>
-                        </div>
-                        <div className="row" style={{ gap: 8, alignItems: 'center', margin: '4px 0' }}>
-                          <span style={{ flex: 'none' }}>图生图</span>
-                          <Select size="sm" className="flex-1 min-w-0" aria-label="图生图工作流" selectedKeys={selectKeys(cfg.workflows.i2i)} onSelectionChange={(k) => setCfg({ ...cfg, workflows: { ...cfg.workflows, i2i: pickKey(k) } })}>
-                            {workflows.filter((w) => w.kind === 'i2i' && w.spec?.hw === hwMode).map((w) => (
-                              <SelectItem key={w.spec.id}>{w.name}</SelectItem>
-                            ))}
-                          </Select>
-                        </div>
+                        {/* 每行可切换：AMD/NVIDIA 的规格按 hw 标记过滤，未标记 hw 的通用规格两种模式都能选。
+                            用户要能在新老两套之间自己切，所以不隐藏老工作流。 */}
+                        {[['文生图', 't2i'], ['图生图', 'i2i'], ['音色设计', 'tts'], ['音色克隆', 'tts_clone'], ['背景音乐', 'music']].map(([label, kind]) => (
+                          <div key={kind} className="row" style={{ gap: 8, alignItems: 'center', margin: '4px 0' }}>
+                            <span style={{ flex: 'none' }}>{label}</span>
+                            <Select size="sm" className="flex-1 min-w-0" aria-label={label + '工作流'} selectedKeys={selectKeys(cfg.workflows[kind])} onSelectionChange={(k) => setCfg({ ...cfg, workflows: { ...cfg.workflows, [kind]: pickKey(k) } })}>
+                              {workflows.filter((w) => w.kind === kind && (!w.spec?.hw || w.spec.hw === hwMode)).map((w) => (
+                                <SelectItem key={w.spec.id}>{w.name}</SelectItem>
+                              ))}
+                            </Select>
+                          </div>
+                        ))}
                         <div style={{ margin: '4px 0' }}>分镜视频：{cfg.workflows.r2v}{hwMode === 'amd' ? '（文生/图生/首尾帧/全能参考按模式自动选用）' : ''}</div>
-                        <div style={{ margin: '4px 0' }}>音色设计：{cfg.workflows.tts}</div>
                       </div>
 
                       {hwMode === 'amd' && (

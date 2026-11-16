@@ -237,6 +237,12 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
       </div>
       {shown.map((s) => {
         const chars = charsOf(s), scenes = scenesOf(s), props = propsOf(s), costumes = costumesOf(s), ages = agesOf(s), audios = audiosOf(s);
+        // 同一角色只显示一张图：挂了服装/年龄变体时变体图就是实际提交给模型的参考图
+        //（后端 assembleShotReferences：服装 > 年龄 > 角色原图），不再重复显示角色原图。
+        const costumeCharIds = new Set(costumes.map((a) => a.parent_id).filter(Boolean));
+        const ageCharIds = new Set(ages.map((a) => a.parent_id).filter(Boolean));
+        const shownChars = chars.filter((c) => !costumeCharIds.has(c.id) && !ageCharIds.has(c.id));
+        const shownAges = ages.filter((a) => !costumeCharIds.has(a.parent_id));
         // 语音参考只显示「有台词」角色（与后端 assembleShotReferences 一致，同走 nameMatches：
         // 名字用规范化后精确相等，避免「明」被对白里的「小明」误判成说话人）
         const speakers = dialogueSpeakers(s.dialogue);
@@ -295,11 +301,11 @@ export default function ShotsTab({ projectId, chapter: chapterProp = '', running
                 </div>
                 {allRefs.length || voices.length || audios.length ? (
                   <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                    {chars.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'character', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'character', a.id) : null} />)}
+                    {shownChars.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'character', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'character', a.id) : null} />)}
                     {scenes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'scene', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'scene', a.id) : null} />)}
                     {props.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'prop', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'prop', a.id) : null} />)}
                     {costumes.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'costume', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'costume', a.id) : null} />)}
-                    {ages.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'age', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'age', a.id) : null} />)}
+                    {shownAges.map((a) => <RefThumb key={a.id} a={a} onReplace={!running ? () => openMaterial(s.id, 'age', 'replace', a.id) : null} onRemove={!running ? () => removeMaterial(s.id, 'age', a.id) : null} />)}
                     {voices.map((v, i) => (
                       <div key={i} style={{ textAlign: 'center', width: 190 }}>
                         <audio controls src={fileUrl(projectId, v.voice_ref)} style={{ width: '100%', height: 38 }} title="角色参考音色" />

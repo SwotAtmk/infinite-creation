@@ -574,6 +574,13 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
             const costumes = costumesOf(s);
             const ages = agesOf(s);
             const audios = audiosOf(s);
+            // 同一角色只显示一张图：挂了服装/年龄变体时，变体图就是实际提交给模型的角色参考图
+            //（后端 assembleShotReferences 也是服装 > 年龄 > 角色原图），再显示角色原图会让
+            // 同一个人物在「参考素材」里出现两次。服装优先于年龄，两者同挂时只显示服装。
+            const costumeCharIds = new Set(costumes.map((a) => a.parent_id).filter(Boolean));
+            const ageCharIds = new Set(ages.map((a) => a.parent_id).filter(Boolean));
+            const shownChars = chars.filter((c) => !costumeCharIds.has(c.id) && !ageCharIds.has(c.id));
+            const shownAges = ages.filter((a) => !costumeCharIds.has(a.parent_id));
             const speakers = dialogueSpeakers(s.dialogue);
             const speakingChars = chars.filter((c) => speakers.some((sp) => nameMatches(sp, c.name)));
             const voices = speakingChars.filter((c) => c.voice_ref).map((c) => ({ name: c.name, voice_ref: c.voice_ref }));
@@ -839,7 +846,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                       </div>
                     ) : chars.length || scenes.length || props.length || costumes.length || ages.length || voices.length || audios.length ? (
                       <div className="flex flex-wrap gap-2">
-                        {chars.map((a) => (
+                        {shownChars.map((a) => (
                           <RefThumb key={a.id} projectId={projectId} a={a} onPreview={setPreview} onReplace={!running && canEdit && features.buttons?.upload !== false ? () => openMaterial(s.id, 'character', 'replace', a.id) : null} onRemove={!running && canEdit && features.buttons?.upload !== false ? () => removeMaterial(s.id, 'character', a.id) : null} />
                         ))}
                         {scenes.map((a) => (
@@ -851,7 +858,7 @@ export default function ShotsPage({ projectId, chapters = [], cursorId, onCursor
                         {costumes.map((a) => (
                           <RefThumb key={a.id} projectId={projectId} a={a} onPreview={setPreview} onReplace={!running && canEdit && features.buttons?.upload !== false ? () => openMaterial(s.id, 'costume', 'replace', a.id) : null} onRemove={!running && canEdit && features.buttons?.upload !== false ? () => removeMaterial(s.id, 'costume', a.id) : null} />
                         ))}
-                        {ages.map((a) => (
+                        {shownAges.map((a) => (
                           <RefThumb key={a.id} projectId={projectId} a={a} onPreview={setPreview} onReplace={!running && canEdit && features.buttons?.upload !== false ? () => openMaterial(s.id, 'age', 'replace', a.id) : null} onRemove={!running && canEdit && features.buttons?.upload !== false ? () => removeMaterial(s.id, 'age', a.id) : null} />
                         ))}
                         {voices.map((v, i) => (

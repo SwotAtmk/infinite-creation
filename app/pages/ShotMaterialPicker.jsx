@@ -33,6 +33,13 @@ export default function ShotMaterialPicker({ projectId, assets, category, mode, 
     return true;
   });
   const disabledIds = (assignedIds || []).filter((id) => id !== replaceAssetId);
+  // 同一角色在一个分镜里只允许绑一件服装/年龄变体：该角色已有变体在本镜时，同角色的其它变体禁选。
+  const usedVariantParents = new Set(
+    (assets || [])
+      .filter((a) => isVariant && a.category === category && a.id !== replaceAssetId && (assignedIds || []).includes(a.id))
+      .map((a) => a.parent_id)
+      .filter(Boolean),
+  );
 
   async function upload(file) {
     const name = await toast.prompt('新素材名称', { defaultValue: (file.name || '').replace(/\.[^.]+$/, ''), placeholder: '素材名称' });
@@ -75,8 +82,9 @@ export default function ShotMaterialPicker({ projectId, assets, category, mode, 
                 onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) upload(f); }} />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 10, maxHeight: 320, overflow: 'auto' }}>
                 {list.map((a) => {
-                  const disabled = disabledIds.includes(a.id);
+                  const disabled = disabledIds.includes(a.id) || (isVariant && usedVariantParents.has(a.parent_id));
                   const pick = () => !disabled && !busy && onPick(a.id);
+                  const title = isVariant && usedVariantParents.has(a.parent_id) ? '该角色在本镜已有一件服装/年龄变体' : '已在该分镜中使用';
                   return (
                     <div key={a.id} style={{ textAlign: 'center', opacity: disabled ? 0.4 : 1 }}>
                       {isAudio
@@ -84,7 +92,7 @@ export default function ShotMaterialPicker({ projectId, assets, category, mode, 
                             ? <audio controls src={fileUrl(projectId, a.audio_path || a.voice_ref)} style={{ width: '100%', height: 38 }} />
                             : <div className="thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 38 }}>音频</div>)
                         : (a.image_path
-                            ? <img className="thumb" src={fileUrl(projectId, a.image_path)} onClick={pick} style={{ cursor: disabled ? 'not-allowed' : 'pointer' }} title={disabled ? '已在该分镜中使用' : '点击选择'} />
+                            ? <img className="thumb" src={fileUrl(projectId, a.image_path)} onClick={pick} style={{ cursor: disabled ? 'not-allowed' : 'pointer' }} title={disabled ? title : '点击选择'} />
                             : <div className="thumb" onClick={pick} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'not-allowed' : 'pointer' }}>{LABEL[category]}</div>)}
                       <div className="muted" style={{ fontSize: 11, wordBreak: 'break-all', ...(isAudio ? { cursor: disabled ? 'not-allowed' : 'pointer', textDecoration: 'underline' } : {}) }} onClick={isAudio ? pick : undefined}>{a.name}{disabled ? '（已使用）' : ''}</div>
                     </div>

@@ -69,6 +69,8 @@ Use a standalone `<Picture N>` when the reference image itself serves as a shot'
 
 If an image is used only to define a character, scene, costume, or style, do not create a standalone picture entry. Instead, cite the image source inside the corresponding `<Subject N>` definition.
 
+> In full-reference generation (`reference generation`), an image that only provides identity / appearance / scene / style is always a `<Subject N>` source and must never become a `<Picture N>` frame. A character multi-view sheet, scene grid, or prop board is a reference sheet, not a frame: it never appears as-is in the video, and never serves as a first frame, last frame, keyframe, or an inserted interpolation frame.
+
 When an image acts as a storyboard or shot-planning reference, state which shots it maps to and what planning information it provides:
 
 ```text

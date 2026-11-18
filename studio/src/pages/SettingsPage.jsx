@@ -5,7 +5,6 @@ import {
   Captions,
   CheckCircle2,
   Cloud,
-  Cpu,
   Film,
   Lock,
   Save,
@@ -23,21 +22,21 @@ import {
   HW_DEFAULT_FREE,
   HW_PRESETS,
   RUNNINGHUB_TIERS,
+  RUNNINGHUB_WORKFLOWS,
   comfyBaseUrl,
   hardwareMode,
   isPresetWorkflows,
   VIDEO_RESOLUTION_CUSTOM,
 } from '../lib/shared.js';
-import { COMFY_PROVIDERS } from '@shared';
 import { Badge, Button, EmptyState, Field, Input, Segmented, Select, Spinner, Switch } from '../components/ui.jsx';
 import { RESOLUTION_SELECT_ITEMS, RATIO_SELECT_ITEMS } from '../components/visuals.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import SkillsPanel from '../components/SkillsPanel.jsx';
 import SkillPipelinePanel from '../components/SkillPipelinePanel.jsx';
 import SubtitlePanel from '../components/SubtitlePanel.jsx';
+import WorkflowConfigPanel from '../components/WorkflowConfigPanel.jsx';
 import { useToast } from '../components/toast.jsx';
 
-const PROVIDER_OPTIONS = COMFY_PROVIDERS.map((p) => ({ value: p.id, label: p.label }));
 const TIER_OPTIONS = RUNNINGHUB_TIERS.map((t) => ({ value: t.id, label: t.label }));
 const REWRITE_LANG_OPTIONS = [
   { value: 'same', label: '与原提示词一致（推荐）' },
@@ -52,7 +51,6 @@ const CATEGORIES = [
   { id: 'llm', label: 'LLM 模型', desc: 'Agent 大脑 · 提示词改写', icon: Sparkles },
   { id: 'subtitle', label: '字幕与语音识别', desc: 'Whisper 模型 · 本地环境', icon: Captions },
   { id: 'agent', label: 'Agent 运行时', desc: '内置 / 外部 CLI · MCP 桥', icon: Bot },
-  { id: 'hardware', label: '硬件适配', desc: '工作流 · 显存策略', icon: Cpu },
   { id: 'skills', label: '技能库', desc: '全局技能包管理', icon: Wand2 },
   { id: 'pipeline', label: '流水线编排', desc: '技能节点 · 导入导出', icon: Workflow, beta: true },
 ];
@@ -85,6 +83,10 @@ export default function SettingsPage({ onBack, publicMode = false }) {
         detectComfy(c.comfyui);
       })
       .catch((e) => setLoadErr(e.message || '未知错误'));
+    api.get('/api/workflows').then(setWorkflows).catch(() => {});
+  }, []);
+
+  const reloadWorkflows = useCallback(() => {
     api.get('/api/workflows').then(setWorkflows).catch(() => {});
   }, []);
 
@@ -223,7 +225,7 @@ export default function SettingsPage({ onBack, publicMode = false }) {
   const hwMode = hardwareMode(cfg);
   const isRunningHub = (cfg.comfyui.provider || 'native') === 'runninghub';
   const dirty = cfg !== savedCfg;
-  const categories = CATEGORIES.filter((c) => c.id !== 'hardware' || !isRunningHub);
+  const categories = CATEGORIES;
   const active = categories.some((c) => c.id === activeCat) ? activeCat : categories[0].id;
 
   // 对外托管模式：密钥、工作流、硬件适配、技能管理都属于管理员范畴，
@@ -262,10 +264,19 @@ export default function SettingsPage({ onBack, publicMode = false }) {
   }
 
   function switchMode(mode) {
+    setTest('');
+    setComfyInfo(null);
+    // RunningHub 是执行端：切到云端时用 RunningHub 的工作流预设（可通过面板自定义覆盖）。
+    if (mode === 'runninghub') {
+      setCfg({ ...cfg, comfyui: { ...cfg.comfyui, provider: 'runninghub' }, workflows: { ...RUNNINGHUB_WORKFLOWS } });
+      return;
+    }
     const free = cfg.generation.freeAfterEvery;
-    const workflowsNext = isPresetWorkflows(cfg.workflows) ? { ...HW_PRESETS[mode] } : cfg.workflows;
+    const isRunninghubPreset = Object.keys(RUNNINGHUB_WORKFLOWS).every((k) => cfg.workflows?.[k] === RUNNINGHUB_WORKFLOWS[k]);
+    const workflowsNext = isPresetWorkflows(cfg.workflows) || isRunninghubPreset ? { ...HW_PRESETS[mode] } : cfg.workflows;
     setCfg({
       ...cfg,
+      comfyui: { ...cfg.comfyui, provider: 'native' },
       hardware: { ...cfg.hardware, mode },
       workflows: workflowsNext,
       generation: {
@@ -519,13 +530,13 @@ export default function SettingsPage({ onBack, publicMode = false }) {
           {active === 'comfyui' ? (
             <Section icon={Server} title="ComfyUI 服务" description="生成图片与视频的执行端">
               <Segmented
-                value={cfg.comfyui.provider || 'native'}
-                onChange={(v) => {
-                  setCfg({ ...cfg, comfyui: { ...cfg.comfyui, provider: v } });
-                  setTest('');
-                  setComfyInfo(null);
-                }}
-                options={PROVIDER_OPTIONS}
+                value={isRunningHub ? 'runninghub' : hwMode}
+                onChange={switchMode}
+                options={[
+                  { value: 'nvidia', label: '英伟达 · 原版工作流' },
+                  { value: 'amd', label: 'AMD · GGUF 量化适配' },
+                  { value: 'runninghub', label: 'RunningHub · 云端渲染' },
+                ]}
               />
               <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-4)]">
                 当前执行端：<b className="text-[var(--fg-2)]">{isRunningHub ? '云端渲染' : '本地 ComfyUI'}</b>
@@ -715,6 +726,40 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                   </div>
                 </>
               )}
+
+              <div className="flex flex-col gap-4 border-t border-[var(--line)] pt-4">
+                <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-3)]">
+                  {isRunningHub
+                    ? '云端 RunningHub 使用云端工作流，可在下方查看或自定义各任务类型对应的工作流；保存设置后生效。'
+                    : '默认英伟达原版；AMD 模式额外启用显存释放与分阶段运行的显存 / CK 拦截。为每个任务类型指定 ComfyUI 工作流，可提交自定义工作流并配置输入 / 输出节点；保存设置后生效。'}
+                </p>
+                <WorkflowConfigPanel cfg={cfg} setCfg={setCfg} workflows={workflows} mode={isRunningHub ? 'runninghub' : hwMode} onReloadWorkflows={reloadWorkflows} />
+                {!isRunningHub && hwMode === 'amd' ? (
+                  <div className="flex flex-col gap-2 rounded-xl border border-[color-mix(in_srgb,var(--danger)_25%,transparent)] bg-[color-mix(in_srgb,var(--danger)_5%,transparent)] p-3.5">
+                    <Field
+                      label="每 N 个生成后释放 ComfyUI 显存（0 = 关闭）"
+                      hint="利：避免 AMD Dynamic VRAM 连续生成后逐步变慢。弊：每次释放后下一次生成多花 1 - 3 分钟重载模型。"
+                    >
+                      <Input
+                        type="number"
+                        min={0}
+                        max={20}
+                        value={String(cfg.generation.freeAfterEvery ?? 0)}
+                        onChange={(e) =>
+                          setCfg({ ...cfg, generation: { ...cfg.generation, freeAfterEvery: Math.max(0, Math.min(20, Math.round(Number(e.target.value) || 0))) } })
+                        }
+                        className="w-24"
+                      />
+                    </Field>
+                    {comfyInfo && comfyInfo.ok === false ? (
+                      <p className="m-0 text-[11px] text-[var(--fg-3)]">当前 ComfyUI 连接失败，无法判断 Dynamic VRAM 状态，建议先测试连接。</p>
+                    ) : null}
+                    {comfyInfo && comfyInfo.ok && !comfyInfo.dynamicVram && (cfg.generation.freeAfterEvery ?? 0) > 0 ? (
+                      <p className="m-0 text-[11px] text-[var(--accent)]">检测到 ComfyUI 未启用 Dynamic VRAM，连续生成不会产生退化，建议把 N 设为 0。</p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </Section>
           ) : null}
 
@@ -909,68 +954,6 @@ export default function SettingsPage({ onBack, publicMode = false }) {
                   当前使用内置 openclaude（进程内 SDK），无需额外安装；切换到外部 Agent 后由本机 CLI 接管流水线。
                 </p>
               )}
-            </Section>
-          ) : null}
-
-          {active === 'hardware' ? (
-            <Section icon={Cpu} title="硬件适配" description="只影响实际提交给 ComfyUI 的工作流">
-              <Segmented
-                value={hwMode}
-                onChange={switchMode}
-                options={[
-                  { value: 'nvidia', label: '英伟达 · 原版工作流' },
-                  { value: 'amd', label: 'AMD · GGUF 量化适配' },
-                ]}
-              />
-              <p className="m-0 text-[11px] leading-relaxed text-[var(--fg-3)]">
-                默认英伟达原版；AMD 模式额外启用显存释放与分阶段运行的显存 / CK 拦截。
-              </p>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {/* 通用规格（没标 hw）两种模式都能选：老工作流不藏起来，切不切由用户决定 */}
-                {[
-                  ['文生图工作流', 't2i'],
-                  ['图生图工作流', 'i2i'],
-                  ['音色设计工作流', 'tts'],
-                  ['音色克隆工作流', 'tts_clone'],
-                  ['背景音乐工作流', 'music'],
-                ].map(([label, kind]) => (
-                  <Field key={kind} label={label}>
-                    <Select
-                      value={cfg.workflows[kind]}
-                      onChange={(v) => setCfg({ ...cfg, workflows: { ...cfg.workflows, [kind]: v } })}
-                      items={workflows.filter((w) => w.kind === kind && (!w.spec?.hw || w.spec.hw === hwMode)).map((w) => ({ value: w.spec.id, label: w.name }))}
-                    />
-                  </Field>
-                ))}
-                <ReadonlyRow label="分镜视频" value={hwMode === 'amd' ? cfg.workflows.r2v + '（文生/图生/首尾帧/全能参考 按模式自动选用）' : cfg.workflows.r2v} />
-              </div>
-
-              {hwMode === 'amd' ? (
-                <div className="flex flex-col gap-2 rounded-xl border border-[color-mix(in_srgb,var(--danger)_25%,transparent)] bg-[color-mix(in_srgb,var(--danger)_5%,transparent)] p-3.5">
-                  <Field
-                    label="每 N 个生成后释放 ComfyUI 显存（0 = 关闭）"
-                    hint="利：避免 AMD Dynamic VRAM 连续生成后逐步变慢。弊：每次释放后下一次生成多花 1 - 3 分钟重载模型。"
-                  >
-                    <Input
-                      type="number"
-                      min={0}
-                      max={20}
-                      value={String(cfg.generation.freeAfterEvery ?? 0)}
-                      onChange={(e) =>
-                        setCfg({ ...cfg, generation: { ...cfg.generation, freeAfterEvery: Math.max(0, Math.min(20, Math.round(Number(e.target.value) || 0))) } })
-                      }
-                      className="w-24"
-                    />
-                  </Field>
-                  {comfyInfo && comfyInfo.ok === false ? (
-                    <p className="m-0 text-[11px] text-[var(--fg-3)]">当前 ComfyUI 连接失败，无法判断 Dynamic VRAM 状态，建议先测试连接。</p>
-                  ) : null}
-                  {comfyInfo && comfyInfo.ok && !comfyInfo.dynamicVram && (cfg.generation.freeAfterEvery ?? 0) > 0 ? (
-                    <p className="m-0 text-[11px] text-[var(--accent)]">检测到 ComfyUI 未启用 Dynamic VRAM，连续生成不会产生退化，建议把 N 设为 0。</p>
-                  ) : null}
-                </div>
-              ) : null}
             </Section>
           ) : null}
 

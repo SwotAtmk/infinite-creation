@@ -24,14 +24,14 @@ ensureDirs();
 startupCleanup();
 // RunningHub 渲染公平队列：进程内调度器（本地 ComfyUI 模式不启用，见 scheduler.queueEnabled）
 startScheduler();
-// 清理已被改名/删除的陈旧工作流记录：upsert 按 name 匹配，改名后会留下孤儿行（下拉出现重复选项），
-// 先按当前 DEFAULT_SPECS 的名称集合剔除不在其中的记录，再注册，保证列表与规格一致。
+// 清理已被改名/删除的「内置」工作流记录：upsert 按 name 匹配，内置工作流改名后会留下孤儿行
+//（下拉出现重复选项）。仅清理 builtin 记录（spec.builtin !== false），自定义工作流（builtin=false）跨重启保留。
 const validWorkflowNames = new Set(DEFAULT_SPECS.map((s) => s.name));
 for (const w of Workflows.list()) {
-  if (!validWorkflowNames.has(w.name)) Workflows.remove(w.id);
+  if (w.spec?.builtin !== false && !validWorkflowNames.has(w.name)) Workflows.remove(w.id);
 }
 for (const spec of DEFAULT_SPECS) {
-  Workflows.upsert({ name: spec.name, kind: spec.kind, sourceFile: spec.sourceFile, spec, status: 'active' });
+  Workflows.upsert({ name: spec.name, kind: spec.kind, sourceFile: spec.sourceFile, spec: { ...spec, builtin: true }, status: 'active' });
 }
 const skills = scanSkills();
 logger.info('启动：注册工作流 ' + DEFAULT_SPECS.length + ' 个，技能 ' + skills.length + ' 个');

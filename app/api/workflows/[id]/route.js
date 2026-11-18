@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Workflows, WORKFLOWS_DIR, loadConfig } from '@/lib/core/index.js';
+import { Workflows, WORKFLOWS_DIR, loadConfig, saveConfig, HW_PRESETS, hardwareMode } from '@/lib/core/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,9 +33,14 @@ function summarize(structure) {
   return { nodeCount: nodes.length, nodes };
 }
 
+// 按行 id / spec.id 定位工作流记录（内置 DEFAULT_SPECS 与自定义工作流共用）。
+function resolveWorkflow(id) {
+  return Workflows.get(id) || Workflows.list().find((x) => x.spec?.id === id);
+}
+
 export async function GET(_req, { params }) {
   const { id } = await params;
-  const w = Workflows.get(id) || Workflows.list().find((x) => x.spec?.id === id);
+  const w = resolveWorkflow(id);
   if (!w) return NextResponse.json({ error: '工作流不存在' }, { status: 404 });
 
   let abs;
@@ -67,7 +72,7 @@ export async function GET(_req, { params }) {
 export async function PUT(req, { params }) {
   if (PUBLIC_MODE) return NextResponse.json({ error: '公开模式下不允许修改工作流' }, { status: 403 });
   const { id } = await params;
-  const w = Workflows.get(id) || Workflows.list().find((x) => x.spec?.id === id);
+  const w = resolveWorkflow(id);
   if (!w) return NextResponse.json({ error: '工作流不存在' }, { status: 404 });
 
   const body = await req.json().catch(() => ({}));
@@ -92,8 +97,49 @@ export async function PUT(req, { params }) {
     const tmp = abs + '.tmp-' + process.pid;
     fs.writeFileSync(tmp, text, 'utf8');
     fs.renameSync(tmp, abs);
-    return NextResponse.json({ ok: true, id: w.id, sourceFile: w.sourceFile, summary: summarize(structure) });
   } catch (e) {
     return NextResponse.json({ error: '保存失败：' + e.message }, { status: 500 });
   }
+
+  // 可选：同时更新 DB 里的规格（roles/media/outputs），引导式编辑器保存节点映射用。
+  let spec = w.spec;
+  if (body?.spec && typeof body.spec === 'object') {
+    spec = { ...(w.spec || {}), ...body.spec, id: w.spec?.id || id, sourceFile: w.sourceFile, name: w.name, kind: w.kind };
+    Workflows.upsert({ name: w.name, kind: w.kind, sourceFile: w.sourceFile, spec, status: w.status });
+  }
+
+  return NextResponse.json({ ok: true, id: w.id, sourceFile: w.sourceFile, spec, summary: summarize(structure) });
+}
+
+// 删除自定义工作流（builtin=false 才允许）：删除源文件 + DB 行，并把指向它的 config.workflows 回落默认。
+export async function DELETE(_req, { params }) {
+  if (PUBLIC_MODE) return NextResponse.json({ error: '公开模式下不允许删除工作流' }, { status: 403 });
+  const { id } = await params;
+  const w = resolveWorkflow(id);
+  if (!w) return NextResponse.json({ error: '工作流不存在' }, { status: 404 });
+  if (w.spec?.builtin !== false) {
+    return NextResponse.json({ error: '内置工作流不可删除，只能恢复默认' }, { status: 403 });
+  }
+
+  try {
+    const abs = safeSourcePath(w.sourceFile);
+    if (fs.existsSync(abs)) fs.unlinkSync(abs);
+  } catch { /* 源文件缺失不影响删除记录 */ }
+  Workflows.remove(w.id);
+
+  // 若 config.workflows 仍指向被删的自定义工作流，回落到当前硬件模式预设，避免渲染时找不到规格。
+  const cfg = loadConfig();
+  const preset = HW_PRESETS[hardwareMode(cfg)] || {};
+  const workflows = { ...(cfg.workflows || {}) };
+  let changed = false;
+  for (const [k, v] of Object.entries(workflows)) {
+    if (v === w.spec?.id || v === w.id || v === w.name) {
+      if (preset[k] !== undefined) workflows[k] = preset[k];
+      else delete workflows[k];
+      changed = true;
+    }
+  }
+  if (changed) saveConfig({ ...cfg, workflows });
+
+  return NextResponse.json({ ok: true, id: w.id });
 }

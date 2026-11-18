@@ -314,6 +314,18 @@ test('项目级取值域：video_resolution / video_aspect_ratio 直写被拒（
   Projects.remove(p.id);
 });
 
+test('项目级图片分辨率：1K/2K/4K 可写，其它值被拒', () => {
+  assert.throws(() => Projects.create({ name: '脏图片分辨率', image_resolution: '8K' }), (e) => e.code === 'BAD_PROJECT_ENUM');
+  const p = mkProject('图片分辨率');
+  assert.equal(Projects.get(p.id).image_resolution, '1K', '默认 1K');
+  assert.throws(() => Projects.update(p.id, { image_resolution: '8K' }), (e) => e.code === 'BAD_PROJECT_ENUM');
+  for (const v of shared.IMAGE_RESOLUTIONS) {
+    assert.equal(Projects.update(p.id, { image_resolution: v }).image_resolution, v, v + ' 应可写');
+  }
+  assert.equal(Projects.update(p.id, { image_resolution: '' }).image_resolution, '1K', '空串回退默认 1K');
+  Projects.remove(p.id);
+});
+
 test('自定义分辨率宽高：0=未设置，非 0 必须落在 64~4096（旧守卫只查 n<0，width=5 能落库）', () => {
   // video_resolution=custom 时宽高直接当画布尺寸喂给工作流（tools.js: `Number(project.video_width) || 1024`）：
   // 写进 5 不会当场报错，却让该项目之后的每一镜在渲染阶段才炸，而设置界面按 1024×576 兜底、看不出问题。

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { Assets, Queue, withWriteContext } from '@/lib/core/index.js';
 import { startAssetImageJob } from '@/lib/agent/index.js';
 import { broadcast } from '@/lib/ws.js';
+import { RATIO_LIST, IMAGE_RESOLUTIONS } from '@/lib/shared/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,11 +23,19 @@ export async function POST(req, { params }) {
   const mode = body?.mode === 'i2i' ? 'i2i' : 't2i';
   const prompt = body?.prompt != null ? String(body.prompt) : (a.prompt || '');
   const reference_image_path = body?.reference_image_path ? String(body.reference_image_path) : '';
+  const ratio = body?.ratio ? String(body.ratio) : '';
+  const resolution = body?.resolution ? String(body.resolution) : '';
+  if (ratio && !RATIO_LIST.includes(ratio)) {
+    return NextResponse.json({ error: 'ratio 只能是 ' + RATIO_LIST.join('/') + '（当前：' + ratio + '）' }, { status: 400 });
+  }
+  if (resolution && !IMAGE_RESOLUTIONS.includes(resolution)) {
+    return NextResponse.json({ error: 'resolution 只能是 ' + IMAGE_RESOLUTIONS.join('/') + '（当前：' + resolution + '）' }, { status: 400 });
+  }
   // 记录本次生成参数（供「重试」复用）并置为生成中
   withWriteContext('POST /api/projects/:id/assets/:aid/generate', () => {
-    Assets.update(aid, { params: { mode, prompt, reference_image_path }, status: 'generating' });
+    Assets.update(aid, { params: { mode, prompt, reference_image_path, ratio, resolution }, status: 'generating' });
   });
   // 去重检查通过后入全局队列，逐个执行
-  const job = startAssetImageJob({ projectId: id, assetId: aid, mode, prompt, referenceImagePath: reference_image_path, onProgress: (p) => broadcast(p) });
+  const job = startAssetImageJob({ projectId: id, assetId: aid, mode, prompt, referenceImagePath: reference_image_path, ratio, resolution, onProgress: (p) => broadcast(p) });
   return NextResponse.json(job);
 }

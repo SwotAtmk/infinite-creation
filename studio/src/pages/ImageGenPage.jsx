@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image as ImageIcon, Sparkles } from 'lucide-react';
 import { api, uploadBinary } from '../lib/api.js';
-import { Button, Field, Segmented, Textarea } from '../components/ui.jsx';
+import { Button, Field, Segmented, Select, Textarea } from '../components/ui.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { FileDrop } from '../components/media.jsx';
 import { FilePill, MediaGrid, useAssets, useAutoProject, useJobs } from '../components/simpleStudio.jsx';
 import { useToast } from '../components/toast.jsx';
+import { IMAGE_RESOLUTION_ITEMS, imageSizeFor } from '../lib/shared.js';
+import { RATIO_SELECT_ITEMS } from '../components/visuals.jsx';
 
 export default function ImageGenPage() {
   const toast = useToast();
@@ -15,7 +17,34 @@ export default function ImageGenPage() {
   const [mode, setMode] = useState('t2i');
   const [prompt, setPrompt] = useState('');
   const [refFile, setRefFile] = useState(null);
+  const [ratio, setRatio] = useState('16:9');
+  const [resolution, setResolution] = useState('1K');
+  const [project, setProject] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  // 分辨率默认跟随项目设置（项目设置里可改 1K/2K/4K）
+  useEffect(() => {
+    if (!projectId) {
+      setProject(null);
+      return;
+    }
+    api.get('/api/projects/' + projectId).then(setProject).catch(() => setProject(null));
+  }, [projectId]);
+  useEffect(() => {
+    if (project?.image_resolution) setResolution(project.image_resolution);
+  }, [project?.image_resolution]);
+
+  function changeMode(v) {
+    setMode(v);
+    setRatio(v === 'i2i' ? '' : '16:9');
+  }
+
+  const [pxW, pxH] = imageSizeFor(ratio || '16:9', resolution);
+  const sizeHint = mode === 't2i'
+    ? '输出约 ' + pxW + '×' + pxH + '（' + resolution + '）'
+    : ratio
+      ? '输出约 ' + pxW + '×' + pxH + '（按 ' + ratio + ' 裁切）'
+      : '跟随参考图宽高比；' + resolution + ' 档位在生成后归一化';
 
   async function generate() {
     if (!projectId) {
@@ -39,7 +68,12 @@ export default function ImageGenPage() {
       if (mode === 'i2i') {
         await uploadBinary('/api/projects/' + projectId + '/assets/' + asset.id + '/upload', refFile, refFile.type || 'application/octet-stream');
       }
-      await api.post('/api/projects/' + projectId + '/assets/' + asset.id + '/generate', { mode, prompt: prompt.trim() });
+      await api.post('/api/projects/' + projectId + '/assets/' + asset.id + '/generate', {
+        mode,
+        prompt: prompt.trim(),
+        ratio: ratio || undefined,
+        resolution,
+      });
       toast.success('已提交图片生成任务');
       setPrompt('');
       setRefFile(null);
@@ -57,6 +91,8 @@ export default function ImageGenPage() {
     await api.post('/api/projects/' + projectId + '/assets/' + asset.id + '/generate', {
       mode: p.mode === 'i2i' ? 'i2i' : 't2i',
       prompt: p.prompt || asset.prompt || '',
+      ratio: p.ratio || undefined,
+      resolution: p.resolution || undefined,
     });
     toast.success('已重新提交图片生成任务');
   }
@@ -72,7 +108,7 @@ export default function ImageGenPage() {
       <section className="panel flex flex-col gap-4 p-4">
         <Segmented
           value={mode}
-          onChange={setMode}
+          onChange={changeMode}
           options={[
             { value: 't2i', label: '文生图' },
             { value: 'i2i', label: '图生图' },
@@ -93,6 +129,19 @@ export default function ImageGenPage() {
             {refFile ? <FilePill onRemove={() => setRefFile(null)}>{refFile.name}</FilePill> : null}
           </div>
         ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="尺寸" hint={sizeHint}>
+            <Select
+              value={ratio}
+              onChange={setRatio}
+              items={mode === 'i2i' ? [{ value: '', label: '跟随参考图' }, ...RATIO_SELECT_ITEMS] : RATIO_SELECT_ITEMS}
+            />
+          </Field>
+          <Field label="分辨率" hint={'项目默认：' + (project?.image_resolution || '1K') + '；按宽高比换算具体像素'}>
+            <Select value={resolution} onChange={setResolution} items={IMAGE_RESOLUTION_ITEMS} />
+          </Field>
+        </div>
 
         <Field label="提示词" required hint="描述画面主体、风格、构图与光线，越具体越可控。">
           <Textarea rows={4} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="例如：黄昏的海边小镇，暖色调，电影感构图，细腻光影" />

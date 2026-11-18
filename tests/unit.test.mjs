@@ -15,7 +15,7 @@ import {
   toOutputItem, runninghubSubmit, generateTask, uploadTaskInput, downloadTaskOutput, checkBackend, freeBackend, interruptTask, DEFAULT_SPECS,
   runRenderSlot, renderConcurrencyLimit, buildChapterScriptMessages,
 } from '../lib/core/index.js';
-import { ratioToSize, videoSizeFor, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
+import { ratioToSize, imageSizeFor, IMAGE_RESOLUTIONS, videoSizeFor, ASSET_CATEGORIES, PROJECT_ASSET_SUBDIRS, filterReferenceImages, splitNovelIntoChapters, FALLBACK_CHAPTER_CHARS, isTruncatedText, classifyAgentMsg, watchdogStep, watchdogStallCheck, AGENT_WATCHDOG, inferVoiceBaseline, HW_PRESETS as SHARED_HW_PRESETS, isPresetWorkflows, presetModeOf, comfyBaseUrl, maskComfyBaseUrl, uploadMediaKind, UPLOAD_MAX_BYTES, SKILL_ZIP_MAX_BYTES, nameMatches, textMentions, isVariantAssetCategory, VARIANT_ASSET_CATEGORIES, isReferenceImageName, REFERENCE_IMAGE_EXTS, REFERENCE_IMAGE_MAX_BYTES } from '../lib/shared/index.js';
 import { parseFrontmatter, routeSkill, installSkillsFromZip, collectSkillReferences } from '../lib/agent/index.js';
 import { ckBroken, STAGES, STAGE_MAP, preflight } from '../lib/agent/stages.js';
 import { RENDER_TOOLS, IMAGE_ASSET_CATEGORIES, runTool, variantReusable, variantPrompt, keepsUserPrompt, TOOL_DEFINITIONS } from '../lib/agent/tools.js';
@@ -843,6 +843,17 @@ test('slugify / ratioToSize', () => {
   assert.equal(slugify('  hello world! '), 'hello_world');
   assert.deepEqual(ratioToSize('16:9'), [1344, 768]);
   assert.deepEqual(ratioToSize('不存在'), [1344, 768]);
+});
+
+test('imageSizeFor: 按宽高比与 1K/2K/4K 档位换算 32 倍数尺寸', () => {
+  assert.deepEqual(imageSizeFor('16:9', '1K'), [1344, 768]);
+  assert.deepEqual(imageSizeFor('1:1', '1K'), [1024, 1024]);
+  for (const res of IMAGE_RESOLUTIONS) {
+    const [w, h] = imageSizeFor('21:9', res);
+    assert.equal(w % 32, 0);
+    assert.equal(h % 32, 0);
+  }
+  assert.ok(imageSizeFor('16:9', '4K')[0] > imageSizeFor('16:9', '2K')[0]);
 });
 
 test('资产分类含服装 costume', () => {

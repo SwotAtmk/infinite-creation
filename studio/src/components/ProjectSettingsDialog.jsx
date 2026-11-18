@@ -14,6 +14,7 @@ export default function ProjectSettingsDialog({ open, onOpenChange, project, onS
   const [customStyle, setCustomStyle] = useState('');
   const [res, setRes] = useState('480P');
   const [ratio, setRatio] = useState('16:9');
+  const [imageRes, setImageRes] = useState('1K');
   const [cw, setCw] = useState('');
   const [ch, setCh] = useState('');
   const [enableBgm, setEnableBgm] = useState(true);
@@ -29,6 +30,7 @@ export default function ProjectSettingsDialog({ open, onOpenChange, project, onS
     setCustomStyle(init.custom);
     setRes(project.video_resolution || '480P');
     setRatio(project.video_aspect_ratio || '16:9');
+    setImageRes(project.image_resolution || '1K');
     setCw(project.video_width ? String(project.video_width) : '');
     setCh(project.video_height ? String(project.video_height) : '');
     setEnableBgm(project.enable_bgm !== false);
@@ -46,6 +48,7 @@ export default function ProjectSettingsDialog({ open, onOpenChange, project, onS
         video_aspect_ratio: ratio,
         video_width: Number(cw) || 0,
         video_height: Number(ch) || 0,
+        image_resolution: imageRes,
         enable_bgm: enableBgm,
         enable_subtitles: enableSub,
         auto_script: autoScript,
@@ -133,24 +136,18 @@ export default function ProjectSettingsDialog({ open, onOpenChange, project, onS
             />
           </div>
         </FormSection>
+
+        <div className="hairline" />
+
+        <FormSection index="03" title="图片参数" description="素材库新建或重新生成的图片使用该档位">
+          <Field
+            label="图片分辨率"
+            hint="1K / 2K / 4K，按各素材宽高比自动换算像素（32 的倍数）；文生图直接按档位出图，图生图生成后归一化到该档位。"
+          >
+            <Select value={imageRes} onChange={setImageRes} items={IMAGE_RESOLUTION_ITEMS} />
+          </Field>
+        </FormSection>
       </div>
     </Modal>
-  );
-}
-
-function StyleChip({ active, onClick, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={clsx(
-        'rounded-full border px-3 py-1.5 text-[12px] transition-all duration-150',
-        active
-          ? 'border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]'
-          : 'border-[var(--line)] bg-white/[0.02] text-[var(--fg-3)] hover:border-[var(--line-strong)] hover:text-[var(--fg-2)]',
-      )}
-    >
-      {children}
-    </button>
   );
 }

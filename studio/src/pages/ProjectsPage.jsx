@@ -4,7 +4,6 @@ import { ArrowUpRight, Clapperboard, Film, Image as ImageIcon, Layers, Plus, Spa
 import { api, uploadForm } from '../lib/api.js';
 import { fileUrl, fmtRelative, STATUS_TEXT } from '../lib/format.js';
 import {
-  STYLE_OPTIONS,
   STYLE_CUSTOM,
   resolveStyle,
   VIDEO_RESOLUTION_CUSTOM,
@@ -14,6 +13,7 @@ import { RESOLUTION_SELECT_ITEMS, RATIO_SELECT_ITEMS, MetaItem } from '../compon
 import { Badge, Button, EmptyState, Field, Input, Select, Skeleton, StatusPill, Switch, Textarea } from '../components/ui.jsx';
 import { Drawer, FormSection } from '../components/overlays.jsx';
 import ReferencePicker from '../components/ReferencePicker.jsx';
+import StylePicker, { StyleChip } from '../components/StylePicker.jsx';
 import { MediaCard } from '../components/simpleStudio.jsx';
 import { useToast } from '../components/toast.jsx';
 
@@ -620,16 +620,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
           <div className="hairline" />
 
           <FormSection index="02" title="画面风格" description="可留空，由 Agent 根据故事推断">
-            <div className="flex flex-wrap gap-1.5">
-              <StyleChip active={form.style === ''} onClick={() => setForm({ ...form, style: '' })}>
-                不指定
-              </StyleChip>
-              {STYLE_OPTIONS.map((s) => (
-                <StyleChip key={s} active={form.style === s} onClick={() => setForm({ ...form, style: s })}>
-                  {s}
-                </StyleChip>
-              ))}
-            </div>
+            <StylePicker value={form.style} onChange={(style) => setForm({ ...form, style })} />
             {form.style === STYLE_CUSTOM ? (
               <Input
                 value={form.customStyle}
@@ -705,23 +696,6 @@ function Stat({ icon: Icon, label, value, tone }) {
         <span className="truncate text-[10.5px] text-[var(--fg-3)]">{label}</span>
       </div>
     </div>
-  );
-}
-
-function StyleChip({ active, onClick, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={clsx(
-        'rounded-full border px-3 py-1.5 text-[12px] transition-all duration-150',
-        active
-          ? 'border-[color-mix(in_srgb,var(--accent)_45%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]'
-          : 'border-[var(--line)] bg-white/[0.02] text-[var(--fg-3)] hover:border-[var(--line-strong)] hover:text-[var(--fg-2)]',
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

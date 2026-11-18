@@ -1,5 +1,16 @@
 // 单一事实来源：常量与纯函数直接复用主仓库 lib/shared，避免工作室与老界面各写一份而漂移。
-import { VIDEO_RESOLUTION_OPTIONS, VIDEO_RESOLUTION_CUSTOM, VIDEO_ASPECT_RATIOS } from '@shared';
+import {
+  VIDEO_RESOLUTION_OPTIONS,
+  VIDEO_RESOLUTION_CUSTOM,
+  VIDEO_ASPECT_RATIOS,
+  IMAGE_RESOLUTIONS,
+  imageSizeFor,
+  STYLE_PRESETS,
+  STYLE_CUSTOM,
+  STYLE_OPTIONS,
+  STYLE_GROUPS,
+  STYLE_COMMON,
+} from '@shared';
 
 export {
   ASSET_CATEGORIES,
@@ -8,9 +19,12 @@ export {
   VIDEO_ASPECT_RATIOS,
   VIDEO_RESOLUTION_CUSTOM,
   VIDEO_RESOLUTION_OPTIONS,
+  IMAGE_RESOLUTIONS,
+  imageSizeFor,
   HW_MODES,
   HW_PRESETS,
   HW_DEFAULT_FREE,
+  RUNNINGHUB_WORKFLOWS,
   hardwareMode,
   isPresetWorkflows,
   comfyBaseUrl,
@@ -22,8 +36,15 @@ export {
   isVariantAssetCategory,
   SHOT_STATUS,
   VIDEO_MODE_LABELS,
+  WORKFLOW_TASKS,
+  VIDEO_MODE_TO_KIND,
   PROJECT_TYPES,
   PROJECT_TYPE_LABEL,
+  STYLE_PRESETS,
+  STYLE_CUSTOM,
+  STYLE_OPTIONS,
+  STYLE_GROUPS,
+  STYLE_COMMON,
 } from '@shared';
 
 // 下拉展示用：值 → 显示名，与主界面保持同一份值域（不把 1080P/2K/4K 放进下拉）
@@ -32,10 +53,7 @@ export const VIDEO_RESOLUTION_ITEMS = VIDEO_RESOLUTION_OPTIONS.map((v) => ({
   label: v === VIDEO_RESOLUTION_CUSTOM ? '自定义宽高' : v,
 }));
 export const VIDEO_RATIO_ITEMS = VIDEO_ASPECT_RATIOS.map((r) => ({ value: r, label: r }));
-
-export const STYLE_PRESETS = ['真人写实', '动漫', '国漫', '日系动漫风', '卡通', 'Q版卡通风', '国风玄幻'];
-export const STYLE_CUSTOM = '自定义风格';
-export const STYLE_OPTIONS = [...STYLE_PRESETS, STYLE_CUSTOM];
+export const IMAGE_RESOLUTION_ITEMS = IMAGE_RESOLUTIONS.map((v) => ({ value: v, label: v }));
 
 export function resolveStyle(sel, custom) {
   return sel === STYLE_CUSTOM ? (custom || '').trim() : sel || '';

@@ -1,5 +1,13 @@
 // 共享常量与工具函数（无 React 依赖）
-import { VIDEO_ASPECT_RATIOS, VIDEO_RESOLUTION_CUSTOM, VIDEO_RESOLUTION_OPTIONS, ASSET_CATEGORIES } from '../../lib/shared/index.js';
+import {
+  VIDEO_ASPECT_RATIOS,
+  VIDEO_RESOLUTION_CUSTOM,
+  VIDEO_RESOLUTION_OPTIONS,
+  ASSET_CATEGORIES,
+  STYLE_PRESETS,
+  STYLE_CUSTOM,
+  STYLE_OPTIONS,
+} from '../../lib/shared/index.js';
 
 // 资产分类下拉（素材库分组 Tab + 新建/编辑素材的分类选择）与写入端共用一份值域：
 // 之前这里手写清单且漏了 age，导致「年龄/时期」变体在素材库里既建不出、也改不过去
@@ -9,9 +17,8 @@ export const CATEGORIES = ASSET_CATEGORIES.map((c) => [c.id, c.label]);
 // 这里只做「值 → 显示名」的展示层映射，避免下拉与映射表各写一份而彼此漂移。
 export const VIDEO_RESOLUTIONS = VIDEO_RESOLUTION_OPTIONS.map((v) => [v, v === VIDEO_RESOLUTION_CUSTOM ? '自定义宽高' : v]);
 export const VIDEO_RATIOS = VIDEO_ASPECT_RATIOS;
-export const STYLE_PRESETS = ['真人写实', '动漫', '国漫', '日系动漫风', '卡通', 'Q版卡通风', '国风玄幻'];
-export const STYLE_CUSTOM = '自定义风格';
-export const STYLE_OPTIONS = [...STYLE_PRESETS, STYLE_CUSTOM];
+// 画面风格预设：值与 Studio 共用 lib/shared 一份，这里只负责再导出。
+export { STYLE_PRESETS, STYLE_CUSTOM, STYLE_OPTIONS };
 
 // 下拉选择值 + 自定义文本 -> 最终存储的 style 字符串
 export function resolveStyle(sel, custom) {

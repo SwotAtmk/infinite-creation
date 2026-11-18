@@ -44,6 +44,11 @@ function kindLabel(kind) {
   return WORKFLOW_TASKS.find((t) => t.kind === kind)?.label || kind;
 }
 
+const HW_LABELS = { nvidia: '英伟达', amd: 'AMD', runninghub: 'RunningHub' };
+function hwLabel(hw) {
+  return hw ? (HW_LABELS[hw] || hw) : '通用';
+}
+
 function nodeListOf(structure) {
   if (!structure || typeof structure !== 'object') return [];
   return Object.entries(structure).map(([id, n]) => ({
@@ -64,22 +69,52 @@ export default function WorkflowConfigPanel({ cfg, setCfg, workflows, mode, onRe
   const filteredTasks = taskFilter === 'all' ? WORKFLOW_TASKS : WORKFLOW_TASKS.filter((t) => t.group === taskFilter);
   const customWorkflows = workflows.filter((w) => w.spec?.builtin === false);
 
+  // 工作流是否属于当前执行端：RunningHub 只认云端工作流（runninghub_* 内置，或 spec.hw='runninghub' 的自定义）；
+  // 本地（英伟达 / AMD）只认本地工作流，且 spec.hw 为空（通用）或与当前硬件一致。
+  // 自定义工作流在保存时会打上创建时的执行端，因此只会出现在对应类型下面。
+  function isCompatible(w) {
+    const sid = String(w.spec?.id || w.id || '');
+    const hw = w.spec?.hw;
+    if (mode === 'runninghub') return sid.startsWith('runninghub_') || hw === 'runninghub';
+    if (sid.startsWith('runninghub_') || hw === 'runninghub') return false;
+    return hw == null || hw === mode;
+  }
+
   function optionsFor(kind) {
     // 内置视频工作流的 spec.kind 统一为 'r2v'，视频类槽位需同时列出 'r2v' 与自定义的细分 kind。
     const matchKinds = groupOf(kind) === 'video' ? ['r2v', kind] : [kind];
     return workflows
-      .filter((w) => {
-        if (!matchKinds.includes(w.kind)) return false;
-        if (w.spec?.builtin === false) return true; // 自定义工作流在任意执行端都可选
-        if (mode === 'runninghub') return (w.spec?.id || '').startsWith('runninghub_');
-        return w.spec?.hw == null || w.spec?.hw === mode;
-      })
+      .filter((w) => matchKinds.includes(w.kind) && isCompatible(w))
       .map((w) => ({ value: w.spec?.id || w.id, label: w.name }));
   }
 
+  // 当前值若不属于当前执行端（切换 英伟达/AMD/RunningHub 后残留），回落到该端的预设，避免下拉显示空值。
   function currentId(kind) {
-    return cfg.workflows?.[kind] || preset[kind] || '';
+    const options = optionsFor(kind);
+    const cur = cfg.workflows?.[kind];
+    if (cur && options.some((o) => o.value === cur)) return cur;
+    if (preset[kind]) return preset[kind];
+    return options[0]?.value || '';
   }
+
+  // 切换执行端后，把不属于当前端的配置值就地纠正为该端预设（仅内存，保存时落盘），
+  // 保证「上面选哪种 ComfyUI 类型」和「下面卡片实际使用的工作流节点」一致。
+  useEffect(() => {
+    if (!workflows.length) return;
+    const wf = cfg.workflows || {};
+    const next = { ...wf };
+    let changed = false;
+    for (const t of WORKFLOW_TASKS) {
+      const cur = next[t.kind];
+      const ok = cur && optionsFor(t.kind).some((o) => o.value === cur);
+      if (!ok && preset[t.kind] && next[t.kind] !== preset[t.kind]) {
+        next[t.kind] = preset[t.kind];
+        changed = true;
+      }
+    }
+    if (changed) setCfg({ ...cfg, workflows: next });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflows, mode]);
 
   function restore(kind) {
     if (preset[kind] === undefined) return;
@@ -161,6 +196,7 @@ export default function WorkflowConfigPanel({ cfg, setCfg, workflows, mode, onRe
       {editing ? (
         <WorkflowEditorModal
           open
+          backend={mode}
           onClose={() => setEditing(null)}
           initial={editing}
           onSaved={() => {
@@ -191,10 +227,12 @@ export default function WorkflowConfigPanel({ cfg, setCfg, workflows, mode, onRe
   );
 }
 
-function WorkflowEditorModal({ open, onClose, initial, onSaved }) {
+function WorkflowEditorModal({ open, onClose, initial, onSaved, backend = 'nvidia' }) {
   const toast = useToast();
   const [name, setName] = useState('');
   const [kind, setKind] = useState('t2i');
+  // 工作流归属的执行端（spec.hw）：默认跟随当前选中的 ComfyUI 类型，保存后只在该类型下可选。
+  const [targetHw, setTargetHw] = useState(backend);
   const [jsonText, setJsonText] = useState('');
   const [structure, setStructure] = useState(null);
   const [nodes, setNodes] = useState([]);
@@ -224,6 +262,7 @@ function WorkflowEditorModal({ open, onClose, initial, onSaved }) {
         .then((w) => {
           setName(w.name || '');
           setKind(w.kind || 'custom');
+          setTargetHw(w.spec?.hw || backend);
           setStructure(w.structure || null);
           setNodes(nodeListOf(w.structure));
           setRoles(w.spec?.roles || {});
@@ -254,8 +293,10 @@ function WorkflowEditorModal({ open, onClose, initial, onSaved }) {
           setJsonText(w.structure ? JSON.stringify(w.structure, null, 2) : '');
         })
         .catch((e) => toast.error(e.message));
+    } else {
+      setTargetHw(backend);
     }
-  }, [open, initial]);
+  }, [open, initial, backend]);
 
   function parseJson() {
     try {
@@ -374,7 +415,7 @@ function WorkflowEditorModal({ open, onClose, initial, onSaved }) {
       roles: cleanRoles(),
       outputs: outputs || [],
       ...cleanMedia(),
-      hw: null,
+      hw: targetHw === 'generic' ? null : targetHw,
       builtin: false,
     };
     setSaving(true);
@@ -414,12 +455,24 @@ function WorkflowEditorModal({ open, onClose, initial, onSaved }) {
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <Field label="工作流名称" required>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：我的自定义文生图" />
           </Field>
           <Field label="任务类型">
             <Select value={kind} onChange={setKind} items={WORKFLOW_TASKS.map((t) => ({ value: t.kind, label: t.label }))} />
+          </Field>
+          <Field label="适用执行端" hint="保存后只出现在该类型的工作流下拉里">
+            <Select
+              value={targetHw}
+              onChange={setTargetHw}
+              items={[
+                { value: 'nvidia', label: '英伟达 · 原版工作流' },
+                { value: 'amd', label: 'AMD · GGUF 量化适配' },
+                { value: 'runninghub', label: 'RunningHub · 云端渲染' },
+                { value: 'generic', label: '通用（英伟达 + AMD）' },
+              ]}
+            />
           </Field>
         </div>
 
@@ -599,7 +652,7 @@ function WorkflowListModal({ open, onClose, workflows, onCreate, onEdit, onView,
                   <span className="truncate text-[13px] font-medium text-[var(--fg)]">{w.name}</span>
                   <Badge tone="accent">自定义</Badge>
                 </div>
-                <span className="text-[11px] text-[var(--fg-3)]">{kindLabel(w.kind)}</span>
+                <span className="text-[11px] text-[var(--fg-3)]">{kindLabel(w.kind)} · {hwLabel(w.spec?.hw)}</span>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="iconSm" title="查看" onClick={() => onView(w)}>
                     <Eye size={13} />
@@ -641,7 +694,7 @@ function WorkflowViewModal({ id, onClose }) {
       open
       onOpenChange={(o) => !o && onClose()}
       title={data?.name || '查看工作流'}
-      description={data ? kindLabel(data.kind) + ' · ' + (data.sourceFile || '') : '加载中…'}
+      description={data ? kindLabel(data.kind) + ' · ' + hwLabel(data.spec?.hw) + ' · ' + (data.sourceFile || '') : '加载中…'}
       size="lg"
       footer={<Button variant="ghost" size="sm" onClick={onClose}>关闭</Button>}
     >

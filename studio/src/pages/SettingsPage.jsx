@@ -25,7 +25,6 @@ import {
   RUNNINGHUB_WORKFLOWS,
   comfyBaseUrl,
   hardwareMode,
-  isPresetWorkflows,
   VIDEO_RESOLUTION_CUSTOM,
 } from '../lib/shared.js';
 import { Badge, Button, EmptyState, Field, Input, Segmented, Select, Spinner, Switch } from '../components/ui.jsx';
@@ -266,19 +265,39 @@ export default function SettingsPage({ onBack, publicMode = false }) {
   function switchMode(mode) {
     setTest('');
     setComfyInfo(null);
-    // RunningHub 是执行端：切到云端时用 RunningHub 的工作流预设（可通过面板自定义覆盖）。
+    // 切换执行端时，各任务类型的工作流跟随该端预设：
+    // 只有「自定义且在该端可用」的选择才保留，其余一律回到新执行端的默认工作流，避免下面卡片显示与上方类型不符的节点。
+    const target = mode === 'runninghub' ? RUNNINGHUB_WORKFLOWS : HW_PRESETS[mode];
+    const prev = cfg.workflows || {};
+    const byId = new Map(workflows.map((w) => [w.spec?.id || w.id, w]));
+    const usableHere = (id) => {
+      const w = byId.get(id);
+      if (!w || w.spec?.builtin !== false) return false; // 只保留自定义工作流
+      const sid = String(id);
+      if (mode === 'runninghub') return sid.startsWith('runninghub_');
+      if (sid.startsWith('runninghub_')) return false;
+      const hw = w.spec?.hw;
+      return hw == null || hw === mode;
+    };
+    const next = {};
+    for (const [k, def] of Object.entries(target)) {
+      const cur = prev[k];
+      next[k] = cur && usableHere(cur) ? cur : def;
+    }
+    for (const [k, v] of Object.entries(prev)) {
+      if (!(k in next) && usableHere(v)) next[k] = v;
+    }
+
     if (mode === 'runninghub') {
-      setCfg({ ...cfg, comfyui: { ...cfg.comfyui, provider: 'runninghub' }, workflows: { ...RUNNINGHUB_WORKFLOWS } });
+      setCfg({ ...cfg, comfyui: { ...cfg.comfyui, provider: 'runninghub' }, workflows: next });
       return;
     }
     const free = cfg.generation.freeAfterEvery;
-    const isRunninghubPreset = Object.keys(RUNNINGHUB_WORKFLOWS).every((k) => cfg.workflows?.[k] === RUNNINGHUB_WORKFLOWS[k]);
-    const workflowsNext = isPresetWorkflows(cfg.workflows) || isRunninghubPreset ? { ...HW_PRESETS[mode] } : cfg.workflows;
     setCfg({
       ...cfg,
       comfyui: { ...cfg.comfyui, provider: 'native' },
       hardware: { ...cfg.hardware, mode },
-      workflows: workflowsNext,
+      workflows: next,
       generation: {
         ...cfg.generation,
         freeAfterEvery: free == null || Number(free) === HW_DEFAULT_FREE[hwMode] ? HW_DEFAULT_FREE[mode] : free,

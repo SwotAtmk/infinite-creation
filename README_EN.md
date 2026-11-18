@@ -2,10 +2,10 @@
 
 # Agent Infinite Creation · Turn Your Stories into a Billion Frames
 
-**Free, open-source, fully automated local-agent video generation ✨**
+**Source-available, free for non-commercial use — fully automated local-agent video generation ✨**
 Upload a novel or script and generate films of any length locally — unattended.
 
-<a href="https://github.com/SwotAtmk/infinite-creation/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SwotAtmk/infinite-creation?style=for-the-badge&color=F5B700&label=stars"></a> <a href="README.md"><img alt="简体中文" src="https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555?style=for-the-badge"></a> <a href="https://github.com/SwotAtmk/infinite-creation/blob/main/LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licence-MIT-2EA44F?style=for-the-badge"></a> <a href="https://nodejs.org/"><img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=for-the-badge"></a><a href="https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0"><img alt="我的B站" src="https://img.shields.io/badge/bilibili-SwotAtmk-blue?style=for-the-badge&logo=bilibili&logoColor=%2300A1D6"></a>
+<a href="https://github.com/SwotAtmk/infinite-creation/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SwotAtmk/infinite-creation?style=for-the-badge&color=F5B700&label=stars"></a> <a href="README.md"><img alt="简体中文" src="https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555?style=for-the-badge"></a> <a href="https://github.com/SwotAtmk/infinite-creation/blob/main/LICENSE"><img alt="PolyForm-NC 1.0.0" src="https://img.shields.io/badge/licence-PolyForm--NC--1.0.0-4B5563?style=for-the-badge"></a> <a href="https://nodejs.org/"><img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=for-the-badge"></a> <a href="https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0"><img alt="我的B站" src="https://img.shields.io/badge/bilibili-SwotAtmk-blue?style=for-the-badge&logo=bilibili&logoColor=%2300A1D6"></a>
 
 </div>
 
@@ -80,7 +80,7 @@ If you or your team find it valuable, sponsoring is the most direct way to keep 
 
 ## What is Agent Infinite Creation
 
-An open-source, local workbench for novel adaptations, comic-drama ads, and story-driven explainer videos. It organizes content analysis, asset management, storyboarding, media generation, cost tracking, and export into one reviewable, resumable production pipeline — no actors, voice actors, directors, or editors required.
+A source-available, local workbench for novel adaptations, comic-drama ads, and story-driven explainer videos. It organizes content analysis, asset management, storyboarding, media generation, cost tracking, and export into one reviewable, resumable production pipeline — no actors, voice actors, directors, or editors required.
 
 - **Two creation workspaces**: **Agent Infinite Creation** (novel / script → long video) and **Rank Shadow** (powered by the lemo-opuscar code-film skill: 66 style templates + any materials + a prompt, with the Agent rendering a styled film locally — no ComfyUI required).
 - **One production chain**: once a novel or script enters a project, the Agent produces the character bible, style guide, character / scene / prop / voice assets, storyboard script, per-shot videos, background music, subtitles, and the final ffmpeg merge.
@@ -311,7 +311,7 @@ Thank you to these projects for enabling rapid iteration and improvement.
 
 ## Author's Note
 
-Welcome everyone to provide feedback, find and report bugs, and help spread the word. Let's create a better product for more people to discover. The project has just been open-sourced, and there may be many areas that need adjustment and optimization. We welcome everyone to submit issues or make further optimizations based on my work. Thank you to everyone who contributes to this project.
+Welcome everyone to provide feedback, find and report bugs, and help spread the word. Let's create a better product for more people to discover. The project has just been released, and there may be many areas that need adjustment and optimization. We welcome everyone to submit issues or make further optimizations based on my work. Thank you to everyone who contributes to this project.
 
 My Bilibili：[https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0](https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0)
 
@@ -332,10 +332,24 @@ My Bilibili：[https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0](ht
  </picture>
 </a>
 
-## License
+## License & Commercial Use
 
-This project is open-sourced under the [MIT License](LICENSE). MIT is the most permissive open-source license — you may use it commercially and create derivative works, but must retain the original statement.
+This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE) (PolyForm-NC 1.0.0) — a **source-available** license, not an OSI-approved open-source license.
+
+- **Free for non-commercial use**: personal study, research, experiment, private entertainment, hobby projects, and use by charitable, educational, public research, public safety or health, environmental, and government organizations are permitted — you may use, modify, and distribute the software at no cost.
+- **Commercial use requires a separate license**: PolyForm-NC grants no commercial rights. Using this project (or a derivative) in paid products or services, offering it as a hosted / SaaS service, or using it in the business operations of a for-profit entity requires a written commercial license.
+- **Keep the notice**: any modified or redistributed copy must retain this license and the `Required Notice: Copyright (c) 2026 SwotAtmk` line.
+
+### Commercial Licensing Requests
+
+Email [swotatmk@foxmail.com](mailto:swotatmk@foxmail.com) and state the purpose in the subject line, for example:
+
+```text
+Commercial License Request - Company/Name - Intended Use
+```
+
+Please include: who will use it, the intended use (product / service form), deployment scale (instances / users), whether it will be offered to third parties, and whether custom development support is needed. I will reply with licensing options and pricing as soon as possible.
 
 Copyright (c) 2026 SwotAtmk
 
-> Note: Some skills in the `skills/` directory originate from the MiniMax-H3 official repository, and the `vendor/` directory contains third-party code. These are not covered by this project's MIT license — please follow their respective licensing terms.
+> Note: Some skills in the `skills/` directory originate from the MiniMax-H3 official repository, and the `vendor/` directory contains third-party code. These are not covered by this project's PolyForm-NC 1.0.0 license — please follow their respective licensing terms (for example, `skills/short-drama-*` and `skills/lemo-opuscar` remain MIT).

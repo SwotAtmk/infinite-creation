@@ -2,10 +2,10 @@
 
 # Agent无限创作 · 把你的故事变成亿帧画面
 
-**免费开源本地 Agent 全自动视频生成 ✨**
+**源码可见、非商业免费使用的本地 Agent 全自动视频生成 ✨**
 上传小说 / 剧本，本地一键生成任意时长的成片，全程无人值守。
 
-<a href="https://github.com/SwotAtmk/infinite-creation/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SwotAtmk/infinite-creation?style=for-the-badge&color=F5B700&label=stars"></a> <a href="README_EN.md"><img alt="English" src="https://img.shields.io/badge/README-English-555?style=for-the-badge"></a> <a href="https://github.com/SwotAtmk/infinite-creation/blob/main/LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licence-MIT-2EA44F?style=for-the-badge"></a> <a href="https://nodejs.org/"><img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=for-the-badge"></a><a href="https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0"><img alt="我的B站" src="https://img.shields.io/badge/bilibili-SwotAtmk-blue?style=for-the-badge&logo=bilibili&logoColor=%2300A1D6"></a>
+<a href="https://github.com/SwotAtmk/infinite-creation/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SwotAtmk/infinite-creation?style=for-the-badge&color=F5B700&label=stars"></a> <a href="README_EN.md"><img alt="English" src="https://img.shields.io/badge/README-English-555?style=for-the-badge"></a> <a href="https://github.com/SwotAtmk/infinite-creation/blob/main/LICENSE"><img alt="PolyForm-NC 1.0.0" src="https://img.shields.io/badge/licence-PolyForm--NC--1.0.0-4B5563?style=for-the-badge"></a> <a href="https://nodejs.org/"><img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=for-the-badge"></a> <a href="https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0"><img alt="我的B站" src="https://img.shields.io/badge/bilibili-SwotAtmk-blue?style=for-the-badge&logo=bilibili&logoColor=%2300A1D6"></a>
 
 </div>
 
@@ -80,7 +80,7 @@
 
 ## Agent无限创作是什么
 
-面向小说改编、漫剧广告与故事讲解视频的开源本地工作台。它把内容分析、资产管理、分镜、媒体生成、费用追踪和导出组织成一条可审核、可中断恢复的生产流水线，不需要演员、配音、导演和剪辑师。
+面向小说改编、漫剧广告与故事讲解视频的源码可见本地工作台。它把内容分析、资产管理、分镜、媒体生成、费用追踪和导出组织成一条可审核、可中断恢复的生产流水线，不需要演员、配音、导演和剪辑师。
 
 - **两个创作工作台**：**Agent无限创作**（小说 / 剧本 → 长视频）与 **无限・秩影**（接入 lemo-opuscar 代码电影技能，66 个风格模板 + 任意素材 + 提示词，Agent 自动渲染风格化成片，无需 ComfyUI）。
 - **统一生产链路**：小说或剧本进入项目后，自动完成人物圣经、风格指南、人物 / 场景 / 道具 / 语音资产、分镜脚本、逐镜视频、背景音乐、字幕与 ffmpeg 合片。
@@ -307,7 +307,7 @@ git clone https://github.com/happymy/MinimaxH3-7900xtx.git
 
 ## 作者致辞
 
-欢迎各位同行多提提意见，多找找bug帮忙多多宣传，做出更好的产品让更多的人发现。项目刚开源里面可能会有很多地方需要调整优化的地方，欢迎各位提交issues或者在我的基础上做更多的优化，感谢每一位对这个项目做出贡献的人。
+欢迎各位同行多提提意见，多找找bug帮忙多多宣传，做出更好的产品让更多的人发现。项目刚发布里面可能会有很多地方需要调整优化的地方，欢迎各位提交issues或者在我的基础上做更多的优化，感谢每一位对这个项目做出贡献的人。
 
 我的B站：[https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0](https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0)
 
@@ -327,10 +327,24 @@ git clone https://github.com/happymy/MinimaxH3-7900xtx.git
  </picture>
 </a>
 
-## 开源协议
+## 许可证与商用授权
 
-本项目基于 [MIT License](LICENSE) 协议进行开源，MIT是自由度最高的开源协议，你可以拿去商用和二次开发，但是必须保留原版声明
+本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE)（PolyForm-NC 1.0.0）许可证 —— 它是**源码可见（source-available）**许可，不是 OSI 定义的开源许可。
+
+- **非商业使用免费**：个人学习、研究、实验、私人娱乐、爱好项目，以及慈善机构、教育机构、公立科研机构、公共安全 / 卫生机构、环保组织、政府机构的使用，均可免费使用、修改和分发。
+- **商业使用需另行授权**：PolyForm-NC 不授予任何商业用途权利。将本项目（或衍生版本）用于付费产品或服务、对外提供托管 / SaaS 服务、或在营利性企业内部用于生产经营等商业场景，需事先取得书面的商业授权。
+- **保留声明**：修改或分发时需保留本许可证，以及 `Required Notice: Copyright (c) 2026 SwotAtmk` 声明。
+
+### 商用申请
+
+请发送邮件至 [swotatmk@foxmail.com](mailto:swotatmk@foxmail.com)，并在邮件标题中注明来意，例如：
+
+```text
+商用授权申请 - 公司/个人名称 - 使用场景
+```
+
+邮件正文建议说明：使用主体、具体用途（产品 / 服务形态）、部署规模（实例数 / 用户量）、是否对外提供服务，以及是否需要二次开发支持。收到后我会尽快回复授权方式与费用方案。
 
 Copyright (c) 2026 SwotAtmk
 
-> 说明：`skills/` 目录中的一些技能来源于 MiniMax-H3 官方仓库，`vendor/` 目录为第三方代码，均不在本项目的 MIT 授权范围内，请遵循其各自的授权条款。
+> 说明：`skills/` 目录中的一些技能来源于 MiniMax-H3 官方仓库，`vendor/` 目录为第三方代码，均不在本项目的 PolyForm-NC 1.0.0 授权范围内，请遵循其各自的授权条款（例如 `skills/short-drama-*`、`skills/lemo-opuscar` 仍为 MIT）。

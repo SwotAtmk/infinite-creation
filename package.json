@@ -2,7 +2,7 @@
   "name": "infinite-creation",
   "private": true,
   "version": "0.1.0",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "author": "SwotAtmk",
   "type": "module",
   "packageManager": "pnpm@11.7.0",

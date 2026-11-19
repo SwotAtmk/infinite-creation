@@ -112,7 +112,16 @@ export default function ProjectWorkspace({ id, initialTab = 'chapters', onBack, 
     setProject((prev) => (JSON.stringify(prev) === JSON.stringify(p) ? prev : p));
     setJobs((prev) => (JSON.stringify(prev) === JSON.stringify(j) ? prev : j));
     setChapters((prev) => (JSON.stringify(prev) === JSON.stringify(c) ? prev : c));
-    setCursorId((x) => (c.some((ch) => ch.id === x) ? x : c.length ? c[c.length - 1].id : ''));
+    // 默认定位到「已在生成」的最后一章：章节目录可能来自整本小说，末尾几章还没拆分镜，
+    // 直接取最后一章会落到没有分镜的空章节。优先正在生成的那章，其次最后一个有分镜的章节。
+    setCursorId((x) => {
+      if (c.some((ch) => ch.id === x)) return x;
+      if (!c.length) return '';
+      const running = c.filter((ch) => ch.genStatus === 'running');
+      if (running.length) return running[running.length - 1].id;
+      const started = c.filter((ch) => ch.genStatus && ch.genStatus !== 'empty');
+      return (started.length ? started[started.length - 1] : c[c.length - 1]).id;
+    });
     if (firstJobsLoadRef.current) firstJobsLoadRef.current = false;
     else if (j.some((x) => !seenJobIdsRef.current.has(x.id))) setQueueOpen(true);
     seenJobIdsRef.current = new Set(j.map((x) => x.id));

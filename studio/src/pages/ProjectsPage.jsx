@@ -7,6 +7,7 @@ import {
   STYLE_CUSTOM,
   resolveStyle,
   VIDEO_RESOLUTION_CUSTOM,
+  IMAGE_RESOLUTION_ITEMS,
   PROJECT_TYPE_LABEL,
 } from '../lib/shared.js';
 import { RESOLUTION_SELECT_ITEMS, RATIO_SELECT_ITEMS, MetaItem } from '../components/visuals.jsx';
@@ -60,7 +61,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
   const [agentLoading, setAgentLoading] = useState(false);
 
   // 一个内容框：自动模式当小说原文，剧本模式当剧本内容
-  const [form, setForm] = useState({ name: '', novel: '', scriptMode: 'auto', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', enableBgm: true, enableSubtitles: true });
+  const [form, setForm] = useState({ name: '', novel: '', scriptMode: 'auto', style: '', customStyle: '', res: '480P', ratio: '16:9', cw: '', ch: '', imageRes: '1K', enableBgm: true, enableSubtitles: true });
   const [refs, setRefs] = useState([]);
   // 上传 txt 的解析结果（不在输入框预览全文，创建时优先使用它）
   const novelFileRef = useRef(null);
@@ -237,6 +238,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
         video_aspect_ratio: form.ratio,
         video_width: Number(form.cw) || 0,
         video_height: Number(form.ch) || 0,
+        image_resolution: form.imageRes,
         enable_bgm: form.enableBgm,
         enable_subtitles: form.enableSubtitles,
       });
@@ -283,6 +285,7 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
       ratio: defaults?.aspectRatio || '16:9',
       cw: defaults?.width ? String(defaults.width) : '',
       ch: defaults?.height ? String(defaults.height) : '',
+      imageRes: defaults?.imageResolution || '1K',
       enableBgm: defaults?.enableBgm !== false,
       enableSubtitles: defaults?.enableSubtitles !== false,
     });
@@ -669,10 +672,25 @@ export default function ProjectsPage({ onOpen, type = '', showTypeFilter = false
             />
           </FormSection>
 
+          <div className="hairline" />
+
+          <FormSection index="04" title="图片参数" description="素材库新建或重新生成的图片使用该档位">
+            <Field
+              label="图片素材分辨率"
+              hint="1K / 2K / 4K，按各素材宽高比自动换算像素（32 的倍数）；后续可在项目设置里修改。"
+            >
+              <Select
+                value={form.imageRes}
+                onChange={(v) => setForm({ ...form, imageRes: v })}
+                items={IMAGE_RESOLUTION_ITEMS}
+              />
+            </Field>
+          </FormSection>
+
           {vision ? (
             <>
               <div className="hairline" />
-              <FormSection index="04" title="参考图片" description="可先跳过，进入项目后再补">
+              <FormSection index="05" title="参考图片" description="可先跳过，进入项目后再补">
                 <ReferencePicker projectId="" items={refs} onChange={setRefs} allowAdd />
               </FormSection>
             </>

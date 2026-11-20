@@ -4,9 +4,11 @@ import { Modal } from './overlays.jsx';
 import { Button } from './ui.jsx';
 import { SURVEY_TITLE, SURVEY_URL } from '../lib/survey.js';
 
-// 问卷提示：每次服务启动后自动弹出一次；同一启动内关闭/刷新不再重复打扰。
-// 记录只写在 sessionStorage（按启动标识区分），不做永久屏蔽，下次启动仍会弹出。
+// 问卷提示：首次使用满 7 天后，每次服务启动自动弹出一次；
+// 同一启动内关闭/刷新不再重复打扰（记录只写在 sessionStorage，不做永久屏蔽）。
 const DISMISSED_KEY = 'ic.survey.dismissedLaunch';
+// 首次使用满 7 天才开始触发问卷
+const SURVEY_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 
 function readSession(key) {
   try {
@@ -35,6 +37,9 @@ export default function SurveyPrompt({ launch }) {
 
   useEffect(() => {
     if (!launch) return;
+    const firstUsed = new Date(launch.firstLaunchAt).getTime();
+    if (!Number.isFinite(firstUsed)) return;
+    if (Date.now() - firstUsed < SURVEY_DELAY_MS) return;
     if (readSession(DISMISSED_KEY) === launch.lastLaunchAt) return;
     setOpen(true);
   }, [launch]);

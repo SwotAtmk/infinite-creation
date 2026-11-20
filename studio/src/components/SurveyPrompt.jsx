@@ -4,22 +4,21 @@ import { Modal } from './overlays.jsx';
 import { Button } from './ui.jsx';
 import { SURVEY_TITLE, SURVEY_URL } from '../lib/survey.js';
 
-// 问卷提示：每次启动后自动弹出一次；同一启动内关闭/刷新不再重复打扰。
-// 「不再提示」永久关闭（localStorage）。
+// 问卷提示：每次服务启动后自动弹出一次；同一启动内关闭/刷新不再重复打扰。
+// 记录只写在 sessionStorage（按启动标识区分），不做永久屏蔽，下次启动仍会弹出。
 const DISMISSED_KEY = 'ic.survey.dismissedLaunch';
-const NEVER_KEY = 'ic.survey.never';
 
-function readLocal(key) {
+function readSession(key) {
   try {
-    return localStorage.getItem(key);
+    return sessionStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-function writeLocal(key, value) {
+function writeSession(key, value) {
   try {
-    localStorage.setItem(key, value);
+    sessionStorage.setItem(key, value);
   } catch {
     /* 隐私模式等无法写入时忽略 */
   }
@@ -36,14 +35,12 @@ export default function SurveyPrompt({ launch }) {
 
   useEffect(() => {
     if (!launch) return;
-    if (readLocal(NEVER_KEY) === '1') return;
-    if (readLocal(DISMISSED_KEY) === launch.lastLaunchAt) return;
+    if (readSession(DISMISSED_KEY) === launch.lastLaunchAt) return;
     setOpen(true);
   }, [launch]);
 
-  const dismiss = (never) => {
-    if (never) writeLocal(NEVER_KEY, '1');
-    else if (launch?.lastLaunchAt) writeLocal(DISMISSED_KEY, launch.lastLaunchAt);
+  const dismiss = () => {
+    if (launch?.lastLaunchAt) writeSession(DISMISSED_KEY, launch.lastLaunchAt);
     setOpen(false);
   };
 
@@ -51,23 +48,20 @@ export default function SurveyPrompt({ launch }) {
     <Modal
       open={open}
       onOpenChange={(o) => {
-        if (!o) dismiss(false);
+        if (!o) dismiss();
       }}
       title="infinite-creation 使用问卷"
       size="md"
       footer={
         <>
-          <Button variant="ghost" onClick={() => dismiss(true)}>
-            不再提示
-          </Button>
-          <Button variant="secondary" onClick={() => dismiss(false)}>
+          <Button variant="secondary" onClick={dismiss}>
             稍后再填
           </Button>
           <Button
             variant="primary"
             onClick={() => {
               window.open(SURVEY_URL, '_blank', 'noopener,noreferrer');
-              dismiss(false);
+              dismiss();
             }}
           >
             <ExternalLink size={14} />
@@ -84,7 +78,7 @@ export default function SurveyPrompt({ launch }) {
           <div className="min-w-0">
             <p className="m-0 font-medium text-[var(--fg)]">{SURVEY_TITLE}</p>
             <p className="m-0 mt-1 text-[12px] text-[var(--fg-3)]">
-              你已经使用过 infinite-creation，欢迎花一两分钟填写问卷，帮助我们了解你的需求并改进体验。
+              欢迎花一两分钟填写问卷，帮助我们了解你的需求并改进体验。服务每次启动后会提示一次，关闭后本次使用不再打扰。
             </p>
           </div>
         </div>

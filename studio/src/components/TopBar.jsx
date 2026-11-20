@@ -1,6 +1,7 @@
 import clsx from 'clsx';
-import { Github, Settings2, Sparkles } from 'lucide-react';
+import { Github, MessageSquarePlus, Settings2, Sparkles } from 'lucide-react';
 import { Button } from './ui.jsx';
+import { SURVEY_URL } from '../lib/survey.js';
 
 export default function TopBar({ onHome, onSettings, serverInfo, showSettings = true }) {
   const online = serverInfo?.online !== false;
@@ -54,6 +55,16 @@ export default function TopBar({ onHome, onSettings, serverInfo, showSettings = 
               云端托管
             </span>
           ) : null}
+          <a
+            href={SURVEY_URL}
+            target="_blank"
+            rel="noreferrer"
+            title="填写需求 & 反馈建议收集表"
+            className="inline-flex h-8 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--line)] bg-white/[0.04] px-3 text-[13px] font-medium text-[var(--fg)] no-underline transition-all duration-150 hover:border-[var(--line-strong)] hover:bg-white/[0.07] active:bg-white/[0.05]"
+          >
+            <MessageSquarePlus size={13} />
+            反馈建议
+          </a>
           {onSettings && showSettings ? (
             <Button variant="secondary" size="sm" onClick={onSettings}>
               <Settings2 size={13} />

@@ -327,6 +327,10 @@ git clone https://github.com/happymy/MinimaxH3-7900xtx.git
  </picture>
 </a>
 
+## 反馈建议
+
+使用中遇到问题、发现 Bug，或有想要的新功能，欢迎填写 [infinite-creation 无限创作项目需求 & 反馈建议收集表](https://docs.qq.com/form/page/DUGZ6ekNsQ1pma2Zs)，也可以直接在 [GitHub Issues](https://github.com/SwotAtmk/infinite-creation/issues) 反馈。
+
 ## 许可证与商用授权
 
 本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE)（PolyForm-NC 1.0.0）许可证 —— 它是**源码可见（source-available）**许可，不是 OSI 定义的开源许可。

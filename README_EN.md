@@ -332,6 +332,10 @@ My Bilibili：[https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0](ht
  </picture>
 </a>
 
+## Feedback
+
+If you run into problems, find bugs, or want new features, please fill in the [infinite-creation Requirements & Feedback Survey](https://docs.qq.com/form/page/DUGZ6ekNsQ1pma2Zs), or open a [GitHub Issue](https://github.com/SwotAtmk/infinite-creation/issues).
+
 ## License & Commercial Use
 
 This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE) (PolyForm-NC 1.0.0) — a **source-available** license, not an OSI-approved open-source license.

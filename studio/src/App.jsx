@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Clapperboard, Feather, Github, Image as ImageIcon, LayoutGrid, Mic2, Music4, Repeat2, Sparkles, UserRound, Video } from 'lucide-react';
 import { ToastProvider } from './components/toast.jsx';
 import BackToTop from './components/BackToTop.jsx';
+import SurveyPrompt from './components/SurveyPrompt.jsx';
 import TopBar from './components/TopBar.jsx';
 import ProjectsPage from './pages/ProjectsPage.jsx';
 import ProjectWorkspace from './pages/ProjectWorkspace.jsx';
@@ -59,6 +60,7 @@ export default function App() {
   const [state, setState] = useState({ mode: 'agent', view: { type: 'list' } });
   const server = useServerInfo();
   const [features, setFeatures] = useState(null);
+  const [launch, setLaunch] = useState(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function App() {
       .then((j) => {
         if (!alive) return;
         setFeatures(j.features || {});
+        setLaunch(j.launch || null);
         setReady(true);
       })
       .catch(() => {
@@ -246,6 +249,7 @@ export default function App() {
         </footer>
         <BackToTop />
       </div>
+      <SurveyPrompt launch={launch} />
     </ToastProvider>
   );
 }

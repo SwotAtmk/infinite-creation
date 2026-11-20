@@ -4,7 +4,7 @@ import { loadConfig, readLaunchState } from '@/lib/core/index.js';
 export const dynamic = 'force-dynamic';
 
 // 开源版没有账号/管理后台：前端只需要功能开关与运行模式。
-// launch：启动记录（首次启动时间 / 累计启动次数），前端用于「非首次启动」时的问卷提示。
+// launch：启动记录（首次启动时间 / 累计启动次数），前端据此在每次启动后弹一次问卷提示。
 export async function GET() {
   let features = {};
   try {

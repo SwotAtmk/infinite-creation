@@ -22,7 +22,7 @@ const handle = app.getRequestHandler();
 // 启动时注册默认工作流 + 扫描技能
 ensureDirs();
 startupCleanup();
-// 记录启动时间节点：首次启动写 firstLaunchAt，之后累加 launchCount（前端据此在非首次启动时弹问卷）
+// 记录启动时间节点：首次启动写 firstLaunchAt，之后累加 launchCount（前端据此在每次启动后弹一次问卷）
 const launchState = recordLaunch();
 logger.info('启动记录：首次启动 ' + launchState.firstLaunchAt + '，累计第 ' + launchState.launchCount + ' 次启动');
 // RunningHub 渲染公平队列：进程内调度器（本地 ComfyUI 模式不启用，见 scheduler.queueEnabled）

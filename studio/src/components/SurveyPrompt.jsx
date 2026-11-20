@@ -4,8 +4,8 @@ import { Modal } from './overlays.jsx';
 import { Button } from './ui.jsx';
 import { SURVEY_TITLE, SURVEY_URL } from '../lib/survey.js';
 
-// 问卷提示：首次启动只记录时间节点，第二次及之后的启动自动弹出。
-// 关闭后本次启动不再打扰；「不再提示」永久关闭（localStorage）。
+// 问卷提示：每次启动后自动弹出一次；同一启动内关闭/刷新不再重复打扰。
+// 「不再提示」永久关闭（localStorage）。
 const DISMISSED_KEY = 'ic.survey.dismissedLaunch';
 const NEVER_KEY = 'ic.survey.never';
 
@@ -35,7 +35,7 @@ export default function SurveyPrompt({ launch }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!launch || launch.launchCount < 2) return;
+    if (!launch) return;
     if (readLocal(NEVER_KEY) === '1') return;
     if (readLocal(DISMISSED_KEY) === launch.lastLaunchAt) return;
     setOpen(true);

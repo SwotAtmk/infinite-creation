@@ -158,6 +158,11 @@ Please refer to https://gitcode.com/SwotAtmk/infinite-creation/releases/download
 Install the infinite-creation skill from GitHub (overseas) or GitCode (domestic), then start the project according to the skill description.
 ```
 
+## Deployment video tutorial
+**【Free and open-source AI unlimited creation tool | Project deployment tutorial】**
+[https://www.bilibili.com/video/BV1MKyrzxEgz/?share_source=copy_web&vd_source=4de78f3e6122809eba5fa7ced06ef5ae](https://www.bilibili.com/video/BV1MKyrzxEgz/?share_source=copy_web&vd_source=4de78f3e6122809eba5fa7ced06ef5ae)
+
+
 ## Hardware
 
 My machine:

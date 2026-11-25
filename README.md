@@ -157,6 +157,10 @@ pnpm run dev              # 默认启动 Studio，打开 http://127.0.0.1:4710
 从GitHub（国外）或者GitCode（国内）上安装SwotAtmk/infinite-creation 安装 infinite-creation 技能，并根据技能描述启动这个项目。
 ```
 
+## 部署视频教程
+**【免费开源的 AI 无限创作工具｜项目部署教程】**
+[https://www.bilibili.com/video/BV1MKyrzxEgz/?share_source=copy_web&vd_source=4de78f3e6122809eba5fa7ced06ef5ae](https://www.bilibili.com/video/BV1MKyrzxEgz/?share_source=copy_web&vd_source=4de78f3e6122809eba5fa7ced06ef5ae)
+
 ## 运行配置
 
 我的电脑：

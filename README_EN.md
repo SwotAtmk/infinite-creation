@@ -2,7 +2,7 @@
 
 # Agent Infinite Creation · Turn Your Stories into a Billion Frames
 
-**Source-available, free for non-commercial use — fully automated local-agent video generation ✨**
+**Fully automated video generation by local agent, a free and open-source project ✨**
 Upload a novel or script and generate films of any length locally — unattended.
 
 <a href="https://github.com/SwotAtmk/infinite-creation/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SwotAtmk/infinite-creation?style=for-the-badge&color=F5B700&label=stars"></a> <a href="README.md"><img alt="简体中文" src="https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555?style=for-the-badge"></a> <a href="https://github.com/SwotAtmk/infinite-creation/blob/main/LICENSE"><img alt="PolyForm-NC 1.0.0" src="https://img.shields.io/badge/licence-PolyForm--NC--1.0.0-4B5563?style=for-the-badge"></a> <a href="https://nodejs.org/"><img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=for-the-badge"></a> <a href="https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0"><img alt="我的B站" src="https://img.shields.io/badge/bilibili-SwotAtmk-blue?style=for-the-badge&logo=bilibili&logoColor=%2300A1D6"></a>

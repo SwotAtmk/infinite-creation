@@ -2,7 +2,7 @@
 
 # Agent无限创作 · 把你的故事变成亿帧画面
 
-**源码可见、非商业免费使用的本地 Agent 全自动视频生成 ✨**
+**免费开源项目本地 Agent 全自动视频生成 ✨**
 上传小说 / 剧本，本地一键生成任意时长的成片，全程无人值守。
 
 <a href="https://github.com/SwotAtmk/infinite-creation/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/SwotAtmk/infinite-creation?style=for-the-badge&color=F5B700&label=stars"></a> <a href="README_EN.md"><img alt="English" src="https://img.shields.io/badge/README-English-555?style=for-the-badge"></a> <a href="https://github.com/SwotAtmk/infinite-creation/blob/main/LICENSE"><img alt="PolyForm-NC 1.0.0" src="https://img.shields.io/badge/licence-PolyForm--NC--1.0.0-4B5563?style=for-the-badge"></a> <a href="https://nodejs.org/"><img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=for-the-badge"></a> <a href="https://space.bilibili.com/384196392?spm_id_from=333.1007.0.0"><img alt="我的B站" src="https://img.shields.io/badge/bilibili-SwotAtmk-blue?style=for-the-badge&logo=bilibili&logoColor=%2300A1D6"></a>
